@@ -2,17 +2,39 @@
 
 #
 #    NativeTransmog.Enable
-#        Description: Enables mod-native-transmog startup initialization.
-#        Important:   Phase 1 provides only a client-side preview wardrobe.
-#                     This setting does not enable persistent transmogrification.
+#        Description: Enables the native preview wardrobe and NPC service.
+#        Important:   Phase 2 still does not apply or persist appearances.
 #        Default:     1
 
 NativeTransmog.Enable = 1
 
 #
+#    NativeTransmog.DefaultNPC.Enable
+#        Description: Enables service resolution for the module's dedicated
+#                     Content Manager resource "dedicated-transmogrifier".
+#                     Its creature entry is allocated per realm at build time.
+#        Default:     1
+
+NativeTransmog.DefaultNPC.Enable = 1
+
+#
+#    NativeTransmog.CustomNPC.Enable
+#        Description: Enables database-registered creature entries and spawns.
+#        Default:     1
+
+NativeTransmog.CustomNPC.Enable = 1
+
+#
+#    NativeTransmog.CustomNPC.AllowSpawnRegistration
+#        Description: Enables registration of individual persistent spawn IDs.
+#        Default:     1
+
+NativeTransmog.CustomNPC.AllowSpawnRegistration = 1
+
+#
 #    NativeTransmog.AllowTwoHandAppearanceOnOneHand
 #        Description: Reserved for future server-side appearance validation.
-#                     It does not enforce any restriction during Phase 1.
+#                     It does not enforce any restriction during Phase 2.
 #        Default:     0
 
 NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
@@ -20,7 +42,7 @@ NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 #
 #    NativeTransmog.AllowOneHandAppearanceOnTwoHand
 #        Description: Reserved for future server-side appearance validation.
-#                     It does not enforce any restriction during Phase 1.
+#                     It does not enforce any restriction during Phase 2.
 #        Default:     0
 
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0

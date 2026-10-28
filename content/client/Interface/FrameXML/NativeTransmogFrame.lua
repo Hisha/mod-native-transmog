@@ -1,5 +1,8 @@
--- Native Transmog Phase 1 wardrobe prototype for WoW 3.3.5a build 12340.
+-- Native Transmog Phase 2 wardrobe for WoW 3.3.5a build 12340.
 -- Loaded from the protected FrameXML tree. This is not an addon.
+
+local TRANSPORT_PREFIX = "NTRANSMOG"
+local authorizedSessionToken = nil
 
 local SLOT_ORDER = { "HEAD", "SHOULDERS", "CHEST", "MAIN_HAND", "OFF_HAND" }
 
@@ -199,6 +202,10 @@ end
 
 function NativeTransmog_OnLoad(frame)
     frame:RegisterForDrag("LeftButton")
+    frame:RegisterEvent("CHAT_MSG_ADDON")
+    if RegisterAddonMessagePrefix then
+        RegisterAddonMessagePrefix(TRANSPORT_PREFIX)
+    end
     UISpecialFrames[#UISpecialFrames + 1] = frame:GetName()
     NativeTransmog_SelectSlot(1)
 end
@@ -210,18 +217,46 @@ end
 
 function NativeTransmog_OnHide()
     NativeTransmog_EndRotation(getModel())
+    authorizedSessionToken = nil
     GameTooltip:Hide()
     PlaySound("igCharacterInfoClose")
 end
 
-function NativeTransmog_Toggle()
+function NativeTransmog_OpenAuthorized(token)
+    authorizedSessionToken = token
+    NativeTransmogFrame:Show()
+end
+
+function NativeTransmog_HasAuthorizedSession()
+    return authorizedSessionToken ~= nil
+end
+
+function NativeTransmog_OnEvent(_, event, prefix, message, channel, sender)
+    if event ~= "CHAT_MSG_ADDON" or prefix ~= TRANSPORT_PREFIX or
+        channel ~= "WHISPER" or sender ~= UnitName("player") then
+        return
+    end
+
+    local version, command, token = string.match(message or "", "^(%d+)\t([A-Z]+)\t(%d+)$")
+    if version ~= "1" or not token then
+        return
+    end
+    if command == "OPEN" then
+        NativeTransmog_OpenAuthorized(token)
+    elseif command == "CLOSE" and authorizedSessionToken == token then
+        NativeTransmogFrame:Hide()
+    end
+end
+
+function NativeTransmog_DebugToggle()
     if NativeTransmogFrame:IsShown() then
         NativeTransmogFrame:Hide()
     else
+        authorizedSessionToken = nil
         NativeTransmogFrame:Show()
     end
 end
 
 SLASH_NATIVETRANSMOG1 = "/wardrobe"
 SLASH_NATIVETRANSMOG2 = "/nativetransmog"
-SlashCmdList["NATIVETRANSMOG"] = NativeTransmog_Toggle
+SlashCmdList["NATIVETRANSMOG"] = NativeTransmog_DebugToggle

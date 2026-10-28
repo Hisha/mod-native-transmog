@@ -1,9 +1,27 @@
 {
   "schema": 3,
   "package": "mod-native-transmog",
-  "name": "Native Transmog Phase 1 Wardrobe",
-  "version": "1.0.0-phase1",
-  "description": "Native build-12340 wardrobe preview UI with no addon and no persistent gameplay changes.",
+  "name": "Native Transmog Wardrobe",
+  "version": "2.0.0-phase2",
+  "description": "Native build-12340 wardrobe preview UI with server-authorized NPC opening and no persistent appearance changes.",
+  "creatureTemplates": [
+    {
+      "symbol": "dedicated-transmogrifier",
+      "copyFrom": 28699,
+      "overrides": {
+        "name": "Transmogrifier",
+        "subname": "Wardrobe Specialist",
+        "minLevel": 80,
+        "maxLevel": 80,
+        "faction": 35,
+        "npcFlags": 1,
+        "unitFlags": 0,
+        "typeFlags": 0,
+        "aiName": "",
+        "scriptName": ""
+      }
+    }
+  ],
   "content": [
     {
       "type": "file",

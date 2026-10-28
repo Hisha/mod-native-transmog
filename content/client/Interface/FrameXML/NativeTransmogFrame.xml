@@ -204,6 +204,7 @@
     </Frames>
     <Scripts>
       <OnLoad>NativeTransmog_OnLoad(self);</OnLoad>
+      <OnEvent>NativeTransmog_OnEvent(self, event, ...);</OnEvent>
       <OnShow>NativeTransmog_OnShow(self);</OnShow>
       <OnHide>NativeTransmog_OnHide(self);</OnHide>
       <OnDragStart>self:StartMoving();</OnDragStart>

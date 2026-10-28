@@ -1,59 +1,66 @@
-# PTR deployment and manual validation
+# Phase 2 PTR deployment and manual validation
 
-This procedure targets the separate PTR AzerothCore installation and databases. Do not run it against production. Replace angle-bracket placeholders with the established PTR paths/commands; the exact local content-manager command and publication endpoint are environment configuration, not properties of this module.
+This procedure targets the separate PTR AzerothCore installation and databases. Do not run it against production. Record pass/fail and evidence; this repository has not performed or claimed Phase 2 PTR validation.
 
-## Stage the server and package
+## Stage server, SQL, and client content
 
-1. Confirm the PTR core is the intended Playerbot checkout and the production installation is not the active target.
-2. Install this repository at `<PTR_CORE>/modules/mod-native-transmog` without changing or disabling `mod-transmog`.
-3. From this repository, run:
+1. Confirm the target core is the intended Playerbot PTR checkout and production is not active.
+2. Install this repository at `<PTR_CORE>/modules/mod-native-transmog`. Do not remove, disable, reconfigure, or migrate `mod-transmog`.
+3. Run the local checks:
 
    ```bash
    python3 content/build_epf.py --check
-   python3 -m unittest tests/test_phase1.py
+   python3 -m unittest tests/test_phase1.py tests/test_phase2.py
    python3 tests/verify_catalog.py <PTR_CORE>/data/sql/base/db_world/item_template.sql
    ```
 
-4. Configure and build the PTR core using its established build procedure. Confirm `-- MOD NATIVE TRANSMOG CONFIGURED (phase-1-wardrobe-prototype) --` appears during configuration and that the worldserver links successfully.
-5. Install the generated configuration as the PTR module configuration with the documented defaults. Do not change production configuration.
-6. Start the PTR worldserver. Confirm the initialization log and that no database migration runs (none is supplied).
-7. Place `content/mod-native-transmog.epf` in the module/content discovery location used by the PTR `mod-content-manager` installation.
-8. Use the existing content-manager validation/build command to create a new cumulative client build. Confirm the package reports `protected-framexml`, both native files are staged, and no collision is reported.
-9. Inspect the built MPQ/listing and confirm these paths exist:
+4. Back up the PTR world database. Apply the normal AzerothCore module updater, including `data/sql/db-world/updates/2026_10_28_00_native_transmog_npc_service.sql`. Confirm `native_transmog_npc_registration` exists and no `mod-transmog` table or character appearance row changed.
+5. Configure/build the PTR core normally. Confirm `-- MOD NATIVE TRANSMOG CONFIGURED (phase-2-npc-services) --`, all three module translation units compile, and worldserver links.
+6. Confirm Content Manager Milestone 2 and migration `2026_09_25_06_content_managed_server_resources.sql` are installed. Install `content/mod-native-transmog.epf`, run the cumulative build, and confirm it allocates `dedicated-transmogrifier` as `creature-template.id`, copies donor `28699` model `25615`, and composes the two protected FrameXML files without collision.
+7. Activate the build on PTR so its managed server bundle is APPLIED, then publish through the established Portalkeeper process. Record the prior build for rollback. Do not modify Portalkeeper.
+8. Restart PTR so AzerothCore loads the applied template. Confirm runtime resolution reports the allocated dedicated entry and registry row counts. Record the entry from `.content allocations` or `.nativetransmog npc list`.
 
-   ```text
-   Interface/FrameXML/FrameXML.toc
-   Interface/FrameXML/NativeTransmogFrame.xml
-   Interface/FrameXML/NativeTransmogFrame.lua
-   ```
+## Required in-game checklist
 
-10. Confirm the composed `FrameXML.toc` loads `NativeTransmogFrame.xml` immediately after `DressUpFrame.xml` and that no `Interface/AddOns` path exists.
-11. Activate/publish or stage that build only to the PTR channel using the existing content-manager/Portalkeeper process. Record the prior PTR build number so the existing activation/rollback operation can restore it.
-12. Confirm the PTR Portalkeeper realm configuration is Schema 1, isolated, and contains `[Client] Requirements=protected-framexml`. Do not modify Portalkeeper or the WoW executable outside its established preparation flow.
+- [ ] 1. The updated module builds and installs on PTR.
+- [ ] 2. Module database migrations apply twice without destructive changes or errors; they create only the registration table and never insert a creature template/model.
+- [ ] 3. Content build/activation allocates the symbol, applies the template plus model row, and restart resolves the same retained entry.
+- [ ] 4. As a GM, run `.npc add <allocated-entry>`; record its persistent spawn ID.
+- [ ] 5. Interact with the dedicated Transmogrifier.
+- [ ] 6. The wardrobe opens from the server interaction without typing `/wardrobe`.
+- [ ] 7. Character model, rotation, all five slots, icons, tooltips, multi-slot preview, and Reset Preview still work; equipment and inventory do not change.
+- [ ] 8. Select an existing interactive NPC and run `.nativetransmog npc add entry`.
+- [ ] 9. Every loaded instance of that entry opens the wardrobe while retaining its original behavior.
+- [ ] 10. Select a different persistent NPC and run `.nativetransmog npc add spawn`.
+- [ ] 11. That spawn opens the wardrobe; another NPC with the same entry does not.
+- [ ] 12. Validate at least one vendor and one quest/gossip NPC: vendor inventory, buying/selling, quest markers/dialog, and existing scripted gossip remain available.
+- [ ] 13. Run both remove commands and confirm service removal is immediate while original NPC services remain.
+- [ ] 14. Re-enable registrations, restart worldserver, and confirm persistence and resolution order with `.nativetransmog npc list/info`.
+- [ ] 15. Confirm an ordinary player cannot execute add, remove, list, or info commands.
+- [ ] 16. Confirm installed `mod-transmog` NPC/UI/application behavior still works.
+- [ ] 17. Compare existing `mod-transmog` tables and appearance records before/after; confirm unchanged.
+- [ ] 18. Confirm the client has no standalone native-transmog addon or addon dependency.
 
-## Windows client checklist
+## Authorization/session checks
 
-Record pass/fail and evidence for every item. Do not mark the phase complete solely from build success.
+- [ ] `/wardrobe` still opens a local preview but `.nativetransmog npc info`/server logs show that it did not create a service session.
+- [ ] Moving beyond interaction range closes an NPC-authorized wardrobe within roughly one second.
+- [ ] Entering combat closes it.
+- [ ] Despawning the NPC closes it.
+- [ ] Changing maps closes it; logout/relogin does not retain authorization.
+- [ ] A dynamic creature of an entry-registered template resolves by entry even with spawn ID zero.
+- [ ] Spawn registration rejects a temporary creature with a clear error.
+- [ ] A creature vehicle passenger does not open the wardrobe in Phase 2; record this as the intentional future-work guard.
+- [ ] Normal say/whisper/guild/gossip chat remains unaffected and the protocol payload is not printed as chat.
 
-- [ ] Portalkeeper prepares/selects the expected generation-2 isolated PTR executable and downloads/selects the new cumulative patch.
-- [ ] WoW 3.3.5a build 12340 launches normally with no FrameXML error.
-- [ ] Login and world entry succeed.
-- [ ] `/wardrobe` opens the wardrobe; `/nativetransmog` toggles the same window.
-- [ ] The model shows the current player's race, gender, and equipped appearance.
-- [ ] Head, shoulders, chest, main hand, and off hand each update the browser.
-- [ ] Every catalog entry shows an icon; hovering shows a valid item tooltip.
-- [ ] Clicking each entry highlights it and changes only the preview.
-- [ ] Compatible selections in several slots remain visible simultaneously.
-- [ ] Record exact behavior for mutually exclusive one-hand/two-hand/off-hand combinations; do not infer policy from preview behavior.
-- [ ] Dragging the model and both rotation buttons work.
-- [ ] Reset returns to the player's equipped appearance and clears highlights.
-- [ ] Escape and the close button close the window; reopening starts clean.
-- [ ] Actual equipped items, inventory, stats, and combat behavior remain unchanged.
-- [ ] No persistent appearance override or existing transmogrification record changes.
-- [ ] Existing `mod-transmog` NPC/UI/application behavior still operates.
-- [ ] Other native FrameXML content and ordinary client interface features still operate.
-- [ ] Logout/restart does not persist prototype selections.
+## Client regression checks
+
+- [ ] Portalkeeper launches the expected isolated build-12340 client and selects the new cumulative patch.
+- [ ] No FrameXML error appears during launch, login, reload, or logout.
+- [ ] `/wardrobe` and `/nativetransmog` remain functional debug toggles and never change equipped items.
+- [ ] Existing native FrameXML modules and ordinary UI panels still function.
+- [ ] Record mutually exclusive weapon-preview behavior without treating it as server policy.
 
 ## Failure and rollback
 
-If client load, UI, or coexistence validation fails, stop PTR publication and use the existing content-manager activation/rollback operation to reactivate the recorded prior PTR build. Preserve logs, the cumulative MPQ hash/listing, Portalkeeper preparation output, screenshots, and the exact client error. Do not repair the failure by installing an addon, changing production, editing `mod-transmog`, inventing an opcode, or modifying Portalkeeper's executable transformation.
+On failure, stop PTR publication, preserve worldserver/client logs, SQL updater output, MPQ hash/listing, Portalkeeper output, screenshots, selected entry/spawn IDs, and reproduction steps. Reactivate the recorded prior client build through content-manager rollback and restore the PTR database backup if migration state itself is suspect. Do not repair a failure by installing an addon, changing production, editing `mod-transmog`, inventing an opcode, changing existing NPC flags/scripts, or modifying Portalkeeper's executable transformation.
