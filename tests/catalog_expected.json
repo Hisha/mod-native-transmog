@@ -1,0 +1,22 @@
+{
+  "HEAD": {
+    "inventoryType": 1,
+    "items": [46140, 47693, 40416]
+  },
+  "SHOULDERS": {
+    "inventoryType": 3,
+    "items": [46136, 47708, 40419]
+  },
+  "CHEST": {
+    "inventoryType": [20, 5],
+    "items": [46137, 47606, 40418]
+  },
+  "MAIN_HAND": {
+    "inventoryType": [13, 17, 21],
+    "items": [19019, 50730, 49623, 46017]
+  },
+  "OFF_HAND": {
+    "inventoryType": 14,
+    "items": [40401, 45682, 50729]
+  }
+}

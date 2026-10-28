@@ -1,0 +1,29 @@
+{
+  "schema": 3,
+  "package": "mod-native-transmog",
+  "name": "Native Transmog Phase 1 Wardrobe",
+  "version": "1.0.0-phase1",
+  "description": "Native build-12340 wardrobe preview UI with no addon and no persistent gameplay changes.",
+  "content": [
+    {
+      "type": "file",
+      "source": "client/Interface/FrameXML/NativeTransmogFrame.xml",
+      "target": "Interface/FrameXML/NativeTransmogFrame.xml"
+    },
+    {
+      "type": "file",
+      "source": "client/Interface/FrameXML/NativeTransmogFrame.lua",
+      "target": "Interface/FrameXML/NativeTransmogFrame.lua"
+    }
+  ],
+  "clientFrameXml": {
+    "stockTocSource": "upstream/FrameXML.toc",
+    "stockTocSha256": "3158bea13225ae51137a389f0f3ab8566e94b6be84196dd2c1fda27024677754",
+    "loadEntries": [
+      {
+        "target": "Interface/FrameXML/NativeTransmogFrame.xml",
+        "after": "Interface/FrameXML/DressUpFrame.xml"
+      }
+    ]
+  }
+}

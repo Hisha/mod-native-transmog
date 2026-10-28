@@ -1,0 +1,26 @@
+[worldserver]
+
+#
+#    NativeTransmog.Enable
+#        Description: Enables mod-native-transmog startup initialization.
+#        Important:   Phase 1 provides only a client-side preview wardrobe.
+#                     This setting does not enable persistent transmogrification.
+#        Default:     1
+
+NativeTransmog.Enable = 1
+
+#
+#    NativeTransmog.AllowTwoHandAppearanceOnOneHand
+#        Description: Reserved for future server-side appearance validation.
+#                     It does not enforce any restriction during Phase 1.
+#        Default:     0
+
+NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
+
+#
+#    NativeTransmog.AllowOneHandAppearanceOnTwoHand
+#        Description: Reserved for future server-side appearance validation.
+#                     It does not enforce any restriction during Phase 1.
+#        Default:     0
+
+NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0
