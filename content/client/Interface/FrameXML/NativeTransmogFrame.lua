@@ -137,7 +137,7 @@ local function refreshCatalog()
 
     for index, appearance in ipairs(catalog) do
         local button = buttons[index] or createAppearanceButton(index)
-        local column = math.mod(index - 1, ICONS_PER_ROW)
+        local column = (index - 1) % ICONS_PER_ROW
         local row = math.floor((index - 1) / ICONS_PER_ROW)
         button:ClearAllPoints()
         button:SetPoint("TOPLEFT", 8 + column * (ICON_SIZE + ICON_GAP),
