@@ -3,7 +3,7 @@
 #
 #    NativeTransmog.Enable
 #        Description: Enables the native preview wardrobe and NPC service.
-#        Important:   Phase 2 still does not apply or persist appearances.
+#        Important:   Phase 3A persists ownership but does not apply appearances.
 #        Default:     1
 
 NativeTransmog.Enable = 1
@@ -30,6 +30,30 @@ NativeTransmog.CustomNPC.Enable = 1
 #        Default:     1
 
 NativeTransmog.CustomNPC.AllowSpawnRegistration = 1
+
+#
+#    NativeTransmog.Collection.Enable
+#        Description: Enables persistent appearance collection.
+#        Default:     1
+
+NativeTransmog.Collection.Enable = 1
+
+#
+#    NativeTransmog.Collection.AccountWide
+#        Description: 1 shares appearances among characters on the authenticated
+#                     account in this character database. 0 uses independent
+#                     character collections. Switching preserves both scopes.
+#        Default:     1
+
+NativeTransmog.Collection.AccountWide = 1
+
+#
+#    NativeTransmog.Collection.UnlockOnAcquire
+#        Description: Unlocks eligible armor and weapon appearances as items
+#                     enter a character's ownership.
+#        Default:     1
+
+NativeTransmog.Collection.UnlockOnAcquire = 1
 
 #
 #    NativeTransmog.AllowTwoHandAppearanceOnOneHand

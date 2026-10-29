@@ -1,33 +1,35 @@
-# Phase 2 test results
+# Phase 3A test results
 
 Test date: 2026-10-28.
 
 ## Passed
 
 - `python3 content/build_epf.py --check`
-  - Deterministic four-member EPF verified.
+  - The unchanged Phase 1/2 protected-FrameXML EPF remains deterministic.
   - SHA-256: `4951f0c61776f1ec00992805f77a4c674cea9d4d858d5f91ed60064ee0cf7b48`.
-- `python3 -m unittest tests/test_phase1.py tests/test_phase2.py`
-  - 17 tests passed.
-  - Phase 1 coverage: Schema 3/TOC ordering, no-addon contract, XML/load contract, preview markers, catalog fixture, configuration/loader, and byte-for-byte EPF rebuilding.
-  - Phase 2 coverage: registration-only SQL ownership, managed creature declaration, symbolic V1 runtime resolution, absence of fixed entry `900100` in SQL/C++, entry/spawn scopes and resolution order, persistence paths, loaded template/model guards, RBAC, interaction checks, additive hooks, transport, debug separation, cleanup hooks, and config defaults.
-- Production `mod-content-manager` `ContentPackage` parser against the regenerated EPF.
-  - Passed as Schema 3 with one `dedicated-transmogrifier` managed creature copied from stock template `28699`.
-- `python3 tests/verify_catalog.py /home/smithkt/aicode_folder/azerothcore-wotlk/data/sql/base/db_world/item_template.sql`
-  - All 16 catalog items exist and match allowed inventory types.
-- `git diff --check`
-  - Passed.
+- `python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py`
+  - 29 tests passed.
+  - Phase 1/2 regression contracts remain covered.
+  - Phase 3A covers idempotent schema/constraints, authenticated ownership, account and character scope behavior, scope switching without deletion/merge, repeated acquisitions, first-provenance preservation, shared visuals, incompatible categories, cross-class independence, eligibility/missing data, acquisition hooks, synchronous persistence, reopen/relogin behavior, query filtering/order, bounded RBAC diagnostics, and an indexed 10,000-row collection model.
+- Playerbot compile and link against revision `8a4e76eac8c4`.
+  - CMake detected `mod-native-transmog` as a static module.
+  - Release build used `MODULES=static`, `SCRIPTS=none`, GCC 15.2, and C++20.
+  - `NativeTransmogCollection.cpp`, the Phase 1/2 module sources, and the generated module loader compiled into `libmodules.a`.
+  - `worldserver` linked successfully at 100%.
+  - The host lacked installed MySQL development files, so `libmysqlclient-dev` and `libmysqlclient24` were downloaded and extracted under `/tmp` only; no system package was installed.
+- AzerothCore C++ codestyle checks passed for the module changes.
+- `git diff --check` passed.
 
 ## Scope of these results
 
-The Python Phase 2 tests are static integration-contract tests consistent with this repository's existing test conventions; they do not replace a running world database, packet capture, or WoW client test. The production parser check validates the EPF schema contract, not allocation/apply against a realm database.
+The Python tests combine the repository's established static integration contracts with an executable SQLite persistence model. The model validates ownership and database semantics but is not a live MySQL/worldserver integration test. The worldserver result proves Playerbot compile/link compatibility with modules enabled; scripts were disabled to keep the verification build bounded and do not change module hook interfaces or linkage.
 
 ## Not performed
 
-- No PTR world migration, worldserver startup, NPC spawn, gossip/vendor/quest interaction, packet observation, or restart-persistence test.
-- No full Playerbot CMake compile was rerun after the Content Manager allocation correction.
-- No Windows client, Portalkeeper launch, cumulative PTR MPQ publication, or in-game Phase 2 validation.
+- No PTR migration, live MySQL write, worldserver startup, item acquisition, relog/restart persistence, or GM command execution.
+- No Windows client, Portalkeeper launch, MPQ publication, or in-game Phase 3A validation.
 - No live `mod-transmog` coexistence/data comparison.
-- No production server, database, configuration, executable, or patch channel was touched.
+- No production/PTR database, configuration, executable, or deployment was changed.
+- The AzerothCore SQL linter could not complete because it requires fetching `origin/master` and this managed workspace exposes `.git/FETCH_HEAD` read-only. Schema-specific automated checks and `git diff --check` passed.
 
-Status: **Phase 2 architectural correction implemented and package-validated; full server build and PTR validation remain required.**
+Status: **Phase 3A implementation, automated checks, and Playerbot compile/link are complete; PTR validation remains required.**

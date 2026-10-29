@@ -2,7 +2,17 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phase 1's in-game validated preview wardrobe is preserved: character model and rotation, slot browser, icons/tooltips, simultaneous previews, reset, and the temporary `/wardrobe` command. Phase 2 adds a reusable, server-authorized NPC service. It still does **not** apply or persist appearances, manage collections, migrate existing transmogrification data, or save outfits.
+Phase 1's in-game validated preview wardrobe and Phase 2's server-authorized NPC service are preserved. Phase 3A adds persistent, permissive appearance collection. It does **not** apply appearances, change the wardrobe catalog, discover unchosen quest rewards, migrate existing `mod-transmog` records, or save outfits.
+
+## Phase 3A persistent collection
+
+Eligible visible armor and weapon appearances unlock when an item is newly stored or moved into a character's inventory. Collection ignores class, race, armor proficiency, weapon proficiency, and required skills: a mage can collect plate and a rogue can collect a two-handed sword. Future Phase 3C application must independently enforce all compatibility rules.
+
+Ownership lives in the character-database table `native_transmog_collection`. Account ownership uses the authenticated `WorldSession` account ID; character ownership uses the server-side character GUID. Both namespaces coexist. Switching scope never merges, copies, or deletes rows, and switching back restores the earlier namespace.
+
+The appearance identity is `(DisplayInfoID, item class, item subclass, inventory type)`. This deduplicates item entries that safely share complete client/category identity while keeping shared display IDs separate where armor/weapon/slot semantics differ. Original source item, acquiring character, timestamp, and acquisition hook category remain attached to the first unlock.
+
+Supported central acquisition paths include ordinary loot storage, quest rewards actually received, crafted items, most vendor purchases, mail retrieval, and trades. A focused hook covers vendor purchases equipped directly. There is no startup/login inventory scan and no historical backfill. See [Phase 3A architecture](docs/PHASE3A_ARCHITECTURE.md) for exact eligibility, acquisition limitations, schema semantics, performance, Playerbot, and cross-realm details.
 
 ## Phase 2 architecture
 
@@ -41,11 +51,14 @@ NativeTransmog.Enable = 1
 NativeTransmog.DefaultNPC.Enable = 1
 NativeTransmog.CustomNPC.Enable = 1
 NativeTransmog.CustomNPC.AllowSpawnRegistration = 1
+NativeTransmog.Collection.Enable = 1
+NativeTransmog.Collection.AccountWide = 1
+NativeTransmog.Collection.UnlockOnAcquire = 1
 NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0
 ```
 
-The first four settings control the module and registry scopes. The weapon settings remain reserved and unenforced because appearance application is out of scope.
+Collection is account-wide by default. Disabling account-wide mode selects existing/per-character rows without touching account rows. The weapon settings remain reserved and unenforced because appearance application is out of scope.
 
 ## GM commands
 
@@ -58,14 +71,17 @@ Select a creature before using selection-based commands:
 .nativetransmog npc remove spawn
 .nativetransmog npc info
 .nativetransmog npc list
+.nativetransmog collection info
+.nativetransmog collection count
+.nativetransmog collection list
 ```
 
-Add uses AzerothCore's existing NPC-add RBAC permission, remove uses NPC-delete, and list/info use NPC-info. Ordinary players therefore cannot manage registrations. Adds, removals, and re-enables update the in-memory registry immediately and synchronously persist to the world database; a restart reloads all rows.
+Add uses AzerothCore's existing NPC-add RBAC permission, remove uses NPC-delete, and read-only NPC/collection diagnostics use NPC-info. Ordinary players therefore cannot inspect collections through GM commands. Collection list output is bounded to 50 rows.
 
 ## Installation and PTR deployment
 
 1. Install this repository as `modules/mod-native-transmog` in the Playerbot core and leave `mod-transmog` installed and configured normally.
-2. Apply the normal AzerothCore module SQL updater. Existing Phase 1 realms receive `data/sql/db-world/updates/2026_10_28_00_native_transmog_npc_service.sql`; clean databases also have the equivalent base SQL.
+2. Apply the normal AzerothCore module SQL updater. Phase 3A adds `data/sql/db-characters/updates/2026_10_28_00_native_transmog_collection.sql`; it does not alter the Phase 2 world schema or any `mod-transmog` table.
 3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow and build worldserver.
 4. Rebuild/verify the EPF:
 
@@ -87,21 +103,21 @@ The checked-in EPF is deterministic Schema 3 content. It adds the XML immediatel
 
 ```bash
 python3 content/build_epf.py --check
-python3 -m unittest tests/test_phase1.py tests/test_phase2.py
+python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py
 python3 tests/verify_catalog.py \
   /path/to/azerothcore-wotlk/data/sql/base/db_world/item_template.sql
 ```
 
-The checks cover Phase 1 UI regressions, deterministic EPF output, schema/config/registry contracts, registration resolution and persistence paths, duplicate/re-enable/removal behavior, RBAC command declarations, interaction validation, additive hooks, transport handling, debug separation, and session cleanup hooks. See [test results](docs/TEST_RESULTS.md) and the [PTR checklist](docs/PTR_VALIDATION.md).
+The checks cover Phase 1/2 regressions plus Phase 3A schema, ownership modes and switching, duplicate/shared-display identity, persistence/reopen behavior, filtering/order, acquisition hooks, eligibility, GM permissions/bounds, and indexed large-collection behavior. See [test results](docs/TEST_RESULTS.md), the [Phase 2 PTR checklist](docs/PTR_VALIDATION.md), and the [Phase 3A PTR plan](docs/PHASE3A_PTR_VALIDATION.md).
 
 ## Known limitations and future mobile NPCs
 
-- PTR validation for Phase 2 has not been performed; automated checks and a Playerbot module build do not prove in-game behavior.
+- Phase 3A PTR validation has not been performed; automated checks and a Playerbot module build do not prove in-game behavior.
 - Phase 2 opens immediately on supported gossip/quest, vendor, and trainer interactions; it cannot safely inject an option into arbitrary scripted gossip on this branch.
 - Client service types that bypass all inspected hooks are not covered. Registration never changes their flags to manufacture an interaction path.
 - Vehicle-passenger creatures are explicitly rejected in Phase 2. Entry resolution itself is location- and spawn-independent, so the registry is suitable for a future mobile Transmogrifier, but passenger interaction and moving-distance/session semantics require dedicated validation before removing this guard.
-- The preview catalog remains a deterministic fixture, not an unlock collection or usability filter.
-- No persistent appearance, collection, saved outfit, item application, or migration from `mod-transmog` exists.
+- The preview catalog remains a deterministic fixture and is not yet filtered by the persisted collection.
+- No saved outfit, appearance application, unchosen quest-reward discovery, historical backfill, or migration from `mod-transmog` exists.
 
 No code change outside this repository is required. The target Content Manager must already include managed server resources and `ContentResourceApiV1` (Milestone 2), and its `2026_09_25_06_content_managed_server_resources.sql` migration must be present before building/activating this EPF.
 
