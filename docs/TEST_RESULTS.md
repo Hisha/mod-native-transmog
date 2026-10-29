@@ -1,35 +1,34 @@
-# Phase 3A test results
+# Phase 3B test results
 
-Test date: 2026-10-28.
+Test date: 2026-10-29.
 
 ## Passed
 
 - `python3 content/build_epf.py --check`
-  - The unchanged Phase 1/2 protected-FrameXML EPF remains deterministic.
+  - The Phase 1/2 protected-FrameXML EPF remains unchanged and deterministic.
   - SHA-256: `4951f0c61776f1ec00992805f77a4c674cea9d4d858d5f91ed60064ee0cf7b48`.
-- `python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py`
-  - 29 tests passed.
-  - Phase 1/2 regression contracts remain covered.
-  - Phase 3A covers idempotent schema/constraints, authenticated ownership, account and character scope behavior, scope switching without deletion/merge, repeated acquisitions, first-provenance preservation, shared visuals, incompatible categories, cross-class independence, eligibility/missing data, acquisition hooks, synchronous persistence, reopen/relogin behavior, query filtering/order, bounded RBAC diagnostics, and an indexed 10,000-row collection model.
-- Playerbot compile and link against revision `8a4e76eac8c4`.
-  - CMake detected `mod-native-transmog` as a static module.
+- `python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py tests/test_phase3b.py`
+  - 50 tests passed.
+  - Phase 3B coverage includes selectable, guaranteed, and mixed rewards; empty/invalid/missing rewards; cross-class independence; duplicate identities; already-owned first provenance; repeat idempotency; account and character scope; post-reward-only hook contracts; preview read-only behavior; execution/rerun behavior; current-definition semantics; reliable rewarded-history selection; RBAC; bounded 25-quest batches; multi-row batch persistence; and Phase 1–3A regression contracts.
+- Real Playerbot compile and link against revision `8a4e76eac8c4` (`Playerbot`).
+  - CMake detected `mod-native-transmog` as a static module and reported `phase-3b-quest-reward-collections`.
   - Release build used `MODULES=static`, `SCRIPTS=none`, GCC 15.2, and C++20.
-  - `NativeTransmogCollection.cpp`, the Phase 1/2 module sources, and the generated module loader compiled into `libmodules.a`.
+  - `NativeTransmogCollection.cpp`, `NativeTransmogQuestCollection.cpp`, the Phase 1/2 sources, and the generated module loader compiled into `libmodules.a`.
   - `worldserver` linked successfully at 100%.
-  - The host lacked installed MySQL development files, so `libmysqlclient-dev` and `libmysqlclient24` were downloaded and extracted under `/tmp` only; no system package was installed.
-- AzerothCore C++ codestyle checks passed for the module changes.
+  - The host's MySQL runtime lacked development headers. `libmysqlclient-dev` and `libmysqlclient24` were downloaded and extracted under the disposable `/tmp` build tree only; no system package was installed.
+- AzerothCore C++ codestyle checks passed for the repository changes.
 - `git diff --check` passed.
 
 ## Scope of these results
 
-The Python tests combine the repository's established static integration contracts with an executable SQLite persistence model. The model validates ownership and database semantics but is not a live MySQL/worldserver integration test. The worldserver result proves Playerbot compile/link compatibility with modules enabled; scripts were disabled to keep the verification build bounded and do not change module hook interfaces or linkage.
+The Python suite follows the repository's established static integration and executable SQLite persistence-model approach. It does not simulate a live worldserver or MySQL transaction. The Playerbot build proves the actual hook signatures, command table, quest structures, database API use, module linkage, and C++20 compatibility on the inspected target revision.
 
 ## Not performed
 
-- No PTR migration, live MySQL write, worldserver startup, item acquisition, relog/restart persistence, or GM command execution.
-- No Windows client, Portalkeeper launch, MPQ publication, or in-game Phase 3A validation.
-- No live `mod-transmog` coexistence/data comparison.
-- No production/PTR database, configuration, executable, or deployment was changed.
-- The AzerothCore SQL linter could not complete because it requires fetching `origin/master` and this managed workspace exposes `.git/FETCH_HEAD` read-only. Schema-specific automated checks and `git diff --check` passed.
+- No PTR migration, live MySQL write, worldserver startup, quest completion, backfill command, relog/restart, Playerbot population load, or in-game collection query was executed.
+- No Windows client, Portalkeeper launch, MPQ publication, or EPF deployment was changed.
+- No live `mod-transmog` coexistence/data comparison was performed.
+- No production/PTR database, config, executable, or deployment was changed.
+- The AzerothCore SQL codestyle tool could not complete because it unconditionally fetches `origin/master` and this managed repository exposes `.git/FETCH_HEAD` read-only. The migration has dedicated idempotency assertions, and `git diff --check` passed.
 
-Status: **Phase 3A implementation, automated checks, and Playerbot compile/link are complete; PTR validation remains required.**
+Status: **Phase 3B implementation, automated checks, and Playerbot compile/link are complete; PTR validation remains required.**

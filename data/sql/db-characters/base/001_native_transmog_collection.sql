@@ -9,12 +9,14 @@ CREATE TABLE IF NOT EXISTS `native_transmog_collection` (
   `item_subclass` TINYINT UNSIGNED NOT NULL,
   `inventory_type` TINYINT UNSIGNED NOT NULL,
   `source_item` INT UNSIGNED NOT NULL COMMENT 'Original item_template entry',
+  `source_quest` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Quest entry for quest-derived unlocks; otherwise 0',
   `acquiring_character` INT UNSIGNED NOT NULL COMMENT 'Original character GUID; deliberately no FK',
   `acquired_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `acquisition_source` TINYINT UNSIGNED NOT NULL COMMENT '1=new item, 2=inventory transfer, 3=vendor direct equip',
+  `acquisition_source` TINYINT UNSIGNED NOT NULL COMMENT '1=new item, 2=inventory transfer, 3=vendor, 4=quest completion, 5=quest backfill',
   PRIMARY KEY (`owner_type`, `owner_id`, `display_id`, `item_class`, `item_subclass`, `inventory_type`),
   KEY `idx_native_transmog_owner_category` (`owner_type`, `owner_id`, `item_class`, `inventory_type`),
   KEY `idx_native_transmog_source_item` (`source_item`),
+  KEY `idx_native_transmog_source_quest` (`source_quest`),
   KEY `idx_native_transmog_acquiring_character` (`acquiring_character`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='mod-native-transmog persistent appearance ownership';

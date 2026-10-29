@@ -47,3 +47,14 @@ The Phase 2 implementation was checked against Playerbot revision `8a4e76eac` in
 - `creatureSpawns[]` is also supported, but the module intentionally does not declare a fixed dedicated spawn. Administrators retain the existing ability to create any number of spawns, while the module's generic registration table continues to support arbitrary creature entries and persistent spawn IDs.
 
 No core, Content Manager, FrameForge, Portalkeeper, or `mod-transmog` code change is required. Deployment does require Content Manager Milestone 2 and its existing `2026_09_25_06_content_managed_server_resources.sql` schema migration. The previous fixed entry `900100` is no longer declared, inserted, or referenced by module SQL/C++; a row created by an earlier unreleased migration is inert legacy data and is not deleted automatically because the module cannot prove ownership of a world row it did not allocate.
+
+## Phase 3B Playerbot quest findings
+
+Phase 3B was inspected against the same Playerbot revision `8a4e76eac8c4`:
+
+- `QuestDef.h` defines six `RewardChoiceItemId` entries and four `RewardItemId` entries. No newer-version reward item fields exist in this branch.
+- `Player::RewardQuest` grants only the chosen choice, grants every guaranteed reward, applies the remaining quest rewards, calls `SetRewardedQuest`, then `SaveToDB`, and finally invokes `OnPlayerCompleteQuest`. The module therefore uses `PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST` as the safest available post-reward hook.
+- `CompleteQuest` changes objective state and can precede actual turn-in; `OnPlayerBeforeQuestComplete`, quest acceptance, abandonment, gossip, and item-reward hooks do not establish the required successful all-reward transaction and are not used for enumeration.
+- The character schema stores durable rewarded evidence in `character_queststatus_rewarded(guid, quest, active)` with primary key `(guid, quest)`. Core loads only active rows. `character_queststatus` is active-log state and can contain complete-but-not-rewarded quests, so Phase 3B excludes it.
+- Rewarded storage proves at least one persisted reward. It does not preserve which choice was selected, the reward definition at completion time, or repeat count. Backfill consequently uses current loaded quest definitions and reports missing definitions without inference.
+- The backfill command uses online `Player*` targets selected through the established command handler, checks command RBAC and target security, derives collection ownership from the authenticated session, and exposes no owner-ID or global scan input.

@@ -2,7 +2,17 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phase 1's in-game validated preview wardrobe and Phase 2's server-authorized NPC service are preserved. Phase 3A adds persistent, permissive appearance collection. It does **not** apply appearances, change the wardrobe catalog, discover unchosen quest rewards, migrate existing `mod-transmog` records, or save outfits.
+Phase 1's in-game validated preview wardrobe, Phase 2's server-authorized NPC service, and Phase 3A's persistent collection are preserved. Phase 3B unlocks every eligible appearance offered by a successfully rewarded quest and adds an explicit, bounded historical backfill. It does **not** grant unselected items, apply appearances, change the wardrobe catalog, migrate existing `mod-transmog` records, or save outfits.
+
+## Phase 3B quest reward collection
+
+After a successful quest reward transaction, all eligible appearances in the quest's six selectable and four guaranteed WotLK reward fields are collected. The character still receives only the selected choice plus normal guaranteed items. Collection ignores class, race, armor/weapon proficiency, skills, and equip requirements; the Phase 3A resolver still excludes non-visible/non-equipment categories, missing templates, invalid display data, rings, trinkets, and other ineligible items.
+
+The Playerbot `PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST` hook is post-reward on the inspected branch: item delivery, rewarded-state mutation, and `SaveToDB` precede the hook. Accepting, previewing, objective-completing, abandoning, or failing to turn in a quest does not collect offered rewards. Duplicate item entries, shared composite appearances, repeated quests, and appearances already acquired normally are idempotent and preserve first provenance.
+
+Quest unlocks use the same authenticated account/character owner, appearance key, cache, persistence table, and query APIs as Phase 3A. Acquisition categories `4` and `5` distinguish live all-offered-reward enumeration and historical backfill. The additive `source_quest` column records the current quest definition responsible for a new quest-derived row; existing rows remain unchanged with zero. A selected or guaranteed item may already have been recorded by Phase 3A's earlier physical-item hook, in which case its original item-storage provenance remains authoritative.
+
+Historical backfill is never automatic. An authorized in-game GM starts preview or execution for one selected online character (or the GM character), and status reports progress. Only active `character_queststatus_rewarded` rows are accepted as reliable evidence; active quest-log state and achievements are ignored. Processing uses monotonic indexed queries of at most 25 quests every 100 ms. Account-wide execution contributes that one character's history to the shared collection without claiming sibling characters were scanned. Current server quest definitions are authoritative; deleted definitions, unretained history, old reward choices, repeat counts, and historical definition changes cannot be reconstructed. See [Phase 3B architecture](docs/PHASE3B_ARCHITECTURE.md).
 
 ## Phase 3A persistent collection
 
@@ -12,7 +22,7 @@ Ownership lives in the character-database table `native_transmog_collection`. Ac
 
 The appearance identity is `(DisplayInfoID, item class, item subclass, inventory type)`. This deduplicates item entries that safely share complete client/category identity while keeping shared display IDs separate where armor/weapon/slot semantics differ. Original source item, acquiring character, timestamp, and acquisition hook category remain attached to the first unlock.
 
-Supported central acquisition paths include ordinary loot storage, quest rewards actually received, crafted items, most vendor purchases, mail retrieval, and trades. A focused hook covers vendor purchases equipped directly. There is no startup/login inventory scan and no historical backfill. See [Phase 3A architecture](docs/PHASE3A_ARCHITECTURE.md) for exact eligibility, acquisition limitations, schema semantics, performance, Playerbot, and cross-realm details.
+Supported central acquisition paths include ordinary loot storage, quest rewards actually received, crafted items, most vendor purchases, mail retrieval, and trades. A focused hook covers vendor purchases equipped directly. There is no startup/login inventory scan; Phase 3B's separate historical command is explicit and selected-character-only. See [Phase 3A architecture](docs/PHASE3A_ARCHITECTURE.md) for exact eligibility, acquisition limitations, schema semantics, performance, Playerbot, and cross-realm details.
 
 ## Phase 2 architecture
 
@@ -54,6 +64,8 @@ NativeTransmog.CustomNPC.AllowSpawnRegistration = 1
 NativeTransmog.Collection.Enable = 1
 NativeTransmog.Collection.AccountWide = 1
 NativeTransmog.Collection.UnlockOnAcquire = 1
+NativeTransmog.Collection.UnlockAllQuestRewards = 1
+NativeTransmog.Collection.QuestBackfill.Enable = 1
 NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0
 ```
@@ -74,14 +86,17 @@ Select a creature before using selection-based commands:
 .nativetransmog collection info
 .nativetransmog collection count
 .nativetransmog collection list
+.nativetransmog collection backfill preview
+.nativetransmog collection backfill run
+.nativetransmog collection backfill status
 ```
 
-Add uses AzerothCore's existing NPC-add RBAC permission, remove uses NPC-delete, and read-only NPC/collection diagnostics use NPC-info. Ordinary players therefore cannot inspect collections through GM commands. Collection list output is bounded to 50 rows.
+Add and quest-backfill execution use AzerothCore's existing NPC-add RBAC permission, remove uses NPC-delete, and read-only NPC/collection diagnostics and backfill preview/status use NPC-info. Ordinary players therefore cannot invoke these GM commands. Collection list output is bounded to 50 rows; backfill has no global/account/realm mode and requires an online character target.
 
 ## Installation and PTR deployment
 
 1. Install this repository as `modules/mod-native-transmog` in the Playerbot core and leave `mod-transmog` installed and configured normally.
-2. Apply the normal AzerothCore module SQL updater. Phase 3A adds `data/sql/db-characters/updates/2026_10_28_00_native_transmog_collection.sql`; it does not alter the Phase 2 world schema or any `mod-transmog` table.
+2. Apply the normal AzerothCore module SQL updater. Phase 3A adds `2026_10_28_00_native_transmog_collection.sql`; Phase 3B conditionally adds `source_quest` and its index through `2026_10_29_00_native_transmog_quest_provenance.sql`. Existing ownership/provenance is not rewritten, and no `mod-transmog` table is touched.
 3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow and build worldserver.
 4. Rebuild/verify the EPF:
 
@@ -103,21 +118,22 @@ The checked-in EPF is deterministic Schema 3 content. It adds the XML immediatel
 
 ```bash
 python3 content/build_epf.py --check
-python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py
+python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py tests/test_phase3b.py
 python3 tests/verify_catalog.py \
   /path/to/azerothcore-wotlk/data/sql/base/db_world/item_template.sql
 ```
 
-The checks cover Phase 1/2 regressions plus Phase 3A schema, ownership modes and switching, duplicate/shared-display identity, persistence/reopen behavior, filtering/order, acquisition hooks, eligibility, GM permissions/bounds, and indexed large-collection behavior. See [test results](docs/TEST_RESULTS.md), the [Phase 2 PTR checklist](docs/PTR_VALIDATION.md), and the [Phase 3A PTR plan](docs/PHASE3A_PTR_VALIDATION.md).
+The checks cover Phase 1/2 regressions, Phase 3A ownership/persistence, and Phase 3B reward enumeration, cross-class behavior, provenance, post-reward integration, backfill evidence, preview/run idempotency, permissions, and batching. See [test results](docs/TEST_RESULTS.md), the [Phase 2 PTR checklist](docs/PTR_VALIDATION.md), the [Phase 3A PTR plan](docs/PHASE3A_PTR_VALIDATION.md), and the [Phase 3B PTR plan](docs/PHASE3B_PTR_VALIDATION.md).
 
 ## Known limitations and future mobile NPCs
 
-- Phase 3A PTR validation has not been performed; automated checks and a Playerbot module build do not prove in-game behavior.
+- Phase 3B PTR validation has not been performed; automated checks and a Playerbot module build do not prove in-game behavior.
 - Phase 2 opens immediately on supported gossip/quest, vendor, and trainer interactions; it cannot safely inject an option into arbitrary scripted gossip on this branch.
 - Client service types that bypass all inspected hooks are not covered. Registration never changes their flags to manufacture an interaction path.
 - Vehicle-passenger creatures are explicitly rejected in Phase 2. Entry resolution itself is location- and spawn-independent, so the registry is suitable for a future mobile Transmogrifier, but passenger interaction and moving-distance/session semantics require dedicated validation before removing this guard.
 - The preview catalog remains a deterministic fixture and is not yet filtered by the persisted collection.
-- No saved outfit, appearance application, unchosen quest-reward discovery, historical backfill, or migration from `mod-transmog` exists.
+- Backfill can prove only active persisted rewarded rows and uses current quest definitions; it cannot reconstruct missing repeat history, old choices, or historical reward definitions. Offline targets are intentionally unsupported.
+- No saved outfit, appearance application, client collection filtering, or migration from `mod-transmog` exists.
 
 No code change outside this repository is required. The target Content Manager must already include managed server resources and `ContentResourceApiV1` (Milestone 2), and its `2026_09_25_06_content_managed_server_resources.sql` migration must be present before building/activating this EPF.
 

@@ -1,4 +1,5 @@
 #include "NativeTransmogCollection.h"
+#include "NativeTransmogQuestCollection.h"
 #include "NativeTransmogService.h"
 
 #include "AllCreatureScript.h"
@@ -10,6 +11,7 @@
 #include "ItemTemplate.h"
 #include "Log.h"
 #include "Player.h"
+#include "QuestDef.h"
 #include "RBAC.h"
 #include "ScriptMgr.h"
 
@@ -46,6 +48,15 @@ Creature* SelectedCreature(ChatHandler* handler)
     if (!creature && handler)
         handler->SendErrorMessage("Select a creature first.");
     return creature;
+}
+
+Player* SelectedOrSelfPlayer(ChatHandler* handler)
+{
+    if (!handler)
+        return nullptr;
+    if (Player* selected = handler->getSelectedPlayer())
+        return selected;
+    return handler->GetPlayer();
 }
 
 bool AddSelected(ChatHandler* handler, native_transmog::RegistrationScope scope)
@@ -125,16 +136,24 @@ public:
             sConfigMgr->GetOption<bool>("NativeTransmog.Collection.AccountWide", true);
         collectionConfig.unlockOnAcquire =
             sConfigMgr->GetOption<bool>("NativeTransmog.Collection.UnlockOnAcquire", true);
+        collectionConfig.unlockAllQuestRewards =
+            sConfigMgr->GetOption<bool>("NativeTransmog.Collection.UnlockAllQuestRewards", true);
+        collectionConfig.questBackfillEnabled =
+            sConfigMgr->GetOption<bool>("NativeTransmog.Collection.QuestBackfill.Enable", true);
 
         native_transmog::Service::Instance().Configure(serviceConfig);
         native_transmog::CollectionService::Instance().Configure(collectionConfig);
+        native_transmog::QuestBackfillService::Instance().Configure(
+            collectionConfig.enabled && collectionConfig.questBackfillEnabled);
         if (reload && collectionConfig.enabled)
             native_transmog::CollectionService::Instance().Initialize();
         if (reload)
             LOG_INFO("server.loading",
-                "Native Transmog Phase 3A configuration reloaded (collection: {}, scope: {}, acquire: {}).",
+                "Native Transmog Phase 3B configuration reloaded "
+                "(collection: {}, scope: {}, acquire: {}, quest rewards: {}, backfill: {}).",
                 collectionConfig.enabled, collectionConfig.accountWide ? "account" : "character",
-                collectionConfig.unlockOnAcquire);
+                collectionConfig.unlockOnAcquire, collectionConfig.unlockAllQuestRewards,
+                collectionConfig.questBackfillEnabled);
     }
 
     void OnStartup() override
@@ -156,9 +175,11 @@ public:
             "(two-hand-on-one-hand: {}, one-hand-on-two-hand: {}).",
             allowTwoHandAppearanceOnOneHand, allowOneHandAppearanceOnTwoHand);
         LOG_INFO("server.loading",
-            "Native Transmog Phase 3A collection initialized (enabled: {}, scope: {}, unlock on acquire: {}).",
+            "Native Transmog Phase 3B collection initialized "
+            "(enabled: {}, scope: {}, unlock on acquire: {}, quest rewards: {}, backfill: {}).",
             collectionConfig.enabled, collectionConfig.accountWide ? "account-wide" : "character-specific",
-            collectionConfig.unlockOnAcquire);
+            collectionConfig.unlockOnAcquire, collectionConfig.unlockAllQuestRewards,
+            collectionConfig.questBackfillEnabled);
     }
 };
 
@@ -187,11 +208,12 @@ public:
         { PLAYERHOOK_ON_UPDATE, PLAYERHOOK_ON_BEFORE_LOGOUT, PLAYERHOOK_ON_MAP_CHANGED,
           PLAYERHOOK_ON_SEND_LIST_INVENTORY, PLAYERHOOK_ON_BEFORE_RECEIVE_SPELL_LIST_FROM_TRAINER,
           PLAYERHOOK_ON_STORE_NEW_ITEM, PLAYERHOOK_ON_AFTER_MOVE_ITEM_TO_INVENTORY,
-          PLAYERHOOK_ON_AFTER_STORE_OR_EQUIP_NEW_ITEM }) { }
+          PLAYERHOOK_ON_AFTER_STORE_OR_EQUIP_NEW_ITEM, PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST }) { }
 
     void OnPlayerUpdate(Player* player, std::uint32_t diff) override
     {
         native_transmog::Service::Instance().UpdateSession(player, diff);
+        native_transmog::QuestBackfillService::Instance().Update(player, diff);
     }
 
     void OnPlayerBeforeLogout(Player* player) override
@@ -240,6 +262,19 @@ public:
             native_transmog::CollectionService::Instance().Unlock(
                 player, item, native_transmog::AcquisitionSource::Vendor);
     }
+
+    void OnPlayerCompleteQuest(Player* player, Quest const* quest) override
+    {
+        if (!collectionConfig.enabled || !collectionConfig.unlockAllQuestRewards)
+            return;
+        native_transmog::QuestCollectionStats stats = native_transmog::CollectQuestRewardAppearances(
+            player, quest, native_transmog::AcquisitionSource::QuestCompletion, false);
+        if (stats.newAppearances || stats.unresolvedRecords)
+            LOG_DEBUG("module.native_transmog",
+                "Quest {} completion collected {} of {} eligible appearances ({} already owned, {} unresolved).",
+                quest ? quest->GetQuestId() : 0, stats.newAppearances, stats.eligibleAppearances,
+                stats.alreadyCollected, stats.unresolvedRecords);
+    }
 };
 
 class NativeTransmogCommandScript final : public CommandScript
@@ -263,10 +298,16 @@ public:
             { "list", HandleList, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::Yes },
             { "info", HandleInfo, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No }
         };
+        static ChatCommandTable backfillCommands = {
+            { "preview", HandleBackfillPreview, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "run", HandleBackfillRun, rbac::RBAC_PERM_COMMAND_NPC_ADD, Console::No },
+            { "status", HandleBackfillStatus, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No }
+        };
         static ChatCommandTable collectionCommands = {
             { "info", HandleCollectionInfo, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "list", HandleCollectionList, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
-            { "count", HandleCollectionCount, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No }
+            { "count", HandleCollectionCount, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "backfill", backfillCommands }
         };
         static ChatCommandTable rootCommands = {
             { "npc", npcCommands },
@@ -322,7 +363,7 @@ public:
             owner.type == native_transmog::CollectionOwnerType::Account ? "account-wide" : "character-specific",
             owner.id, collection.Count(player));
         handler->SendSysMessage("Collection eligibility is independent of class/proficiency; "
-            "appearance application is not implemented in Phase 3A.");
+            "appearance application is not implemented in Phase 3B.");
         return true;
     }
 
@@ -352,14 +393,85 @@ public:
         {
             ItemTemplate const* source = collection.ResolveSourceItem(record);
             handler->PSendSysMessage(
-                "  display {} class {} subclass {} inventory {} | source item {}{} | acquired by {} via {} at {}",
+                "  display {} class {} subclass {} inventory {} | source item {}{} quest {} | "
+                "acquired by {} via {} at {}",
                 record.appearance.displayId, record.appearance.itemClass, record.appearance.itemSubclass,
                 record.appearance.inventoryType, record.sourceItem,
-                source ? "" : " (template missing)", record.acquiringCharacter,
+                source ? "" : " (template missing)", record.sourceQuest, record.acquiringCharacter,
                 native_transmog::CollectionService::SourceName(record.acquisitionSource), record.acquiredAt);
         }
         if (total > records.size())
             handler->SendSysMessage("  Output is bounded to the first 50 records in deterministic appearance order.");
+        return true;
+    }
+
+    static bool StartBackfill(ChatHandler* handler, bool preview)
+    {
+        Player* target = SelectedOrSelfPlayer(handler);
+        if (!target)
+        {
+            handler->SendErrorMessage("Select an online character or execute the command in game for yourself.");
+            return false;
+        }
+        if (handler->HasLowerSecurity(target))
+            return false;
+
+        std::string error;
+        if (!native_transmog::QuestBackfillService::Instance().Start(target, preview, error))
+        {
+            handler->SendErrorMessage("Native Transmog quest backfill: {}", error);
+            return false;
+        }
+
+        handler->PSendSysMessage(
+            "Native Transmog quest backfill {} started for {} (GUID {}). Processing is bounded to 25 reliably "
+            "rewarded quests per batch; use '.nativetransmog collection backfill status' with the same target.",
+            preview ? "preview" : "run", target->GetName(), target->GetGUID().GetCounter());
+        return true;
+    }
+
+    static bool HandleBackfillPreview(ChatHandler* handler)
+    {
+        return StartBackfill(handler, true);
+    }
+
+    static bool HandleBackfillRun(ChatHandler* handler)
+    {
+        return StartBackfill(handler, false);
+    }
+
+    static bool HandleBackfillStatus(ChatHandler* handler)
+    {
+        Player* target = SelectedOrSelfPlayer(handler);
+        if (!target)
+        {
+            handler->SendErrorMessage("Select the online character whose backfill status you want to inspect.");
+            return false;
+        }
+        if (handler->HasLowerSecurity(target))
+            return false;
+
+        native_transmog::QuestBackfillStatus status =
+            native_transmog::QuestBackfillService::Instance().Status(target);
+        if (status.state == native_transmog::BackfillState::NotStarted)
+        {
+            handler->PSendSysMessage("Native Transmog quest backfill: no job recorded for {}.", target->GetName());
+            return true;
+        }
+
+        handler->PSendSysMessage(
+            "Native Transmog quest backfill {} {} for {} (GUID {}, {} owner {}): quests {}, "
+            "eligible {}, already collected {}, {} {}, unresolved {}, ineligible reward items {}, cursor {}.",
+            status.preview ? "preview" : "run",
+            native_transmog::QuestBackfillService::StateName(status.state), status.targetName,
+            status.targetCharacter,
+            status.owner.type == native_transmog::CollectionOwnerType::Account ? "account" : "character",
+            status.owner.id, status.stats.completedQuestsExamined, status.stats.eligibleAppearances,
+            status.stats.alreadyCollected, status.preview ? "would unlock" : "newly unlocked",
+            status.stats.newAppearances, status.stats.unresolvedRecords, status.stats.ineligibleItems,
+            status.lastQuest);
+        if (!status.error.empty())
+            handler->PSendSysMessage("  Error: {}", status.error);
         return true;
     }
 };

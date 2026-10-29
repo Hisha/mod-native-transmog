@@ -3,7 +3,7 @@
 #
 #    NativeTransmog.Enable
 #        Description: Enables the native preview wardrobe and NPC service.
-#        Important:   Phase 3A persists ownership but does not apply appearances.
+#        Important:   Phases 3A/3B persist ownership but do not apply appearances.
 #        Default:     1
 
 NativeTransmog.Enable = 1
@@ -54,6 +54,24 @@ NativeTransmog.Collection.AccountWide = 1
 #        Default:     1
 
 NativeTransmog.Collection.UnlockOnAcquire = 1
+
+#
+#    NativeTransmog.Collection.UnlockAllQuestRewards
+#        Description: Unlocks every eligible selectable and guaranteed item
+#                     appearance after a quest reward completes successfully.
+#                     This never grants unselected items.
+#        Default:     1
+
+NativeTransmog.Collection.UnlockAllQuestRewards = 1
+
+#
+#    NativeTransmog.Collection.QuestBackfill.Enable
+#        Description: Permits an authorized GM to explicitly preview or run a
+#                     bounded historical quest-reward backfill. No scan starts
+#                     on login, startup, reload, or a timer.
+#        Default:     1
+
+NativeTransmog.Collection.QuestBackfill.Enable = 1
 
 #
 #    NativeTransmog.AllowTwoHandAppearanceOnOneHand

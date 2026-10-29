@@ -25,7 +25,9 @@ enum class AcquisitionSource : std::uint8_t
 {
     NewItem = 1,          // StoreNewItem: loot, craft, quest receipt, and similar creation paths.
     InventoryTransfer = 2,// MoveItemToInventory: trade, mail, and similar existing-item transfers.
-    Vendor = 3            // Direct-to-equipment vendor purchase not covered by StoreNewItem.
+    Vendor = 3,           // Direct-to-equipment vendor purchase not covered by StoreNewItem.
+    QuestCompletion = 4,  // Every eligible item offered by a successfully rewarded quest.
+    QuestBackfill = 5     // Current rewards of a quest found in reliable historical completion storage.
 };
 
 struct AppearanceKey
@@ -61,6 +63,8 @@ struct CollectionConfig
     bool enabled = true;
     bool accountWide = true;
     bool unlockOnAcquire = true;
+    bool unlockAllQuestRewards = true;
+    bool questBackfillEnabled = true;
 };
 
 struct CollectionFilter
@@ -75,9 +79,16 @@ struct AppearanceRecord
     CollectionOwner owner;
     AppearanceKey appearance;
     std::uint32_t sourceItem = 0;
+    std::uint32_t sourceQuest = 0;
     std::uint32_t acquiringCharacter = 0;
     std::uint64_t acquiredAt = 0;
     AcquisitionSource acquisitionSource = AcquisitionSource::NewItem;
+};
+
+struct CollectionUnlockRequest
+{
+    ItemTemplate const* itemTemplate = nullptr;
+    std::uint32_t sourceQuest = 0;
 };
 
 class CollectionService final
@@ -96,8 +107,11 @@ public:
 
     // The player/session is the only accepted ownership authority. No API takes
     // a client-supplied account or character ID.
-    bool Unlock(Player* player, Item const* item, AcquisitionSource source);
-    bool Unlock(Player* player, ItemTemplate const* itemTemplate, AcquisitionSource source);
+    bool Unlock(Player* player, Item const* item, AcquisitionSource source, std::uint32_t sourceQuest = 0);
+    bool Unlock(Player* player, ItemTemplate const* itemTemplate, AcquisitionSource source,
+        std::uint32_t sourceQuest = 0);
+    std::uint32_t UnlockBatch(Player* player, std::vector<CollectionUnlockRequest> const& requests,
+        AcquisitionSource source);
     bool IsCollected(Player const* player, AppearanceKey const& appearance);
     std::vector<AppearanceRecord> List(Player const* player, CollectionFilter const& filter = {},
         std::uint32_t offset = 0, std::uint32_t limit = 50) const;
@@ -105,8 +119,8 @@ public:
     bool GetProvenance(Player const* player, AppearanceKey const& appearance, AppearanceRecord& record) const;
     ItemTemplate const* ResolveSourceItem(AppearanceRecord const& record) const;
 
-    // Future controlled backfills can call Unlock with a specific server-owned
-    // Player and template. Phase 3A deliberately never scans on login/startup.
+    // Phase 3B backfill calls Unlock with a specific authenticated Player and
+    // template. No collection scan runs on login or startup.
     CollectionOwner OwnerFor(Player const* player) const;
     void ReleasePlayer(Player const* player);
 

@@ -56,8 +56,9 @@ void CollectionService::Configure(CollectionConfig const& config)
 bool CollectionService::Initialize()
 {
     QueryResult table = CharacterDatabase.Query(
-        "SELECT COUNT(*) FROM `information_schema`.`TABLES` "
-        "WHERE `TABLE_SCHEMA` = DATABASE() AND `TABLE_NAME` = 'native_transmog_collection'");
+        "SELECT COUNT(*) FROM `information_schema`.`COLUMNS` "
+        "WHERE `TABLE_SCHEMA` = DATABASE() AND `TABLE_NAME` = 'native_transmog_collection' "
+        "AND `COLUMN_NAME` = 'source_quest'");
 
     std::lock_guard<std::mutex> lock(_mutex);
     _collections.clear();
@@ -65,8 +66,8 @@ bool CollectionService::Initialize()
     if (!_databaseAvailable)
     {
         LOG_ERROR("module.native_transmog",
-            "Collection table native_transmog_collection is missing from the character database; "
-            "appearance collection is unavailable.");
+            "Collection table native_transmog_collection or its Phase 3B source_quest column is missing from "
+            "the character database; appearance collection is unavailable.");
         return false;
     }
     return true;
@@ -144,6 +145,8 @@ char const* CollectionService::SourceName(AcquisitionSource source)
         case AcquisitionSource::NewItem: return "new-item";
         case AcquisitionSource::InventoryTransfer: return "inventory-transfer";
         case AcquisitionSource::Vendor: return "vendor";
+        case AcquisitionSource::QuestCompletion: return "quest-completion";
+        case AcquisitionSource::QuestBackfill: return "quest-backfill";
         default: return "unknown";
     }
 }
@@ -182,12 +185,13 @@ bool CollectionService::EnsureOwnerLoaded(CollectionOwner const& owner)
     return true;
 }
 
-bool CollectionService::Unlock(Player* player, Item const* item, AcquisitionSource source)
+bool CollectionService::Unlock(Player* player, Item const* item, AcquisitionSource source, std::uint32_t sourceQuest)
 {
-    return item && Unlock(player, item->GetTemplate(), source);
+    return item && Unlock(player, item->GetTemplate(), source, sourceQuest);
 }
 
-bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate, AcquisitionSource source)
+bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate, AcquisitionSource source,
+    std::uint32_t sourceQuest)
 {
     AppearanceKey appearance;
     if (!player || !player->GetSession() || !ResolveAppearance(itemTemplate, appearance))
@@ -201,7 +205,22 @@ bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate,
     CollectionOwner owner;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        if (!_config.enabled || !_config.unlockOnAcquire || !_databaseAvailable)
+        bool sourceEnabled = false;
+        switch (source)
+        {
+            case AcquisitionSource::NewItem:
+            case AcquisitionSource::InventoryTransfer:
+            case AcquisitionSource::Vendor:
+                sourceEnabled = _config.unlockOnAcquire;
+                break;
+            case AcquisitionSource::QuestCompletion:
+                sourceEnabled = _config.unlockAllQuestRewards;
+                break;
+            case AcquisitionSource::QuestBackfill:
+                sourceEnabled = _config.questBackfillEnabled;
+                break;
+        }
+        if (!_config.enabled || !sourceEnabled || !_databaseAvailable)
             return false;
         owner.type = _config.accountWide ? CollectionOwnerType::Account : CollectionOwnerType::Character;
         owner.id = _config.accountWide ? player->GetSession()->GetAccountId() : player->GetGUID().GetCounter();
@@ -216,21 +235,89 @@ bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate,
         CharacterDatabase.DirectExecute(
             "INSERT IGNORE INTO `native_transmog_collection` "
             "(`owner_type`, `owner_id`, `display_id`, `item_class`, `item_subclass`, `inventory_type`, "
-            "`source_item`, `acquiring_character`, `acquired_at`, `acquisition_source`) "
-            "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, CURRENT_TIMESTAMP, {})",
+            "`source_item`, `source_quest`, `acquiring_character`, `acquired_at`, `acquisition_source`) "
+            "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, CURRENT_TIMESTAMP, {})",
             static_cast<std::uint32_t>(owner.type), owner.id, appearance.displayId,
             static_cast<std::uint32_t>(appearance.itemClass), static_cast<std::uint32_t>(appearance.itemSubclass),
             static_cast<std::uint32_t>(appearance.inventoryType), itemTemplate->ItemId,
-            player->GetGUID().GetCounter(), static_cast<std::uint32_t>(source));
+            sourceQuest, player->GetGUID().GetCounter(), static_cast<std::uint32_t>(source));
         appearances.insert(appearance);
     }
 
     LOG_DEBUG("module.native_transmog",
-        "Collected appearance display {} class {} subclass {} inventory {} from item {} for {} {} via {}.",
+        "Collected appearance display {} class {} subclass {} inventory {} from item {} quest {} for {} {} via {}.",
         appearance.displayId, appearance.itemClass, appearance.itemSubclass, appearance.inventoryType,
-        itemTemplate->ItemId, owner.type == CollectionOwnerType::Account ? "account" : "character",
+        itemTemplate->ItemId, sourceQuest, owner.type == CollectionOwnerType::Account ? "account" : "character",
         owner.id, SourceName(source));
     return true;
+}
+
+std::uint32_t CollectionService::UnlockBatch(Player* player,
+    std::vector<CollectionUnlockRequest> const& requests, AcquisitionSource source)
+{
+    if (!player || !player->GetSession() || requests.empty())
+        return 0;
+
+    struct ResolvedRequest
+    {
+        AppearanceKey appearance;
+        ItemTemplate const* itemTemplate;
+        std::uint32_t sourceQuest;
+    };
+
+    std::lock_guard<std::mutex> lock(_mutex);
+    bool sourceEnabled = source == AcquisitionSource::QuestCompletion ? _config.unlockAllQuestRewards :
+        source == AcquisitionSource::QuestBackfill ? _config.questBackfillEnabled : _config.unlockOnAcquire;
+    if (!_config.enabled || !sourceEnabled || !_databaseAvailable)
+        return 0;
+
+    CollectionOwner owner;
+    owner.type = _config.accountWide ? CollectionOwnerType::Account : CollectionOwnerType::Character;
+    owner.id = _config.accountWide ? player->GetSession()->GetAccountId() : player->GetGUID().GetCounter();
+    if (!owner.id || !EnsureOwnerLoaded(owner))
+        return 0;
+
+    AppearanceSet& appearances = _collections[owner];
+    AppearanceSet batchAppearances;
+    std::vector<ResolvedRequest> resolved;
+    resolved.reserve(requests.size());
+    for (CollectionUnlockRequest const& request : requests)
+    {
+        AppearanceKey appearance;
+        if (!ResolveAppearance(request.itemTemplate, appearance) ||
+            appearances.find(appearance) != appearances.end() || !batchAppearances.insert(appearance).second)
+            continue;
+        resolved.push_back({ appearance, request.itemTemplate, request.sourceQuest });
+    }
+    if (resolved.empty())
+        return 0;
+
+    std::string query =
+        "INSERT IGNORE INTO `native_transmog_collection` "
+        "(`owner_type`, `owner_id`, `display_id`, `item_class`, `item_subclass`, `inventory_type`, "
+        "`source_item`, `source_quest`, `acquiring_character`, `acquired_at`, `acquisition_source`) VALUES ";
+    query.reserve(query.size() + resolved.size() * 100);
+    for (std::size_t index = 0; index < resolved.size(); ++index)
+    {
+        ResolvedRequest const& request = resolved[index];
+        if (index)
+            query += ',';
+        query += '(' + std::to_string(static_cast<std::uint32_t>(owner.type)) + ',' + std::to_string(owner.id) +
+            ',' + std::to_string(request.appearance.displayId) +
+            ',' + std::to_string(static_cast<std::uint32_t>(request.appearance.itemClass)) +
+            ',' + std::to_string(static_cast<std::uint32_t>(request.appearance.itemSubclass)) +
+            ',' + std::to_string(static_cast<std::uint32_t>(request.appearance.inventoryType)) +
+            ',' + std::to_string(request.itemTemplate->ItemId) + ',' + std::to_string(request.sourceQuest) +
+            ',' + std::to_string(player->GetGUID().GetCounter()) + ",CURRENT_TIMESTAMP," +
+            std::to_string(static_cast<std::uint32_t>(source)) + ')';
+    }
+    CharacterDatabase.DirectExecute(query);
+    for (ResolvedRequest const& request : resolved)
+        appearances.insert(request.appearance);
+
+    LOG_DEBUG("module.native_transmog", "Collected {} batched appearances for {} {} via {}.", resolved.size(),
+        owner.type == CollectionOwnerType::Account ? "account" : "character", owner.id, SourceName(source));
+    return static_cast<std::uint32_t>(resolved.size());
 }
 
 bool CollectionService::IsCollected(Player const* player, AppearanceKey const& appearance)
@@ -261,7 +348,7 @@ std::vector<AppearanceRecord> CollectionService::List(Player const* player, Coll
         predicates += " AND `inventory_type` = " + std::to_string(filter.inventoryType);
 
     if (QueryResult result = CharacterDatabase.Query(
-        "SELECT `display_id`, `item_class`, `item_subclass`, `inventory_type`, `source_item`, "
+        "SELECT `display_id`, `item_class`, `item_subclass`, `inventory_type`, `source_item`, `source_quest`, "
         "`acquiring_character`, UNIX_TIMESTAMP(`acquired_at`), `acquisition_source` "
         "FROM `native_transmog_collection` WHERE `owner_type` = {} AND `owner_id` = {}{} "
         "ORDER BY `item_class`, `inventory_type`, `item_subclass`, `display_id` LIMIT {} OFFSET {}",
@@ -275,9 +362,10 @@ std::vector<AppearanceRecord> CollectionService::List(Player const* player, Coll
             record.appearance = { fields[0].Get<std::uint32_t>(), fields[1].Get<std::uint8_t>(),
                 fields[2].Get<std::uint8_t>(), fields[3].Get<std::uint8_t>() };
             record.sourceItem = fields[4].Get<std::uint32_t>();
-            record.acquiringCharacter = fields[5].Get<std::uint32_t>();
-            record.acquiredAt = fields[6].Get<std::uint64_t>();
-            record.acquisitionSource = static_cast<AcquisitionSource>(fields[7].Get<std::uint8_t>());
+            record.sourceQuest = fields[5].Get<std::uint32_t>();
+            record.acquiringCharacter = fields[6].Get<std::uint32_t>();
+            record.acquiredAt = fields[7].Get<std::uint64_t>();
+            record.acquisitionSource = static_cast<AcquisitionSource>(fields[8].Get<std::uint8_t>());
             records.push_back(record);
         } while (result->NextRow());
     }
@@ -309,7 +397,8 @@ bool CollectionService::GetProvenance(Player const* player, AppearanceKey const&
     if (!owner.id || !IsEnabled() || !IsDatabaseAvailable())
         return false;
     QueryResult result = CharacterDatabase.Query(
-        "SELECT `source_item`, `acquiring_character`, UNIX_TIMESTAMP(`acquired_at`), `acquisition_source` "
+        "SELECT `source_item`, `source_quest`, `acquiring_character`, UNIX_TIMESTAMP(`acquired_at`), "
+        "`acquisition_source` "
         "FROM `native_transmog_collection` WHERE `owner_type` = {} AND `owner_id` = {} "
         "AND `display_id` = {} AND `item_class` = {} AND `item_subclass` = {} AND `inventory_type` = {}",
         static_cast<std::uint32_t>(owner.type), owner.id, appearance.displayId,
@@ -321,9 +410,10 @@ bool CollectionService::GetProvenance(Player const* player, AppearanceKey const&
     record.owner = owner;
     record.appearance = appearance;
     record.sourceItem = fields[0].Get<std::uint32_t>();
-    record.acquiringCharacter = fields[1].Get<std::uint32_t>();
-    record.acquiredAt = fields[2].Get<std::uint64_t>();
-    record.acquisitionSource = static_cast<AcquisitionSource>(fields[3].Get<std::uint8_t>());
+    record.sourceQuest = fields[1].Get<std::uint32_t>();
+    record.acquiringCharacter = fields[2].Get<std::uint32_t>();
+    record.acquiredAt = fields[3].Get<std::uint64_t>();
+    record.acquisitionSource = static_cast<AcquisitionSource>(fields[4].Get<std::uint8_t>());
     return true;
 }
 
