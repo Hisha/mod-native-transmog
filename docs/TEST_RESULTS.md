@@ -1,34 +1,33 @@
-# Phase 3B test results
+# Phase 3C test results
 
-Test date: 2026-10-29.
+Test date: 2026-11-01.
 
 ## Passed
 
 - `python3 content/build_epf.py --check`
-  - The Phase 1/2 protected-FrameXML EPF remains unchanged and deterministic.
+  - The existing protected-FrameXML EPF remains unchanged and deterministic.
   - SHA-256: `4951f0c61776f1ec00992805f77a4c674cea9d4d858d5f91ed60064ee0cf7b48`.
-- `python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py tests/test_phase3b.py`
-  - 50 tests passed.
-  - Phase 3B coverage includes selectable, guaranteed, and mixed rewards; empty/invalid/missing rewards; cross-class independence; duplicate identities; already-owned first provenance; repeat idempotency; account and character scope; post-reward-only hook contracts; preview read-only behavior; execution/rerun behavior; current-definition semantics; reliable rewarded-history selection; RBAC; bounded 25-quest batches; multi-row batch persistence; and Phase 1–3A regression contracts.
-- Real Playerbot compile and link against revision `8a4e76eac8c4` (`Playerbot`).
-  - CMake detected `mod-native-transmog` as a static module and reported `phase-3b-quest-reward-collections`.
+- `python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py tests/test_phase3b.py tests/test_phase3c.py`
+  - 62 tests passed.
+  - Phase 3C coverage includes authenticated authority, collection entitlement, class/race/skill/spell and proficiency policy, armor and weapon compatibility, independent handedness settings, item-instance upsert/removal, lifecycle hook contracts, persistence-before-render ordering, visible-field and mirror-image integration, RBAC diagnostics, sole-table ownership, and all Phase 1-3B regressions.
+- `python3 tests/verify_catalog.py /home/smithkt/aicode_folder/azerothcore-wotlk/data/sql/base/db_world/item_template.sql`
+  - All 16 deterministic preview-catalog entries resolved with the expected inventory types.
+- Actual Playerbot worldserver compile/link against branch `Playerbot`, revision `8a4e76eac8c4`.
+  - An isolated source/build tree under `/tmp` contained only `mod-native-transmog`; `mod-transmog` was absent.
   - Release build used `MODULES=static`, `SCRIPTS=none`, GCC 15.2, and C++20.
-  - `NativeTransmogCollection.cpp`, `NativeTransmogQuestCollection.cpp`, the Phase 1/2 sources, and the generated module loader compiled into `libmodules.a`.
-  - `worldserver` linked successfully at 100%.
-  - The host's MySQL runtime lacked development headers. `libmysqlclient-dev` and `libmysqlclient24` were downloaded and extracted under the disposable `/tmp` build tree only; no system package was installed.
-- AzerothCore C++ codestyle checks passed for the repository changes.
+  - CMake reported `phase-3c-appearance-application`; every module translation unit compiled into `libmodules.a` and `worldserver` linked at 100%.
+  - Generated `ModulesLoader.cpp`, archive symbols, and the isolated module tree contain `Addmod_native_transmogScripts` and no `Addmod_transmogScripts`.
+  - Final worldserver SHA-256: `065fbc8cfb1083f7a9e1d2660e0163f6bc6561b86400e5422a87983fb8719a5a`.
+  - The host runtime lacked system MySQL development headers. CMake used an existing local MySQL development snapshot only; no package, core checkout, PTR, or system installation was changed.
+- AzerothCore C++ codestyle checks passed.
 - `git diff --check` passed.
 
-## Scope of these results
+## Scope and limitations
 
-The Python suite follows the repository's established static integration and executable SQLite persistence-model approach. It does not simulate a live worldserver or MySQL transaction. The Playerbot build proves the actual hook signatures, command table, quest structures, database API use, module linkage, and C++20 compatibility on the inspected target revision.
+The Python suite uses the repository's established static integration and executable SQLite model approach. The compile proves the real Playerbot hook signatures, field/constants, database transaction API, command parser signatures, module loader, C++20 compilation, and final worldserver linkage.
 
-## Not performed
+No live MySQL server, worldserver startup, client, observer, mirror image, item transfer, relog, Playerbot population, or PTR environment was exercised. Those remain mandatory in [the Phase 3C PTR validation plan](PHASE3C_PTR_VALIDATION.md). The core hooks needed by Phase 3C were present; no core modification was required. The documented live-config refresh limitation remains: disabling application does not proactively rewrite every online player's already-published visible fields until restart/relog/equipment refresh.
 
-- No PTR migration, live MySQL write, worldserver startup, quest completion, backfill command, relog/restart, Playerbot population load, or in-game collection query was executed.
-- No Windows client, Portalkeeper launch, MPQ publication, or EPF deployment was changed.
-- No live `mod-transmog` coexistence/data comparison was performed.
-- No production/PTR database, config, executable, or deployment was changed.
-- The AzerothCore SQL codestyle tool could not complete because it unconditionally fetches `origin/master` and this managed repository exposes `.git/FETCH_HEAD` read-only. The migration has dedicated idempotency assertions, and `git diff --check` passed.
+No PTR or production deployment, database migration, Portalkeeper change, commit, or push was performed.
 
-Status: **Phase 3B implementation, automated checks, and Playerbot compile/link are complete; PTR validation remains required.**
+Status: **Phase 3C implementation, automated checks, sole-writer isolation inspection, and Playerbot worldserver compile/link are complete; authorized PTR validation remains required.**

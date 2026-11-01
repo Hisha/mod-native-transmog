@@ -1,3 +1,4 @@
+#include "NativeTransmogApplication.h"
 #include "NativeTransmogCollection.h"
 #include "NativeTransmogQuestCollection.h"
 #include "NativeTransmogService.h"
@@ -7,6 +8,7 @@
 #include "CommandScript.h"
 #include "Config.h"
 #include "Creature.h"
+#include "GlobalScript.h"
 #include "Item.h"
 #include "ItemTemplate.h"
 #include "Log.h"
@@ -23,8 +25,7 @@ namespace
 {
 native_transmog::ServiceConfig serviceConfig;
 native_transmog::CollectionConfig collectionConfig;
-bool allowTwoHandAppearanceOnOneHand = false;
-bool allowOneHandAppearanceOnTwoHand = false;
+native_transmog::ApplicationConfig applicationConfig;
 
 char const* ScopeName(native_transmog::RegistrationScope scope)
 {
@@ -126,9 +127,11 @@ public:
         serviceConfig.customNpcEnabled = sConfigMgr->GetOption<bool>("NativeTransmog.CustomNPC.Enable", true);
         serviceConfig.allowSpawnRegistration =
             sConfigMgr->GetOption<bool>("NativeTransmog.CustomNPC.AllowSpawnRegistration", true);
-        allowTwoHandAppearanceOnOneHand = sConfigMgr->GetOption<bool>(
+        applicationConfig.enabled = serviceConfig.enabled &&
+            sConfigMgr->GetOption<bool>("NativeTransmog.Application.Enable", true);
+        applicationConfig.allowTwoHandAppearanceOnOneHand = sConfigMgr->GetOption<bool>(
             "NativeTransmog.AllowTwoHandAppearanceOnOneHand", false);
-        allowOneHandAppearanceOnTwoHand = sConfigMgr->GetOption<bool>(
+        applicationConfig.allowOneHandAppearanceOnTwoHand = sConfigMgr->GetOption<bool>(
             "NativeTransmog.AllowOneHandAppearanceOnTwoHand", false);
         collectionConfig.enabled = serviceConfig.enabled &&
             sConfigMgr->GetOption<bool>("NativeTransmog.Collection.Enable", true);
@@ -143,17 +146,23 @@ public:
 
         native_transmog::Service::Instance().Configure(serviceConfig);
         native_transmog::CollectionService::Instance().Configure(collectionConfig);
+        native_transmog::ApplicationService::Instance().Configure(applicationConfig);
         native_transmog::QuestBackfillService::Instance().Configure(
             collectionConfig.enabled && collectionConfig.questBackfillEnabled);
         if (reload && collectionConfig.enabled)
             native_transmog::CollectionService::Instance().Initialize();
+        if (reload && applicationConfig.enabled)
+            native_transmog::ApplicationService::Instance().Initialize();
         if (reload)
             LOG_INFO("server.loading",
-                "Native Transmog Phase 3B configuration reloaded "
-                "(collection: {}, scope: {}, acquire: {}, quest rewards: {}, backfill: {}).",
+                "Native Transmog Phase 3C configuration reloaded "
+                "(collection: {}, scope: {}, acquire: {}, quest rewards: {}, backfill: {}, application: {}, "
+                "two-hand-on-one-hand: {}, one-hand-on-two-hand: {}).",
                 collectionConfig.enabled, collectionConfig.accountWide ? "account" : "character",
                 collectionConfig.unlockOnAcquire, collectionConfig.unlockAllQuestRewards,
-                collectionConfig.questBackfillEnabled);
+                collectionConfig.questBackfillEnabled, applicationConfig.enabled,
+                applicationConfig.allowTwoHandAppearanceOnOneHand,
+                applicationConfig.allowOneHandAppearanceOnTwoHand);
     }
 
     void OnStartup() override
@@ -167,19 +176,22 @@ public:
         native_transmog::Service::Instance().LoadRegistrations();
         if (collectionConfig.enabled)
             native_transmog::CollectionService::Instance().Initialize();
+        if (applicationConfig.enabled)
+            native_transmog::ApplicationService::Instance().Initialize();
         LOG_INFO("server.loading",
             "Native Transmog Phase 2 NPC service initialized (dedicated: {}, custom: {}, spawn registrations: {}).",
             serviceConfig.defaultNpcEnabled, serviceConfig.customNpcEnabled, serviceConfig.allowSpawnRegistration);
-        LOG_INFO("server.loading",
-            "Native Transmog weapon compatibility options remain reserved for a later application phase "
-            "(two-hand-on-one-hand: {}, one-hand-on-two-hand: {}).",
-            allowTwoHandAppearanceOnOneHand, allowOneHandAppearanceOnTwoHand);
         LOG_INFO("server.loading",
             "Native Transmog Phase 3B collection initialized "
             "(enabled: {}, scope: {}, unlock on acquire: {}, quest rewards: {}, backfill: {}).",
             collectionConfig.enabled, collectionConfig.accountWide ? "account-wide" : "character-specific",
             collectionConfig.unlockOnAcquire, collectionConfig.unlockAllQuestRewards,
             collectionConfig.questBackfillEnabled);
+        LOG_INFO("server.loading",
+            "Native Transmog Phase 3C application initialized "
+            "(enabled: {}, two-hand-on-one-hand: {}, one-hand-on-two-hand: {}).",
+            applicationConfig.enabled, applicationConfig.allowTwoHandAppearanceOnOneHand,
+            applicationConfig.allowOneHandAppearanceOnTwoHand);
     }
 };
 
@@ -205,10 +217,16 @@ class NativeTransmogPlayerScript final : public PlayerScript
 {
 public:
     NativeTransmogPlayerScript() : PlayerScript("NativeTransmogPlayerScript",
-        { PLAYERHOOK_ON_UPDATE, PLAYERHOOK_ON_BEFORE_LOGOUT, PLAYERHOOK_ON_MAP_CHANGED,
+        { PLAYERHOOK_ON_UPDATE, PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_BEFORE_LOGOUT, PLAYERHOOK_ON_MAP_CHANGED,
           PLAYERHOOK_ON_SEND_LIST_INVENTORY, PLAYERHOOK_ON_BEFORE_RECEIVE_SPELL_LIST_FROM_TRAINER,
           PLAYERHOOK_ON_STORE_NEW_ITEM, PLAYERHOOK_ON_AFTER_MOVE_ITEM_TO_INVENTORY,
+          PLAYERHOOK_ON_AFTER_MOVE_ITEM_FROM_INVENTORY, PLAYERHOOK_ON_AFTER_SET_VISIBLE_ITEM_SLOT,
           PLAYERHOOK_ON_AFTER_STORE_OR_EQUIP_NEW_ITEM, PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST }) { }
+
+    void OnPlayerLogin(Player* player) override
+    {
+        native_transmog::ApplicationService::Instance().LoadPlayer(player);
+    }
 
     void OnPlayerUpdate(Player* player, std::uint32_t diff) override
     {
@@ -219,6 +237,7 @@ public:
     void OnPlayerBeforeLogout(Player* player) override
     {
         native_transmog::Service::Instance().CloseSession(player, false);
+        native_transmog::ApplicationService::Instance().ReleasePlayer(player);
         native_transmog::CollectionService::Instance().ReleasePlayer(player);
     }
 
@@ -253,6 +272,16 @@ public:
             player, item, native_transmog::AcquisitionSource::InventoryTransfer);
     }
 
+    void OnPlayerAfterMoveItemFromInventory(Player*, Item* item, std::uint8_t, std::uint8_t, bool) override
+    {
+        native_transmog::ApplicationService::Instance().RemoveForTransferredItem(item);
+    }
+
+    void OnPlayerAfterSetVisibleItemSlot(Player* player, std::uint8_t slot, Item* item) override
+    {
+        native_transmog::ApplicationService::Instance().ApplyVisible(player, slot, item);
+    }
+
     void OnPlayerAfterStoreOrEquipNewItem(Player* player, std::uint32_t, Item* item, std::uint8_t,
         std::uint8_t, std::uint8_t, ItemTemplate const*, Creature*, VendorItem const*, bool stored) override
     {
@@ -274,6 +303,23 @@ public:
                 "Quest {} completion collected {} of {} eligible appearances ({} already owned, {} unresolved).",
                 quest ? quest->GetQuestId() : 0, stats.newAppearances, stats.eligibleAppearances,
                 stats.alreadyCollected, stats.unresolvedRecords);
+    }
+};
+
+class NativeTransmogGlobalScript final : public GlobalScript
+{
+public:
+    NativeTransmogGlobalScript() : GlobalScript("NativeTransmogGlobalScript",
+        { GLOBALHOOK_ON_ITEM_DEL_FROM_DB, GLOBALHOOK_ON_MIRRORIMAGE_DISPLAY_ITEM }) { }
+
+    void OnItemDelFromDB(CharacterDatabaseTransaction transaction, ObjectGuid::LowType itemGuid) override
+    {
+        native_transmog::ApplicationService::Instance().RemoveForDeletedItem(transaction, itemGuid);
+    }
+
+    void OnMirrorImageDisplayItem(Item const* item, std::uint32_t& displayId) override
+    {
+        native_transmog::ApplicationService::Instance().ResolveMirrorImage(item, displayId);
     }
 };
 
@@ -309,9 +355,15 @@ public:
             { "count", HandleCollectionCount, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "backfill", backfillCommands }
         };
+        static ChatCommandTable appearanceCommands = {
+            { "apply", HandleAppearanceApply, rbac::RBAC_PERM_COMMAND_NPC_ADD, Console::No },
+            { "remove", HandleAppearanceRemove, rbac::RBAC_PERM_COMMAND_NPC_DELETE, Console::No },
+            { "info", HandleAppearanceInfo, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No }
+        };
         static ChatCommandTable rootCommands = {
             { "npc", npcCommands },
-            { "collection", collectionCommands }
+            { "collection", collectionCommands },
+            { "appearance", appearanceCommands }
         };
         static ChatCommandTable root = {
             { "nativetransmog", rootCommands }
@@ -363,7 +415,7 @@ public:
             owner.type == native_transmog::CollectionOwnerType::Account ? "account-wide" : "character-specific",
             owner.id, collection.Count(player));
         handler->SendSysMessage("Collection eligibility is independent of class/proficiency; "
-            "appearance application is not implemented in Phase 3B.");
+            "Phase 3C revalidates ownership and compatibility whenever an appearance is applied.");
         return true;
     }
 
@@ -402,6 +454,78 @@ public:
         }
         if (total > records.size())
             handler->SendSysMessage("  Output is bounded to the first 50 records in deterministic appearance order.");
+        return true;
+    }
+
+    static bool HandleAppearanceApply(ChatHandler* handler, std::uint8_t equipmentSlot,
+        std::uint32_t appearanceItem)
+    {
+        Player* target = SelectedOrSelfPlayer(handler);
+        if (!target)
+            return false;
+        if (handler->HasLowerSecurity(target))
+            return false;
+        native_transmog::ApplicationResult result = native_transmog::ApplicationService::Instance().Apply(
+            target, equipmentSlot, appearanceItem, native_transmog::ApplicationAuthorization::GmDiagnostic);
+        if (result != native_transmog::ApplicationResult::Ok)
+        {
+            handler->SendErrorMessage("Native Transmog diagnostic apply failed: {}.",
+                native_transmog::ApplicationService::ResultName(result));
+            return false;
+        }
+        handler->PSendSysMessage(
+            "Native Transmog: applied collected appearance item {} to {} equipment slot {}.",
+            appearanceItem, target->GetName(), equipmentSlot);
+        return true;
+    }
+
+    static bool HandleAppearanceRemove(ChatHandler* handler, std::uint8_t equipmentSlot)
+    {
+        Player* target = SelectedOrSelfPlayer(handler);
+        if (!target)
+            return false;
+        if (handler->HasLowerSecurity(target))
+            return false;
+        native_transmog::ApplicationResult result = native_transmog::ApplicationService::Instance().Remove(
+            target, equipmentSlot, native_transmog::ApplicationAuthorization::GmDiagnostic);
+        if (result != native_transmog::ApplicationResult::Ok)
+        {
+            handler->SendErrorMessage("Native Transmog diagnostic removal failed: {}.",
+                native_transmog::ApplicationService::ResultName(result));
+            return false;
+        }
+        handler->PSendSysMessage("Native Transmog: removed the appearance override from {} equipment slot {}.",
+            target->GetName(), equipmentSlot);
+        return true;
+    }
+
+    static bool HandleAppearanceInfo(ChatHandler* handler, std::uint8_t equipmentSlot)
+    {
+        Player* target = SelectedOrSelfPlayer(handler);
+        if (!target || equipmentSlot >= EQUIPMENT_SLOT_END)
+            return false;
+        if (handler->HasLowerSecurity(target))
+            return false;
+        Item* item = target->GetItemByPos(INVENTORY_SLOT_BAG_0, equipmentSlot);
+        if (!item)
+        {
+            handler->SendErrorMessage("Native Transmog: {} has no item in equipment slot {}.",
+                target->GetName(), equipmentSlot);
+            return false;
+        }
+        native_transmog::AppearanceOverride appearanceOverride;
+        if (!native_transmog::ApplicationService::Instance().GetOverride(item, appearanceOverride))
+        {
+            handler->PSendSysMessage("Native Transmog: item {} in {} slot {} has no appearance override.",
+                item->GetGUID().GetCounter(), target->GetName(), equipmentSlot);
+            return true;
+        }
+        handler->PSendSysMessage(
+            "Native Transmog: item {} in {} slot {} uses appearance item {} (display {}, class {}, "
+            "subclass {}, inventory {}).",
+            appearanceOverride.itemGuid, target->GetName(), equipmentSlot, appearanceOverride.appearanceItem,
+            appearanceOverride.appearance.displayId, appearanceOverride.appearance.itemClass,
+            appearanceOverride.appearance.itemSubclass, appearanceOverride.appearance.inventoryType);
         return true;
     }
 
@@ -482,5 +606,6 @@ void AddNativeTransmogModuleScripts()
     new NativeTransmogWorldScript();
     new NativeTransmogCreatureScript();
     new NativeTransmogPlayerScript();
+    new NativeTransmogGlobalScript();
     new NativeTransmogCommandScript();
 }

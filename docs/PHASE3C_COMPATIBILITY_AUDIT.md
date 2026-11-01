@@ -1,5 +1,7 @@
 # Phase 3C compatibility audit
 
+> Historical gate, accepted 2026-11-01. The project owner permanently retired `mod-transmog` from PTR and selected `mod-native-transmog` as PTR's sole appearance writer. Production remains unchanged. Phase 3C therefore implements no compatibility layer or legacy integration.
+
 ## Decision
 
 `mod-native-transmog` Phase 3C and the audited `azerothcore/mod-transmog` implementation **cannot safely render applied appearances at the same time**. Both implementations would be independent writers of the same player visible-item entry fields, with independent item-instance persistence and no ownership/arbitration API between them.

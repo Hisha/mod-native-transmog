@@ -2,7 +2,15 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phase 1's in-game validated preview wardrobe, Phase 2's server-authorized NPC service, and Phase 3A's persistent collection are preserved. Phase 3B unlocks every eligible appearance offered by a successfully rewarded quest and adds an explicit, bounded historical backfill. It does **not** grant unselected items, apply appearances, change the wardrobe catalog, migrate existing `mod-transmog` records, or save outfits.
+Phase 1's in-game validated preview wardrobe, Phase 2's server-authorized NPC service, Phase 3A's persistent collection, and Phase 3B's quest reward collection/backfill are preserved. Phase 3C adds server-authorized application of collected appearances, compatibility validation, item-instance persistence, lifecycle cleanup, visible synchronization, and GM diagnostics. It does **not** grant items, add client application buttons, migrate legacy records, or save outfits.
+
+## Phase 3C appearance application
+
+The application service resolves the equipped target and source template entirely on the server. It requires either an immediately revalidated Phase 2 NPC session or an RBAC-protected GM diagnostic operation, verifies ownership in the authenticated account/character collection, and checks class, race, required skill/spell, armor/weapon proficiency, subclass, and inventory-slot compatibility before writing anything.
+
+Armor requires the same subclass and visual slot, with chest/robe interchange. Weapons require the same weapon family and valid main/off-hand or ranged placement. One-hand/two-hand axe, mace, and sword family crossings are controlled by two independent, default-off settings. Persistence is keyed to the real item-instance GUID in `native_transmog_item_override`; the item's stats and gameplay identity never change.
+
+Login restoration, ordinary visible-slot refreshes, ownership transfers, permanent item deletion, removal, nearby object-field synchronization, and mirror images use existing Playerbot hooks. No core patch was needed. See [Phase 3C architecture](docs/PHASE3C_ARCHITECTURE.md).
 
 ## Phase 3B quest reward collection
 
@@ -16,7 +24,7 @@ Historical backfill is never automatic. An authorized in-game GM starts preview 
 
 ## Phase 3A persistent collection
 
-Eligible visible armor and weapon appearances unlock when an item is newly stored or moved into a character's inventory. Collection ignores class, race, armor proficiency, weapon proficiency, and required skills: a mage can collect plate and a rogue can collect a two-handed sword. Future Phase 3C application must independently enforce all compatibility rules.
+Eligible visible armor and weapon appearances unlock when an item is newly stored or moved into a character's inventory. Collection ignores class, race, armor proficiency, weapon proficiency, and required skills: a mage can collect plate and a rogue can collect a two-handed sword. Phase 3C independently enforces compatibility whenever an appearance is applied.
 
 Ownership lives in the character-database table `native_transmog_collection`. Account ownership uses the authenticated `WorldSession` account ID; character ownership uses the server-side character GUID. Both namespaces coexist. Switching scope never merges, copies, or deletes rows, and switching back restores the earlier namespace.
 
@@ -52,7 +60,7 @@ This uses the stock addon-message wire protocol without installing an addon, inv
 
 The server creates a session only after resolving the actual server-side `Creature*`, confirming it is registered, and calling `GetNPCIfCanInteractWith` for proximity, map, reaction, life-state, control-state, and existence checks. Combat is rejected. Every 500 ms the session is revalidated and is closed when the player moves away, enters combat, the creature disappears, eligibility is removed, or the map changes; logout removes it without sending a packet. The client never supplies an entry or spawn ID.
 
-Addon messages are not cryptographic: arbitrary client Lua could imitate an `OPEN` display message. That only reveals the local preview window. It cannot create a server session, and Phase 2 exposes no appearance-application request. Every future gameplay request must carry the token and independently revalidate the live server session, NPC, item, slot, and policy; the client token alone must never grant permission.
+Addon messages are not cryptographic: arbitrary client Lua could imitate an `OPEN` display message. That only reveals the local preview window and cannot create a server session. Phase 3C adds no client application request or button. Its server API immediately revalidates the live session/NPC and independently resolves ownership, item, slot, and policy; the client token alone never grants permission.
 
 ## Configuration
 
@@ -66,11 +74,12 @@ NativeTransmog.Collection.AccountWide = 1
 NativeTransmog.Collection.UnlockOnAcquire = 1
 NativeTransmog.Collection.UnlockAllQuestRewards = 1
 NativeTransmog.Collection.QuestBackfill.Enable = 1
+NativeTransmog.Application.Enable = 1
 NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0
 ```
 
-Collection is account-wide by default. Disabling account-wide mode selects existing/per-character rows without touching account rows. The weapon settings remain reserved and unenforced because appearance application is out of scope.
+Collection is account-wide by default. Disabling account-wide mode selects existing/per-character rows without touching account rows. Application can be disabled independently for rendering rollback. The two weapon-direction settings are independent and default to the conservative disabled policy.
 
 ## GM commands
 
@@ -89,14 +98,17 @@ Select a creature before using selection-based commands:
 .nativetransmog collection backfill preview
 .nativetransmog collection backfill run
 .nativetransmog collection backfill status
+.nativetransmog appearance apply <equipment-slot> <appearance-item-entry>
+.nativetransmog appearance remove <equipment-slot>
+.nativetransmog appearance info <equipment-slot>
 ```
 
-Add and quest-backfill execution use AzerothCore's existing NPC-add RBAC permission, remove uses NPC-delete, and read-only NPC/collection diagnostics and backfill preview/status use NPC-info. Ordinary players therefore cannot invoke these GM commands. Collection list output is bounded to 50 rows; backfill has no global/account/realm mode and requires an online character target.
+Add, appearance apply, and quest-backfill execution use AzerothCore's existing NPC-add RBAC permission; removal uses NPC-delete; read-only diagnostics and backfill preview/status use NPC-info. Appearance commands target the selected online player or the executing GM. Ordinary players cannot invoke them. Equipment slots use AzerothCore's zero-based slot values (for example head `0`, main hand `15`, off hand `16`, ranged `17`).
 
 ## Installation and PTR deployment
 
-1. Install this repository as `modules/mod-native-transmog` in the Playerbot core and leave `mod-transmog` installed and configured normally.
-2. Apply the normal AzerothCore module SQL updater. Phase 3A adds `2026_10_28_00_native_transmog_collection.sql`; Phase 3B conditionally adds `source_quest` and its index through `2026_10_29_00_native_transmog_quest_provenance.sql`. Existing ownership/provenance is not rewritten, and no `mod-transmog` table is touched.
+1. Install this repository as `modules/mod-native-transmog` in the isolated Playerbot PTR build. Confirm `mod-transmog` is excluded from that build/load; production remains unchanged.
+2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`. Existing ownership/provenance and all legacy tables remain untouched.
 3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow and build worldserver.
 4. Rebuild/verify the EPF:
 
@@ -118,25 +130,27 @@ The checked-in EPF is deterministic Schema 3 content. It adds the XML immediatel
 
 ```bash
 python3 content/build_epf.py --check
-python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py tests/test_phase3b.py
+python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py tests/test_phase3b.py tests/test_phase3c.py
 python3 tests/verify_catalog.py \
   /path/to/azerothcore-wotlk/data/sql/base/db_world/item_template.sql
 ```
 
-The checks cover Phase 1/2 regressions, Phase 3A ownership/persistence, and Phase 3B reward enumeration, cross-class behavior, provenance, post-reward integration, backfill evidence, preview/run idempotency, permissions, and batching. See [test results](docs/TEST_RESULTS.md), the [Phase 2 PTR checklist](docs/PTR_VALIDATION.md), the [Phase 3A PTR plan](docs/PHASE3A_PTR_VALIDATION.md), and the [Phase 3B PTR plan](docs/PHASE3B_PTR_VALIDATION.md).
+The checks cover all earlier regressions plus Phase 3C authority, ownership, compatibility, persistence ordering, lifecycle hooks, rendering, removal, diagnostics, and directional weapon policy. See [test results](docs/TEST_RESULTS.md) and the [Phase 3C PTR plan](docs/PHASE3C_PTR_VALIDATION.md).
 
 ## Known limitations and future mobile NPCs
 
-- Phase 3B PTR validation has not been performed; automated checks and a Playerbot module build do not prove in-game behavior.
+- Phase 3C PTR validation has not been performed; automated checks and a Playerbot compile/link do not prove in-game behavior.
 - Phase 2 opens immediately on supported gossip/quest, vendor, and trainer interactions; it cannot safely inject an option into arbitrary scripted gossip on this branch.
 - Client service types that bypass all inspected hooks are not covered. Registration never changes their flags to manufacture an interaction path.
 - Vehicle-passenger creatures are explicitly rejected in Phase 2. Entry resolution itself is location- and spawn-independent, so the registry is suitable for a future mobile Transmogrifier, but passenger interaction and moving-distance/session semantics require dedicated validation before removing this guard.
 - The preview catalog remains a deterministic fixture and is not yet filtered by the persisted collection.
 - Backfill can prove only active persisted rewarded rows and uses current quest definitions; it cannot reconstruct missing repeat history, old choices, or historical reward definitions. Offline targets are intentionally unsupported.
-- No saved outfit, appearance application, client collection filtering, or migration from `mod-transmog` exists.
+- There is no client application button yet; Phase 3C application is exposed only through the server service boundary and GM diagnostics.
+- A live config reload that disables application does not proactively refresh every online visible slot; use a controlled restart/relog or equipment refresh.
+- No saved outfit, client collection filtering, legacy integration, or migration from `mod-transmog` exists.
 
 No code change outside this repository is required. The target Content Manager must already include managed server resources and `ContentResourceApiV1` (Milestone 2), and its `2026_09_25_06_content_managed_server_resources.sql` migration must be present before building/activating this EPF.
 
 ## License
 
-All module implementation is independently authored under the [MIT License](LICENSE). No AGPL implementation from `mod-transmog` was copied or adapted.
+All module implementation is independently authored under the [MIT License](LICENSE). No AGPL implementation from `mod-transmog` was copied or adapted. `mod-native-transmog` is the sole appearance writer intended for PTR; production remains unchanged.

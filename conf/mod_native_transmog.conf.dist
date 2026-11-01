@@ -2,8 +2,8 @@
 
 #
 #    NativeTransmog.Enable
-#        Description: Enables the native preview wardrobe and NPC service.
-#        Important:   Phases 3A/3B persist ownership but do not apply appearances.
+#        Description: Enables the native preview wardrobe, NPC service,
+#                     collection, and appearance application.
 #        Default:     1
 
 NativeTransmog.Enable = 1
@@ -74,17 +74,26 @@ NativeTransmog.Collection.UnlockAllQuestRewards = 1
 NativeTransmog.Collection.QuestBackfill.Enable = 1
 
 #
+#    NativeTransmog.Application.Enable
+#        Description: Enables server-authorized application, persistence, and
+#                     visible rendering of collected appearances. Disable this
+#                     for a safe module-level rendering rollback.
+#        Default:     1
+
+NativeTransmog.Application.Enable = 1
+
+#
 #    NativeTransmog.AllowTwoHandAppearanceOnOneHand
-#        Description: Reserved for future server-side appearance validation.
-#                     It does not enforce any restriction during Phase 2.
+#        Description: Permits a collected two-handed axe/mace/sword appearance
+#                     on the corresponding one-handed weapon family.
 #        Default:     0
 
 NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 
 #
 #    NativeTransmog.AllowOneHandAppearanceOnTwoHand
-#        Description: Reserved for future server-side appearance validation.
-#                     It does not enforce any restriction during Phase 2.
+#        Description: Permits a collected one-handed axe/mace/sword appearance
+#                     on the corresponding two-handed weapon family.
 #        Default:     0
 
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0

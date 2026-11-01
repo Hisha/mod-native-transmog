@@ -95,7 +95,8 @@ class PhaseThreeAContractTests(unittest.TestCase):
             self.assertIn(hook, MODULE)
         self.assertIn("CharacterDatabase.DirectExecute", COLLECTION_CPP)
         self.assertIn("INSERT IGNORE", COLLECTION_CPP)
-        self.assertNotIn("PLAYERHOOK_ON_LOGIN", MODULE)
+        login = MODULE[MODULE.index("void OnPlayerLogin"):MODULE.index("void OnPlayerUpdate")]
+        self.assertNotIn("CollectionService", login)
 
     def test_query_api_filtering_order_and_missing_source_safety(self) -> None:
         for method in ("IsCollected", "List", "Count", "GetProvenance", "ResolveSourceItem"):
@@ -109,7 +110,7 @@ class PhaseThreeAContractTests(unittest.TestCase):
         self.assertGreaterEqual(MODULE.count("RBAC_PERM_COMMAND_NPC_INFO"), 5)
         self.assertIn("constexpr std::uint32_t PageSize = 50", MODULE)
         command_section = MODULE[MODULE.index("static ChatCommandTable collectionCommands"):]
-        command_section = command_section[:command_section.index("static ChatCommandTable rootCommands")]
+        command_section = command_section[:command_section.index("static ChatCommandTable appearanceCommands")]
         self.assertNotIn("grant", command_section.lower())
         self.assertNotIn("remove", command_section.lower())
 

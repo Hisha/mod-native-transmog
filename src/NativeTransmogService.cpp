@@ -367,4 +367,24 @@ bool Service::HasSession(Player const* player) const
     std::lock_guard<std::mutex> lock(_mutex);
     return _sessions.find(player->GetGUID().GetCounter()) != _sessions.end();
 }
+
+bool Service::ValidateSession(Player* player)
+{
+    if (!player)
+        return false;
+    Session session;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto found = _sessions.find(player->GetGUID().GetCounter());
+        if (found == _sessions.end())
+            return false;
+        session = found->second;
+    }
+    Creature* creature = ObjectAccessor::GetCreature(*player, session.creatureGuid);
+    if (player->GetMapId() == session.mapId && ValidateInteraction(player, creature) &&
+        Resolve(creature) != ServiceResolution::None)
+        return true;
+    CloseSession(player);
+    return false;
+}
 }

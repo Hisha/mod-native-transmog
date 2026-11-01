@@ -102,7 +102,8 @@ class PhaseThreeBContractTests(unittest.TestCase):
         self.assertIn("constexpr std::uint32_t BackfillBatchSize = 25", QUEST_CPP)
         self.assertIn("LIMIT {}", QUEST_CPP)
         self.assertIn("UnlockBatch", QUEST_CPP)
-        self.assertNotIn("PLAYERHOOK_ON_LOGIN", MODULE)
+        login = MODULE[MODULE.index("void OnPlayerLogin"):MODULE.index("void OnPlayerUpdate")]
+        self.assertNotIn("QuestBackfillService", login)
         self.assertNotIn("QuestBackfillService::Instance().Start", MODULE[:MODULE.index("class NativeTransmogCommandScript")])
 
     def test_gm_commands_and_permissions(self) -> None:

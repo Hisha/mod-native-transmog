@@ -61,6 +61,7 @@ public:
     void UpdateSession(Player* player, std::uint32_t diff);
     void CloseSession(Player* player, bool notifyClient = true);
     bool HasSession(Player const* player) const;
+    bool ValidateSession(Player* player);
 
 private:
     struct Session
