@@ -99,6 +99,14 @@ NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0
 
 #
+#    NativeTransmog.HideWeapons
+#        Description: Allow main-hand, off-hand (including shields and held
+#                     items), and ranged equipment to be hidden.
+#        Default:     0
+
+NativeTransmog.HideWeapons = 0
+
+#
 #    NativeTransmog.Wardrobe.PageSize
 #        Description: Maximum compatible appearances returned per requested page.
 #        Range:       1-36 (values are clamped).

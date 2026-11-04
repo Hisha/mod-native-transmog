@@ -1,12 +1,18 @@
--- Native Transmog Phase 3D protected FrameXML for WoW 3.3.5a build 12340.
+-- Native Transmog Phase 4A protected FrameXML for WoW 3.3.5a build 12340.
 local PREFIX, VERSION = "NTRANSMOG", "2"
-local SLOT_ORDER = { "HEAD", "SHOULDERS", "CHEST", "MAIN_HAND", "OFF_HAND" }
-local SLOT_LABELS = { HEAD="Head Appearances", SHOULDERS="Shoulder Appearances", CHEST="Chest Appearances",
-    MAIN_HAND="Main-Hand Appearances", OFF_HAND="Off-Hand Appearances" }
+local SLOT_ORDER = { "HEAD", "SHOULDERS", "SHIRT", "CHEST", "WAIST", "LEGS", "FEET", "WRISTS",
+    "HANDS", "BACK", "MAIN_HAND", "OFF_HAND", "RANGED", "TABARD" }
+local SLOT_INVENTORY_NAMES = { "HeadSlot", "ShoulderSlot", "ShirtSlot", "ChestSlot", "WaistSlot", "LegsSlot",
+    "FeetSlot", "WristSlot", "HandsSlot", "BackSlot", "MainHandSlot", "SecondaryHandSlot", "RangedSlot", "TabardSlot" }
+local SLOT_LABELS = { HEAD="Head Appearances", SHOULDERS="Shoulder Appearances", SHIRT="Shirt Appearances",
+    CHEST="Chest Appearances", WAIST="Waist Appearances", LEGS="Leg Appearances", FEET="Feet Appearances",
+    WRISTS="Wrist Appearances", HANDS="Hand Appearances", BACK="Back Appearances",
+    MAIN_HAND="Main-Hand Appearances", OFF_HAND="Off-Hand Appearances", RANGED="Ranged Appearances",
+    TABARD="Tabard Appearances" }
 local authorizedToken, selectedSlot, selectedSlotId = nil, "HEAD", 1
 local requestId, snapshotNonce, cursor, nextCursor, hasNext = 0, nil, 0, 0, false
 local cursorHistory, catalog, incomingCatalog, buttons = {}, {}, {}, {}
-local selectedAppearance, actualItem, appliedItem, pending = nil, nil, nil, nil
+local selectedAppearance, actualItem, appliedItem, hiddenApplied, overridePresent, canHide, pending = nil, nil, nil, false, false, false, nil
 local modelRotation, scheduledRefresh = 0, nil
 local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 4, 58, 14
 
@@ -24,6 +30,7 @@ local RESULT_TEXT = {
  ["weapon subclass mismatch"]="Weapon family incompatible with equipped item.",
  ["two-hand appearance on one-hand target is disabled"]="Two-hand appearances are disabled for one-hand items.",
  ["one-hand appearance on two-hand target is disabled"]="One-hand appearances are disabled for two-hand items.",
+ ["weapon hiding is disabled"]="Weapon hiding is disabled by server configuration.",
  ["item has no appearance override"]="The equipped item has no appearance to remove.",
  ["SESSION_EXPIRED"]="The Transmogrifier session expired.", ["NO_ITEM"]="No item is equipped in this slot.",
  ["EQUIPMENT_CHANGED"]="Equipment changed; refreshing the wardrobe.",
@@ -55,32 +62,54 @@ local function itemLabel(entry, emptyText)
 end
 local function refreshStateLabels()
  NativeTransmogFrameActual:SetText("Equipped: " .. itemLabel(actualItem, "None"))
- NativeTransmogFrameApplied:SetText("Applied: " .. itemLabel(appliedItem, "Original appearance"))
- NativeTransmogFramePreview:SetText("Preview: " .. itemLabel(selectedAppearance and selectedAppearance.entry, "Applied appearance"))
+ local applied="Original appearance"
+ if hiddenApplied then applied="Hidden appearance"
+ elseif overridePresent and (not appliedItem or appliedItem==0) then applied="Hidden appearance (disabled)"
+ else applied=itemLabel(appliedItem,"Original appearance") end
+ NativeTransmogFrameApplied:SetText("Applied: " .. applied)
+ local preview="Applied appearance"
+ if selectedAppearance then preview=selectedAppearance.isHide and "Hidden appearance" or itemLabel(selectedAppearance.entry,"Applied appearance") end
+ NativeTransmogFramePreview:SetText("Preview: " .. preview)
 end
 local function setButtonEnabled(button, enabled)
  if enabled then button:Enable() else button:Disable() end
 end
 local function refreshSelection()
  for _, button in ipairs(buttons) do
-  if button.entry and selectedAppearance and button.selectionId == selectedAppearance.selection then button.selection:Show()
+  if button.appearance and selectedAppearance and button.selectionId == selectedAppearance.selection and
+      button.isHide == selectedAppearance.isHide then button.selection:Show()
   else button.selection:Hide() end
   if button.applied then button.appliedMark:Show() else button.appliedMark:Hide() end
  end
  setButtonEnabled(NativeTransmogFrameApply, authorizedToken and selectedAppearance and not pending)
- setButtonEnabled(NativeTransmogFrameRemove, authorizedToken and appliedItem and appliedItem ~= 0 and not pending)
+ setButtonEnabled(NativeTransmogFrameRemove, authorizedToken and overridePresent and not pending)
  setButtonEnabled(NativeTransmogFramePrevious, authorizedToken and #cursorHistory > 0 and not pending)
  setButtonEnabled(NativeTransmogFrameNext, authorizedToken and hasNext and not pending)
  refreshStateLabels()
 end
 local function showTooltip(button)
- if not button.entry then return end
- GameTooltip:SetOwner(button, "ANCHOR_RIGHT"); GameTooltip:SetHyperlink("item:" .. button.entry); GameTooltip:Show()
+ if not button.appearance then return end
+ GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+ if button.isHide then
+  GameTooltip:SetText("Hide Appearance",1,1,1); GameTooltip:AddLine("Makes this equipped item's model invisible without changing the item.",.8,.8,.8,true)
+ else GameTooltip:SetHyperlink("item:" .. button.entry) end
+ GameTooltip:Show()
 end
 local function previewItem(button)
- if not button.entry then return end
- selectedAppearance = { selection=button.selectionId, entry=button.entry }
- local model=getModel(); model:SetUnit("player"); model:TryOn(button.entry); model:SetRotation(modelRotation)
+ if not button.appearance then return end
+ selectedAppearance = { selection=button.selectionId, entry=button.entry, isHide=button.isHide }
+ local model=getModel(); model:SetUnit("player")
+ if button.isHide then
+  model:Undress()
+  local hiddenSlot=GetInventorySlotInfo(SLOT_INVENTORY_NAMES[selectedSlotId])
+  for _,slotName in ipairs(SLOT_INVENTORY_NAMES) do
+   local inventorySlot=GetInventorySlotInfo(slotName)
+   if inventorySlot and inventorySlot~=hiddenSlot then
+    local link=GetInventoryItemLink("player",inventorySlot); if link then model:TryOn(link) end
+   end
+  end
+ else model:TryOn(button.entry) end
+ model:SetRotation(modelRotation)
  refreshSelection()
 end
 local function createAppearanceButton(index)
@@ -95,6 +124,7 @@ local function createAppearanceButton(index)
  button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-6,6); button.selection:SetPoint("BOTTOMRIGHT",6,-6); button.selection:Hide()
  button.appliedMark=button:CreateTexture(nil,"OVERLAY"); button.appliedMark:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
  button.appliedMark:SetWidth(18); button.appliedMark:SetHeight(18); button.appliedMark:SetPoint("BOTTOMRIGHT",-2,2); button.appliedMark:Hide()
+ button.hideLabel=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); button.hideLabel:SetPoint("BOTTOM",0,3)
  button:SetScript("OnClick",previewItem); button:SetScript("OnEnter",showTooltip); button:SetScript("OnLeave",function() GameTooltip:Hide() end)
  buttons[index]=button; return button
 end
@@ -103,13 +133,15 @@ local function renderCatalog()
   local button=buttons[index] or createAppearanceButton(index)
   local column,row=(index-1)%ICONS_PER_ROW,math.floor((index-1)/ICONS_PER_ROW)
   button:ClearAllPoints(); button:SetPoint("TOPLEFT",8+column*(ICON_SIZE+ICON_GAP),-8-row*(ICON_SIZE+ICON_GAP))
-  button.entry,button.selectionId,button.applied=appearance.entry,appearance.selection,appearance.applied
-  button.icon:SetTexture(GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); button:Show()
+  button.appearance,button.entry,button.selectionId,button.applied,button.isHide=appearance,appearance.entry,appearance.selection,appearance.applied,appearance.isHide
+  button.icon:SetTexture(appearance.isHide and "Interface\\Icons\\Spell_Shadow_EvilEye" or
+      (GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"))
+  button.hideLabel:SetText(appearance.isHide and "HIDE" or ""); button:Show()
  end
- for index=#catalog+1,#buttons do buttons[index].entry=nil; buttons[index]:Hide() end
+ for index=#catalog+1,#buttons do buttons[index].appearance=nil; buttons[index].entry=nil; buttons[index]:Hide() end
  NativeTransmogFrameBrowserPanelScrollChild:SetHeight(math.max(238,math.ceil(#catalog/ICONS_PER_ROW)*(ICON_SIZE+ICON_GAP)+8))
  NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(0)
- if #catalog==0 and not pending then setStatus("No compatible collected appearances for this slot.",false) end
+ if #catalog==(canHide and 1 or 0) and not pending then setStatus("No compatible collected appearances for this slot.",false) end
  refreshSelection()
 end
 local function sendRequest(operation,tail)
@@ -121,11 +153,14 @@ local function sendRequest(operation,tail)
 end
 local function requestCatalog(newCursor)
  requestId=requestId+1; snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}
- cursor=newCursor or 0; hasNext=false; renderCatalog()
+ cursor=newCursor or 0; hasNext=false; canHide=false; hiddenApplied=false; overridePresent=false; renderCatalog()
  sendRequest("CAT",requestId.."\t"..selectedSlotId.."\t"..cursor)
 end
 function NativeTransmog_Apply()
- if selectedAppearance and snapshotNonce then sendRequest("APPLY",requestId.."\t"..snapshotNonce.."\t"..selectedAppearance.selection) end
+ if selectedAppearance and snapshotNonce then
+  if selectedAppearance.isHide then sendRequest("HIDE",requestId.."\t"..snapshotNonce)
+  else sendRequest("APPLY",requestId.."\t"..snapshotNonce.."\t"..selectedAppearance.selection) end
+ end
 end
 function NativeTransmog_Remove() if snapshotNonce then sendRequest("REMOVE",requestId.."\t"..snapshotNonce) end end
 function NativeTransmog_NextPage() if hasNext then table.insert(cursorHistory,cursor); requestCatalog(nextCursor) end end
@@ -178,15 +213,18 @@ function NativeTransmog_OnEvent(_,event,prefix,message,channel,sender)
  if not authorizedToken or fields[3]~=authorizedToken then return end
  if command=="PAGE" and tonumber(fields[4])==requestId then
   snapshotNonce=fields[5]; nextCursor=tonumber(fields[8]) or 0; hasNext=fields[9]=="1"
-  actualItem=tonumber(fields[10]); appliedItem=tonumber(fields[11]); incomingCatalog={}
+  actualItem=tonumber(fields[10]); appliedItem=tonumber(fields[11]); canHide=fields[12]=="1"; hiddenApplied=fields[13]=="1"; overridePresent=fields[14]=="1"; incomingCatalog={}
+  if canHide then table.insert(incomingCatalog,{selection=0,isHide=true,applied=hiddenApplied}) end
  elseif command=="ITEM" and tonumber(fields[4])==requestId and fields[5]==snapshotNonce then
   table.insert(incomingCatalog,{selection=tonumber(fields[6]),entry=tonumber(fields[7]),applied=fields[8]=="1"})
  elseif command=="END" and tonumber(fields[4])==requestId and fields[5]==snapshotNonce then
-  pending=nil; catalog=incomingCatalog; setStatus(#catalog>0 and ("Page contains "..#catalog.." compatible appearances.") or "",false); renderCatalog()
+  pending=nil; catalog=incomingCatalog; local collected=#catalog-(canHide and 1 or 0)
+  setStatus(collected>0 and ("Page contains "..collected.." compatible appearances.") or "",false); renderCatalog()
  elseif command=="RESULT" and tonumber(fields[4])==requestId then
   pending=nil; local operation,result=fields[5],fields[6] or "MALFORMED"; local success=result=="ok"
   if success then
-   setStatus(operation=="REMOVE" and "Appearance removed." or "Appearance applied.",false); scheduledRefresh=GetTime()+.30
+   setStatus(operation=="REMOVE" and "Original appearance restored." or
+       (operation=="HIDE" and "Appearance hidden." or "Appearance applied."),false); scheduledRefresh=GetTime()+.30
   else
    setStatus(RESULT_TEXT[result] or ("Request failed: "..result),true)
    if result=="SESSION_EXPIRED" or result=="no authorized Transmogrifier session" then authorizedToken=nil end

@@ -1,4 +1,8 @@
-# Phase 2 PTR deployment and manual validation
+# Historical Phase 2 PTR deployment and manual validation
+
+For the current Phase 4A server/client deployment and full-slot Hide Appearance checklist, use
+[`PHASE4A_PTR_VALIDATION.md`](PHASE4A_PTR_VALIDATION.md). This document remains the historical Phase 2
+service baseline.
 
 This procedure targets the separate PTR AzerothCore installation and databases. Do not run it against production. Record pass/fail and evidence; this repository has not performed or claimed Phase 2 PTR validation.
 

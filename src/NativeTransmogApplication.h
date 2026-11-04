@@ -21,6 +21,13 @@ struct ApplicationConfig
     bool enabled = true;
     bool allowTwoHandAppearanceOnOneHand = false;
     bool allowOneHandAppearanceOnTwoHand = false;
+    bool hideWeapons = false;
+};
+
+enum class OverrideState : std::uint8_t
+{
+    Appearance = 0,
+    Hidden = 1
 };
 
 enum class ApplicationAuthorization : std::uint8_t
@@ -52,6 +59,7 @@ enum class ApplicationResult : std::uint8_t
     WeaponSubclassMismatch,
     TwoHandOnOneHandDisabled,
     OneHandOnTwoHandDisabled,
+    HideWeaponsDisabled,
     NoOverride
 };
 
@@ -61,7 +69,11 @@ struct AppearanceOverride
     ObjectGuid::LowType ownerGuid = 0;
     std::uint32_t appearanceItem = 0;
     AppearanceKey appearance;
+    OverrideState state = OverrideState::Appearance;
 };
+
+bool IsSupportedEquipmentSlot(std::uint8_t equipmentSlot);
+bool IsWeaponEquipmentSlot(std::uint8_t equipmentSlot);
 
 class CompatibilityValidator final
 {
@@ -82,6 +94,8 @@ public:
 
     ApplicationResult Apply(Player* player, std::uint8_t equipmentSlot, std::uint32_t appearanceItem,
         ApplicationAuthorization authorization);
+    ApplicationResult Hide(Player* player, std::uint8_t equipmentSlot,
+        ApplicationAuthorization authorization);
     ApplicationResult Remove(Player* player, std::uint8_t equipmentSlot,
         ApplicationAuthorization authorization);
     bool GetOverride(Item const* item, AppearanceOverride& appearanceOverride) const;
@@ -94,6 +108,7 @@ public:
     void RemoveForTransferredItem(Item const* item);
     void RemoveForDeletedItem(CharacterDatabaseTransaction transaction, ObjectGuid::LowType itemGuid);
     void ResolveMirrorImage(Item const* item, std::uint32_t& displayId) const;
+    bool CanHide(std::uint8_t equipmentSlot) const;
 
     static char const* ResultName(ApplicationResult result);
 

@@ -15,6 +15,36 @@
 
 namespace native_transmog
 {
+bool IsSupportedEquipmentSlot(std::uint8_t equipmentSlot)
+{
+    switch (equipmentSlot)
+    {
+        case EQUIPMENT_SLOT_HEAD:
+        case EQUIPMENT_SLOT_SHOULDERS:
+        case EQUIPMENT_SLOT_BODY:
+        case EQUIPMENT_SLOT_CHEST:
+        case EQUIPMENT_SLOT_WAIST:
+        case EQUIPMENT_SLOT_LEGS:
+        case EQUIPMENT_SLOT_FEET:
+        case EQUIPMENT_SLOT_WRISTS:
+        case EQUIPMENT_SLOT_HANDS:
+        case EQUIPMENT_SLOT_BACK:
+        case EQUIPMENT_SLOT_MAINHAND:
+        case EQUIPMENT_SLOT_OFFHAND:
+        case EQUIPMENT_SLOT_RANGED:
+        case EQUIPMENT_SLOT_TABARD:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsWeaponEquipmentSlot(std::uint8_t equipmentSlot)
+{
+    return equipmentSlot == EQUIPMENT_SLOT_MAINHAND || equipmentSlot == EQUIPMENT_SLOT_OFFHAND ||
+        equipmentSlot == EQUIPMENT_SLOT_RANGED;
+}
+
 namespace
 {
 bool ClassAllowed(Player const* player, ItemTemplate const* source)
@@ -155,9 +185,9 @@ bool ApplicationService::Initialize()
     QueryResult table = CharacterDatabase.Query(
         "SELECT COUNT(*) FROM `information_schema`.`COLUMNS` "
         "WHERE `TABLE_SCHEMA` = DATABASE() AND `TABLE_NAME` = 'native_transmog_item_override' "
-        "AND `COLUMN_NAME` = 'appearance_item'");
+        "AND `COLUMN_NAME` IN ('appearance_item', 'override_state')");
     std::lock_guard<std::mutex> lock(_mutex);
-    _databaseAvailable = table && table->Fetch()[0].Get<std::uint64_t>() == 1;
+    _databaseAvailable = table && table->Fetch()[0].Get<std::uint64_t>() == 2;
     if (!_databaseAvailable)
         LOG_ERROR("module.native_transmog",
             "Application table native_transmog_item_override is missing; appearance application is unavailable.");
@@ -196,7 +226,7 @@ ApplicationResult ApplicationService::Apply(Player* player, std::uint8_t equipme
     }
     if (!Authorized(player, authorization))
         return ApplicationResult::Unauthorized;
-    if (equipmentSlot >= EQUIPMENT_SLOT_END)
+    if (!IsSupportedEquipmentSlot(equipmentSlot))
         return ApplicationResult::InvalidSlot;
     Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, equipmentSlot);
     if (!target || target->GetOwnerGUID() != player->GetGUID())
@@ -219,13 +249,16 @@ ApplicationResult ApplicationService::Apply(Player* player, std::uint8_t equipme
         appearanceItem, appearance };
     CharacterDatabase.DirectExecute(
         "INSERT INTO `native_transmog_item_override` "
-        "(`item_guid`, `owner_guid`, `appearance_item`, `display_id`, `item_class`, `item_subclass`, "
-        "`inventory_type`, `applied_at`) VALUES ({}, {}, {}, {}, {}, {}, {}, CURRENT_TIMESTAMP) "
+        "(`item_guid`, `owner_guid`, `override_state`, `appearance_item`, `display_id`, `item_class`, "
+        "`item_subclass`, `inventory_type`, `applied_at`) "
+        "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, CURRENT_TIMESTAMP) "
         "ON DUPLICATE KEY UPDATE `owner_guid` = VALUES(`owner_guid`), "
-        "`appearance_item` = VALUES(`appearance_item`), `display_id` = VALUES(`display_id`), "
+        "`override_state` = VALUES(`override_state`), `appearance_item` = VALUES(`appearance_item`), "
+        "`display_id` = VALUES(`display_id`), "
         "`item_class` = VALUES(`item_class`), `item_subclass` = VALUES(`item_subclass`), "
         "`inventory_type` = VALUES(`inventory_type`), `applied_at` = CURRENT_TIMESTAMP",
-        appearanceOverride.itemGuid, appearanceOverride.ownerGuid, appearanceOverride.appearanceItem,
+        appearanceOverride.itemGuid, appearanceOverride.ownerGuid,
+        static_cast<std::uint32_t>(appearanceOverride.state), appearanceOverride.appearanceItem,
         appearance.displayId, static_cast<std::uint32_t>(appearance.itemClass),
         static_cast<std::uint32_t>(appearance.itemSubclass), static_cast<std::uint32_t>(appearance.inventoryType));
     {
@@ -235,6 +268,49 @@ ApplicationResult ApplicationService::Apply(Player* player, std::uint8_t equipme
     player->SetVisibleItemSlot(equipmentSlot, target);
     LOG_INFO("module.native_transmog", "Applied collected appearance item {} to item {} owned by character {}.",
         appearanceItem, appearanceOverride.itemGuid, appearanceOverride.ownerGuid);
+    return ApplicationResult::Ok;
+}
+
+ApplicationResult ApplicationService::Hide(Player* player, std::uint8_t equipmentSlot,
+    ApplicationAuthorization authorization)
+{
+    ApplicationConfig config;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (!_config.enabled)
+            return ApplicationResult::Disabled;
+        if (!_databaseAvailable)
+            return ApplicationResult::DatabaseUnavailable;
+        config = _config;
+    }
+    if (!Authorized(player, authorization))
+        return ApplicationResult::Unauthorized;
+    if (!IsSupportedEquipmentSlot(equipmentSlot))
+        return ApplicationResult::InvalidSlot;
+    if (IsWeaponEquipmentSlot(equipmentSlot) && !config.hideWeapons)
+        return ApplicationResult::HideWeaponsDisabled;
+    Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, equipmentSlot);
+    if (!target || target->GetOwnerGUID() != player->GetGUID())
+        return ApplicationResult::TargetMissing;
+
+    AppearanceOverride appearanceOverride{ target->GetGUID().GetCounter(), player->GetGUID().GetCounter(),
+        0, {}, OverrideState::Hidden };
+    CharacterDatabase.DirectExecute(
+        "INSERT INTO `native_transmog_item_override` "
+        "(`item_guid`, `owner_guid`, `override_state`, `appearance_item`, `display_id`, `item_class`, "
+        "`item_subclass`, `inventory_type`, `applied_at`) VALUES ({}, {}, {}, 0, 0, 0, 0, 0, CURRENT_TIMESTAMP) "
+        "ON DUPLICATE KEY UPDATE `owner_guid` = VALUES(`owner_guid`), `override_state` = VALUES(`override_state`), "
+        "`appearance_item` = 0, `display_id` = 0, `item_class` = 0, `item_subclass` = 0, "
+        "`inventory_type` = 0, `applied_at` = CURRENT_TIMESTAMP",
+        appearanceOverride.itemGuid, appearanceOverride.ownerGuid,
+        static_cast<std::uint32_t>(appearanceOverride.state));
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _overrides[appearanceOverride.itemGuid] = appearanceOverride;
+    }
+    player->SetVisibleItemSlot(equipmentSlot, target);
+    LOG_INFO("module.native_transmog", "Hid item {} in equipment slot {} for character {}.",
+        appearanceOverride.itemGuid, equipmentSlot, appearanceOverride.ownerGuid);
     return ApplicationResult::Ok;
 }
 
@@ -250,7 +326,7 @@ ApplicationResult ApplicationService::Remove(Player* player, std::uint8_t equipm
     }
     if (!Authorized(player, authorization))
         return ApplicationResult::Unauthorized;
-    if (equipmentSlot >= EQUIPMENT_SLOT_END)
+    if (!IsSupportedEquipmentSlot(equipmentSlot))
         return ApplicationResult::InvalidSlot;
     Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, equipmentSlot);
     if (!target || target->GetOwnerGUID() != player->GetGUID())
@@ -311,7 +387,8 @@ void ApplicationService::LoadPlayer(Player* player)
     std::vector<ObjectGuid::LowType> invalid;
     std::vector<AppearanceOverride> loaded;
     if (QueryResult result = CharacterDatabase.Query(
-        "SELECT `item_guid`, `appearance_item`, `display_id`, `item_class`, `item_subclass`, `inventory_type` "
+        "SELECT `item_guid`, `override_state`, `appearance_item`, `display_id`, `item_class`, `item_subclass`, "
+        "`inventory_type` "
         "FROM `native_transmog_item_override` WHERE `owner_guid` = {}", player->GetGUID().GetCounter()))
     {
         do
@@ -320,19 +397,30 @@ void ApplicationService::LoadPlayer(Player* player)
             AppearanceOverride appearanceOverride;
             appearanceOverride.itemGuid = fields[0].Get<ObjectGuid::LowType>();
             appearanceOverride.ownerGuid = player->GetGUID().GetCounter();
-            appearanceOverride.appearanceItem = fields[1].Get<std::uint32_t>();
-            appearanceOverride.appearance = { fields[2].Get<std::uint32_t>(), fields[3].Get<std::uint8_t>(),
-                fields[4].Get<std::uint8_t>(), fields[5].Get<std::uint8_t>() };
+            std::uint8_t state = fields[1].Get<std::uint8_t>();
+            if (state > static_cast<std::uint8_t>(OverrideState::Hidden))
+            {
+                invalid.push_back(appearanceOverride.itemGuid);
+                continue;
+            }
+            appearanceOverride.state = static_cast<OverrideState>(state);
+            appearanceOverride.appearanceItem = fields[2].Get<std::uint32_t>();
+            appearanceOverride.appearance = { fields[3].Get<std::uint32_t>(), fields[4].Get<std::uint8_t>(),
+                fields[5].Get<std::uint8_t>(), fields[6].Get<std::uint8_t>() };
             Item* target = player->GetItemByGuid(ObjectGuid::Create<HighGuid::Item>(appearanceOverride.itemGuid));
-            ItemTemplate const* source = sObjectMgr->GetItemTemplate(appearanceOverride.appearanceItem);
-            AppearanceKey resolved;
-            bool valid = target && target->GetOwnerGUID() == player->GetGUID() &&
-                CollectionService::ResolveAppearance(source, resolved) && resolved == appearanceOverride.appearance;
+            bool valid = target && target->GetOwnerGUID() == player->GetGUID();
             std::uint8_t equipmentSlot = target && target->IsEquipped() ? target->GetSlot() :
                 static_cast<std::uint8_t>(NULL_SLOT);
-            if (!valid ||
-                CompatibilityValidator::Validate(player, target->GetTemplate(), source, config, equipmentSlot) !=
-                    ApplicationResult::Ok)
+            if (appearanceOverride.state == OverrideState::Appearance)
+            {
+                ItemTemplate const* source = sObjectMgr->GetItemTemplate(appearanceOverride.appearanceItem);
+                AppearanceKey resolved;
+                valid = valid && CollectionService::ResolveAppearance(source, resolved) &&
+                    resolved == appearanceOverride.appearance &&
+                    CompatibilityValidator::Validate(player, target->GetTemplate(), source, config, equipmentSlot) ==
+                        ApplicationResult::Ok;
+            }
+            if (!valid)
             {
                 invalid.push_back(appearanceOverride.itemGuid);
                 continue;
@@ -364,12 +452,18 @@ void ApplicationService::ReleasePlayer(Player const* player)
 
 void ApplicationService::ApplyVisible(Player* player, std::uint8_t equipmentSlot, Item* item) const
 {
-    if (!player || !item || equipmentSlot >= EQUIPMENT_SLOT_END)
+    if (!player || !item || !IsSupportedEquipmentSlot(equipmentSlot))
         return;
     std::lock_guard<std::mutex> lock(_mutex);
     auto found = _overrides.find(item->GetGUID().GetCounter());
     if (found == _overrides.end() || found->second.ownerGuid != player->GetGUID().GetCounter())
         return;
+    if (found->second.state == OverrideState::Hidden)
+    {
+        if (!IsWeaponEquipmentSlot(equipmentSlot) || _config.hideWeapons)
+            player->SetUInt32Value(PLAYER_VISIBLE_ITEM_1_ENTRYID + (equipmentSlot * 2), 0);
+        return;
+    }
     ItemTemplate const* source = sObjectMgr->GetItemTemplate(found->second.appearanceItem);
     if (CompatibilityValidator::Validate(player, item->GetTemplate(), source, _config, equipmentSlot) ==
         ApplicationResult::Ok)
@@ -422,9 +516,16 @@ void ApplicationService::ResolveMirrorImage(Item const* item, std::uint32_t& dis
         config = _config;
     }
     Player* owner = item->GetOwner();
+    if (!owner || appearanceOverride.ownerGuid != owner->GetGUID().GetCounter())
+        return;
+    if (appearanceOverride.state == OverrideState::Hidden)
+    {
+        if (!IsWeaponEquipmentSlot(item->GetSlot()) || config.hideWeapons)
+            displayId = 0;
+        return;
+    }
     ItemTemplate const* source = sObjectMgr->GetItemTemplate(appearanceOverride.appearanceItem);
-    if (owner && appearanceOverride.ownerGuid == owner->GetGUID().GetCounter() &&
-        CompatibilityValidator::Validate(owner, item->GetTemplate(), source, config, item->GetSlot()) ==
+    if (CompatibilityValidator::Validate(owner, item->GetTemplate(), source, config, item->GetSlot()) ==
             ApplicationResult::Ok)
         displayId = appearanceOverride.appearance.displayId;
 }
@@ -454,8 +555,15 @@ char const* ApplicationService::ResultName(ApplicationResult result)
         case ApplicationResult::WeaponSubclassMismatch: return "weapon subclass mismatch";
         case ApplicationResult::TwoHandOnOneHandDisabled: return "two-hand appearance on one-hand target is disabled";
         case ApplicationResult::OneHandOnTwoHandDisabled: return "one-hand appearance on two-hand target is disabled";
+        case ApplicationResult::HideWeaponsDisabled: return "weapon hiding is disabled";
         case ApplicationResult::NoOverride: return "item has no appearance override";
         default: return "unknown result";
     }
+}
+
+bool ApplicationService::CanHide(std::uint8_t equipmentSlot) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return IsSupportedEquipmentSlot(equipmentSlot) && (!IsWeaponEquipmentSlot(equipmentSlot) || _config.hideWeapons);
 }
 }

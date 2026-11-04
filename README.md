@@ -2,7 +2,17 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them: the native wardrobe now pages through the authenticated player's collected, compatible appearances and applies or removes them only after server confirmation. It does **not** grant items, migrate legacy records, add saved outfits, or introduce a second transmog engine.
+Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A expands the native wardrobe to every visually relevant 3.3.5a equipment slot and adds a free, explicit Hide Appearance state. It does **not** grant items, add equipment sets or saved outfits, price ordinary applications, migrate legacy `mod-transmog` records, or introduce a second transmog engine.
+
+## Phase 4A full slots and Hide Appearance
+
+The supported AzerothCore equipment slots are Head, Shoulders, Shirt (`EQUIPMENT_SLOT_BODY`), Chest, Waist, Legs, Feet, Wrists, Hands, Back, Main Hand, Off Hand, Ranged, and Tabard. Neck, fingers, and trinkets are excluded. Catalog filtering and application continue through the Phase 3C compatibility validator, including exact armor subclass rules, chest/robe interchange, weapon families, handedness settings, and player eligibility.
+
+Every supported catalog begins with a special **Hide Appearance** tile when hiding is permitted. It is independent of collection ownership, remains available for an empty collection, and does not consume a collected-appearance page position. Hide is a separate authenticated `HIDE` request using the same NPC session and item-GUID-bound snapshot as Apply and Remove. Hide and Restore Original are free; ordinary application pricing remains unchanged for this phase.
+
+`native_transmog_item_override.override_state` distinguishes a collected appearance (`0`) from explicit hidden state (`1`). Existing rows migrate as state `0`. A hidden row retains the real item-instance GUID and owner but stores no fake appearance identity. Rendering writes zero only to the public visible-item entry field after the core has populated the real item and enchant fields; the item template, inventory record, stats, enchantments, durability, and combat behavior are untouched. The mirror-image hook returns display `0` for hidden armor. Removing the row and refreshing the slot restores the physical item's entry.
+
+Weapon-slot hiding—including shields and held-in-off-hand items because they occupy `EQUIPMENT_SLOT_OFFHAND`—is controlled by the single default-off `NativeTransmog.HideWeapons` setting. When disabled, the tile is omitted for main hand, off hand, and ranged; the server independently rejects `HIDE`; and retained hidden-weapon rows render as the real item. Configuration reload refreshes online visible equipment but never deletes those rows.
 
 ## Phase 3D native wardrobe integration
 
@@ -62,7 +72,7 @@ The inspected hook order cannot safely append a new gossip option to every scrip
 
 ## Wardrobe transport and authorization
 
-The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 2, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Client catalog/apply/remove messages use the same prefix and are accepted only as authenticated self-whispers.
+The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 2, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Client catalog/apply/hide/remove messages use the same prefix and are accepted only as authenticated self-whispers.
 
 This uses the stock addon-message wire protocol without installing an addon, inventing an opcode, or exposing normal chat text. It is also a pattern already supported by the inspected Playerbot branch and other native FrameXML modules in this environment.
 
@@ -85,12 +95,13 @@ NativeTransmog.Collection.QuestBackfill.Enable = 1
 NativeTransmog.Application.Enable = 1
 NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0
+NativeTransmog.HideWeapons = 0
 NativeTransmog.Wardrobe.PageSize = 24
 NativeTransmog.Wardrobe.RequestCooldownMs = 250
 NativeTransmog.Wardrobe.SnapshotLifetimeMs = 30000
 ```
 
-Collection is account-wide by default. Disabling account-wide mode selects existing/per-character rows without touching account rows. Application can be disabled independently for rendering rollback. The two weapon-direction settings are independent and default to the conservative disabled policy.
+Collection is account-wide by default. Disabling account-wide mode selects existing/per-character rows without touching account rows. Application can be disabled independently for rendering rollback. The two weapon-direction settings and weapon hiding are independent and default to the conservative disabled policy.
 
 ## GM commands
 
@@ -119,7 +130,7 @@ Add, appearance apply, and quest-backfill execution use AzerothCore's existing N
 ## Installation and PTR deployment
 
 1. Install this repository as `modules/mod-native-transmog` in the isolated Playerbot PTR build. Confirm `mod-transmog` is excluded from that build/load; production remains unchanged.
-2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`. Existing ownership/provenance and all legacy tables remain untouched.
+2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`; Phase 4A adds `2026_11_04_00_native_transmog_hidden_state.sql`. Existing override rows become collected-appearance state `0`; ownership/provenance and all legacy tables remain untouched.
 3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow. Ensure AzerothCore's `worldserver.conf` contains:
 
    ```ini
@@ -150,17 +161,16 @@ python3 content/build_epf.py --check
 python3 -m unittest discover -s tests -p 'test_phase*.py'
 ```
 
-The checks cover all earlier regressions plus Phase 3D transport, catalog identity, canonical resolution, shared compatibility, authorization, bounded pagination, stale snapshots, UI state, feedback, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 3D PTR plan](docs/PHASE3D_PTR_VALIDATION.md).
+The checks cover all earlier regressions plus the 14-slot allowlist, filtering, explicit hidden state, migration, authorization, weapon policy, empty collections, state transitions, reload/equipment paths, pagination, UI state, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 4A PTR plan](docs/PHASE4A_PTR_VALIDATION.md).
 
 ## Known limitations and future mobile NPCs
 
-- Phase 3C PTR validation has not been performed; automated checks and a Playerbot compile/link do not prove in-game behavior.
+- Phase 4A build-12340 client rendering has not been performed. Automated checks and a Playerbot compile/link do not prove the local model, observer model, every race/gender geometry, enchant visuals, relog/restart, or mirror-image behavior.
 - Phase 2 opens immediately on supported gossip/quest, vendor, and trainer interactions; it cannot safely inject an option into arbitrary scripted gossip on this branch.
 - Client service types that bypass all inspected hooks are not covered. Registration never changes their flags to manufacture an interaction path.
 - Vehicle-passenger creatures are explicitly rejected in Phase 2. Entry resolution itself is location- and spawn-independent, so the registry is suitable for a future mobile Transmogrifier, but passenger interaction and moving-distance/session semantics require dedicated validation before removing this guard.
 - Addon transport requires AzerothCore's addon channel to be enabled and has build-12340's 255-byte message limit; pages are therefore multipart.
 - Backfill can prove only active persisted rewarded rows and uses current quest definitions; it cannot reconstruct missing repeat history, old choices, or historical reward definitions. Offline targets are intentionally unsupported.
-- A live config reload that disables application does not proactively refresh every online visible slot; use a controlled restart/relog or equipment refresh.
 - No saved outfit, search, favorites, cost system, legacy integration, or migration from `mod-transmog` exists.
 
 No code change outside this repository is required. The target Content Manager must already include managed server resources and `ContentResourceApiV1` (Milestone 2), and its `2026_09_25_06_content_managed_server_resources.sql` migration must be present before building/activating this EPF.

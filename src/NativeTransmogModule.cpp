@@ -13,12 +13,14 @@
 #include "Item.h"
 #include "ItemTemplate.h"
 #include "Log.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "QuestDef.h"
 #include "RBAC.h"
 #include "ScriptMgr.h"
 
 #include <cstdint>
+#include <shared_mutex>
 
 using namespace Acore::ChatCommands;
 
@@ -28,6 +30,20 @@ native_transmog::ServiceConfig serviceConfig;
 native_transmog::CollectionConfig collectionConfig;
 native_transmog::ApplicationConfig applicationConfig;
 native_transmog::WardrobeConfig wardrobeConfig;
+
+void RefreshOnlineVisibleEquipment()
+{
+    std::shared_lock<std::shared_mutex> lock(*HashMapHolder<Player>::GetLock());
+    for (auto const& [guid, player] : ObjectAccessor::GetPlayers())
+    {
+        (void)guid;
+        if (!player)
+            continue;
+        for (std::uint8_t slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+            if (Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+                player->SetVisibleItemSlot(slot, item);
+    }
+}
 
 char const* ScopeName(native_transmog::RegistrationScope scope)
 {
@@ -135,6 +151,7 @@ public:
             "NativeTransmog.AllowTwoHandAppearanceOnOneHand", false);
         applicationConfig.allowOneHandAppearanceOnTwoHand = sConfigMgr->GetOption<bool>(
             "NativeTransmog.AllowOneHandAppearanceOnTwoHand", false);
+        applicationConfig.hideWeapons = sConfigMgr->GetOption<bool>("NativeTransmog.HideWeapons", false);
         collectionConfig.enabled = serviceConfig.enabled &&
             sConfigMgr->GetOption<bool>("NativeTransmog.Collection.Enable", true);
         collectionConfig.accountWide =
@@ -166,15 +183,17 @@ public:
         if (reload && wardrobeConfig.enabled)
             native_transmog::WardrobeService::Instance().Initialize();
         if (reload)
+            RefreshOnlineVisibleEquipment();
+        if (reload)
             LOG_INFO("server.loading",
-                "Native Transmog Phase 3C configuration reloaded "
+                "Native Transmog Phase 4A configuration reloaded "
                 "(collection: {}, scope: {}, acquire: {}, quest rewards: {}, backfill: {}, application: {}, "
-                "two-hand-on-one-hand: {}, one-hand-on-two-hand: {}).",
+                "two-hand-on-one-hand: {}, one-hand-on-two-hand: {}, hide-weapons: {}).",
                 collectionConfig.enabled, collectionConfig.accountWide ? "account" : "character",
                 collectionConfig.unlockOnAcquire, collectionConfig.unlockAllQuestRewards,
                 collectionConfig.questBackfillEnabled, applicationConfig.enabled,
                 applicationConfig.allowTwoHandAppearanceOnOneHand,
-                applicationConfig.allowOneHandAppearanceOnTwoHand);
+                applicationConfig.allowOneHandAppearanceOnTwoHand, applicationConfig.hideWeapons);
     }
 
     void OnStartup() override
@@ -202,10 +221,10 @@ public:
             collectionConfig.unlockOnAcquire, collectionConfig.unlockAllQuestRewards,
             collectionConfig.questBackfillEnabled);
         LOG_INFO("server.loading",
-            "Native Transmog Phase 3C application initialized "
-            "(enabled: {}, two-hand-on-one-hand: {}, one-hand-on-two-hand: {}).",
+            "Native Transmog Phase 4A application initialized "
+            "(enabled: {}, two-hand-on-one-hand: {}, one-hand-on-two-hand: {}, hide-weapons: {}).",
             applicationConfig.enabled, applicationConfig.allowTwoHandAppearanceOnOneHand,
-            applicationConfig.allowOneHandAppearanceOnTwoHand);
+            applicationConfig.allowOneHandAppearanceOnTwoHand, applicationConfig.hideWeapons);
     }
 };
 
@@ -548,7 +567,7 @@ public:
     static bool HandleAppearanceInfo(ChatHandler* handler, std::uint8_t equipmentSlot)
     {
         Player* target = SelectedOrSelfPlayer(handler);
-        if (!target || equipmentSlot >= EQUIPMENT_SLOT_END)
+        if (!target || !native_transmog::IsSupportedEquipmentSlot(equipmentSlot))
             return false;
         if (handler->HasLowerSecurity(target))
             return false;
@@ -566,12 +585,16 @@ public:
                 item->GetGUID().GetCounter(), target->GetName(), equipmentSlot);
             return true;
         }
-        handler->PSendSysMessage(
-            "Native Transmog: item {} in {} slot {} uses appearance item {} (display {}, class {}, "
-            "subclass {}, inventory {}).",
-            appearanceOverride.itemGuid, target->GetName(), equipmentSlot, appearanceOverride.appearanceItem,
-            appearanceOverride.appearance.displayId, appearanceOverride.appearance.itemClass,
-            appearanceOverride.appearance.itemSubclass, appearanceOverride.appearance.inventoryType);
+        if (appearanceOverride.state == native_transmog::OverrideState::Hidden)
+            handler->PSendSysMessage("Native Transmog: item {} in {} slot {} is explicitly hidden.",
+                appearanceOverride.itemGuid, target->GetName(), equipmentSlot);
+        else
+            handler->PSendSysMessage(
+                "Native Transmog: item {} in {} slot {} uses appearance item {} (display {}, class {}, "
+                "subclass {}, inventory {}).",
+                appearanceOverride.itemGuid, target->GetName(), equipmentSlot, appearanceOverride.appearanceItem,
+                appearanceOverride.appearance.displayId, appearanceOverride.appearance.itemClass,
+                appearanceOverride.appearance.itemSubclass, appearanceOverride.appearance.inventoryType);
         return true;
     }
 

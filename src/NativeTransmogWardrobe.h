@@ -43,6 +43,7 @@ private:
         std::uint32_t requestId = 0;
         std::uint8_t equipmentSlot = 0;
         ObjectGuid::LowType itemGuid = 0;
+        bool canHide = false;
         std::vector<std::uint32_t> sources;
         std::chrono::steady_clock::time_point expires;
     };
@@ -59,6 +60,7 @@ private:
         char const* operation, char const* result) const;
     void HandleCatalog(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleApply(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleHide(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleRemove(Player* player, std::vector<std::uint32_t> const& fields);
     std::uint8_t ResolveSlot(std::uint32_t wireSlot) const;
     CollectionFilter FilterFor(Item const* target) const;

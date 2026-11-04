@@ -172,6 +172,8 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         HandleCatalog(player, fields);
     else if (parts[2] == "APPLY" && fields.size() == 4)
         HandleApply(player, fields);
+    else if (parts[2] == "HIDE" && fields.size() == 3)
+        HandleHide(player, fields);
     else if (parts[2] == "REMOVE" && fields.size() == 3)
         HandleRemove(player, fields);
     else
@@ -186,9 +188,18 @@ std::uint8_t WardrobeService::ResolveSlot(std::uint32_t wireSlot) const
     {
         case 1: return EQUIPMENT_SLOT_HEAD;
         case 2: return EQUIPMENT_SLOT_SHOULDERS;
-        case 3: return EQUIPMENT_SLOT_CHEST;
-        case 4: return EQUIPMENT_SLOT_MAINHAND;
-        case 5: return EQUIPMENT_SLOT_OFFHAND;
+        case 3: return EQUIPMENT_SLOT_BODY;
+        case 4: return EQUIPMENT_SLOT_CHEST;
+        case 5: return EQUIPMENT_SLOT_WAIST;
+        case 6: return EQUIPMENT_SLOT_LEGS;
+        case 7: return EQUIPMENT_SLOT_FEET;
+        case 8: return EQUIPMENT_SLOT_WRISTS;
+        case 9: return EQUIPMENT_SLOT_HANDS;
+        case 10: return EQUIPMENT_SLOT_BACK;
+        case 11: return EQUIPMENT_SLOT_MAINHAND;
+        case 12: return EQUIPMENT_SLOT_OFFHAND;
+        case 13: return EQUIPMENT_SLOT_RANGED;
+        case 14: return EQUIPMENT_SLOT_TABARD;
         default: return NULL_SLOT;
     }
 }
@@ -270,6 +281,8 @@ void WardrobeService::HandleCatalog(Player* player, std::vector<std::uint32_t> c
     bool exhausted = false;
     AppearanceOverride appearanceOverride;
     bool hasOverride = ApplicationService::Instance().GetOverride(target, appearanceOverride);
+    bool canHide = ApplicationService::Instance().CanHide(equipmentSlot);
+    bool hidden = hasOverride && appearanceOverride.state == OverrideState::Hidden && canHide;
     while (sources.size() <= pageSize && scanned < maximumScan)
     {
         std::uint32_t chunk = std::min<std::uint32_t>(64, maximumScan - scanned);
@@ -287,7 +300,8 @@ void WardrobeService::HandleCatalog(Player* player, std::vector<std::uint32_t> c
             if (source)
             {
                 sources.push_back(source);
-                appliedFlags.push_back(hasOverride && appearanceOverride.appearance == record.appearance);
+                appliedFlags.push_back(hasOverride && appearanceOverride.state == OverrideState::Appearance &&
+                    appearanceOverride.appearance == record.appearance);
                 if (sources.size() > pageSize)
                     break;
             }
@@ -315,22 +329,58 @@ void WardrobeService::HandleCatalog(Player* player, std::vector<std::uint32_t> c
         if (!nonce)
             nonce = _nextNonce++;
         _players[player->GetGUID().GetCounter()].snapshot = { nonce, token, requestId, equipmentSlot,
-            target->GetGUID().GetCounter(), sources,
+            target->GetGUID().GetCounter(), canHide, sources,
             std::chrono::steady_clock::now() + std::chrono::milliseconds(snapshotLifetime) };
     }
 
-    std::uint32_t appliedEntry = hasOverride ? appearanceOverride.appearanceItem : 0;
+    std::uint32_t appliedEntry = hasOverride && appearanceOverride.state == OverrideState::Appearance ?
+        appearanceOverride.appearanceItem : 0;
     Send(player, "PAGE\t" + std::to_string(token) + '\t' + std::to_string(requestId) + '\t' +
         std::to_string(nonce) + '\t' + std::to_string(wireSlot) + '\t' + std::to_string(cursor) + '\t' +
         std::to_string(cursor + scanned) + '\t' + std::to_string(hasNext ? 1 : 0) + '\t' +
         std::to_string(target->GetEntry()) + '\t' + std::to_string(appliedEntry) + '\t' +
-        std::to_string(sources.size()));
+        std::to_string(canHide ? 1 : 0) + '\t' + std::to_string(hidden ? 1 : 0) + '\t' +
+        std::to_string(hasOverride ? 1 : 0) + '\t' + std::to_string(sources.size()));
     for (std::size_t index = 0; index < sources.size(); ++index)
         Send(player, "ITEM\t" + std::to_string(token) + '\t' + std::to_string(requestId) + '\t' +
             std::to_string(nonce) + '\t' + std::to_string(index + 1) + '\t' +
             std::to_string(sources[index]) + '\t' + std::to_string(appliedFlags[index] ? 1 : 0));
     Send(player, "END\t" + std::to_string(token) + '\t' + std::to_string(requestId) + '\t' +
         std::to_string(nonce));
+}
+
+void WardrobeService::HandleHide(Player* player, std::vector<std::uint32_t> const& fields)
+{
+    std::uint32_t token = fields[0], requestId = fields[1], nonce = fields[2];
+    Snapshot snapshot;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto found = _players.find(player->GetGUID().GetCounter());
+        if (found == _players.end())
+        {
+            SendError(player, token, requestId, "HIDE", "STALE");
+            return;
+        }
+        snapshot = found->second.snapshot;
+    }
+    Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, snapshot.equipmentSlot);
+    if (!Service::Instance().ValidateSession(player, token))
+        SendError(player, token, requestId, "HIDE", "SESSION_EXPIRED");
+    else if (snapshot.nonce != nonce || snapshot.sessionToken != token || snapshot.requestId != requestId ||
+        snapshot.expires < std::chrono::steady_clock::now() || !snapshot.canHide || !target ||
+        target->GetGUID().GetCounter() != snapshot.itemGuid)
+        SendError(player, token, requestId, "HIDE", "EQUIPMENT_CHANGED");
+    else
+    {
+        ApplicationResult result = ApplicationService::Instance().Hide(
+            player, snapshot.equipmentSlot, ApplicationAuthorization::NpcSession);
+        if (result == ApplicationResult::Ok)
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            _players[player->GetGUID().GetCounter()].snapshot.nonce = 0;
+        }
+        SendError(player, token, requestId, "HIDE", ApplicationService::ResultName(result));
+    }
 }
 
 void WardrobeService::HandleApply(Player* player, std::vector<std::uint32_t> const& fields)
