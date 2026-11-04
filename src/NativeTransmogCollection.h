@@ -27,7 +27,8 @@ enum class AcquisitionSource : std::uint8_t
     InventoryTransfer = 2,// MoveItemToInventory: trade, mail, and similar existing-item transfers.
     Vendor = 3,           // Direct-to-equipment vendor purchase not covered by StoreNewItem.
     QuestCompletion = 4,  // Every eligible item offered by a successfully rewarded quest.
-    QuestBackfill = 5     // Current rewards of a quest found in reliable historical completion storage.
+    QuestBackfill = 5,    // Current rewards of a quest found in reliable historical completion storage.
+    Equipment = 6         // An eligible item observed in its successfully equipped slot.
 };
 
 struct AppearanceKey

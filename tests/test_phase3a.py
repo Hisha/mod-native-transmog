@@ -90,13 +90,34 @@ class PhaseThreeAContractTests(unittest.TestCase):
         for hook in (
             "PLAYERHOOK_ON_STORE_NEW_ITEM",
             "PLAYERHOOK_ON_AFTER_MOVE_ITEM_TO_INVENTORY",
-            "PLAYERHOOK_ON_AFTER_STORE_OR_EQUIP_NEW_ITEM",
+            "PLAYERHOOK_ON_EQUIP",
         ):
             self.assertIn(hook, MODULE)
         self.assertIn("CharacterDatabase.DirectExecute", COLLECTION_CPP)
         self.assertIn("INSERT IGNORE", COLLECTION_CPP)
         login = MODULE[MODULE.index("void OnPlayerLogin"):MODULE.index("void OnPlayerUpdate")]
         self.assertNotIn("CollectionService", login)
+
+    def test_equipment_unlock_is_post_success_and_rechecks_authoritative_slot(self) -> None:
+        equip = MODULE[MODULE.index("void OnPlayerEquip"):MODULE.index("void OnPlayerAfterSetVisibleItemSlot")]
+        for marker in (
+            "GetItemByPos(INVENTORY_SLOT_BAG_0, slot)",
+            "equipped != item",
+            "equipped->IsEquipped()",
+            "equipped->GetOwnerGUID() != player->GetGUID()",
+            "AcquisitionSource::Equipment",
+        ):
+            self.assertIn(marker, equip)
+        self.assertNotIn("CompatibilityValidator", equip)
+        self.assertNotIn("CanUseItem", equip)
+
+    def test_equipment_collection_has_no_new_setting_or_acquire_gate(self) -> None:
+        self.assertNotIn("Collection.UnlockOnEquip", CONFIG)
+        unlock = COLLECTION_CPP.index("bool CollectionService::Unlock(Player* player, ItemTemplate const*")
+        equipment_case = COLLECTION_CPP[COLLECTION_CPP.index("case AcquisitionSource::Equipment", unlock) :]
+        equipment_case = equipment_case[:equipment_case.index("if (!_config.enabled")]
+        self.assertIn("sourceEnabled = true", equipment_case)
+        self.assertNotIn("unlockOnAcquire", equipment_case)
 
     def test_query_api_filtering_order_and_missing_source_safety(self) -> None:
         for method in ("IsCollected", "List", "Count", "GetProvenance", "ResolveSourceItem"):

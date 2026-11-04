@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `native_transmog_collection` (
   `source_quest` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Quest entry for quest-derived unlocks; otherwise 0',
   `acquiring_character` INT UNSIGNED NOT NULL COMMENT 'Original character GUID; deliberately no FK',
   `acquired_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `acquisition_source` TINYINT UNSIGNED NOT NULL COMMENT '1=new item, 2=inventory transfer, 3=vendor, 4=quest completion, 5=quest backfill',
+  `acquisition_source` TINYINT UNSIGNED NOT NULL COMMENT '1=new item, 2=inventory transfer, 3=vendor, 4=quest completion, 5=quest backfill, 6=equipment',
   PRIMARY KEY (`owner_type`, `owner_id`, `display_id`, `item_class`, `item_subclass`, `inventory_type`),
   KEY `idx_native_transmog_owner_category` (`owner_type`, `owner_id`, `item_class`, `inventory_type`),
   KEY `idx_native_transmog_source_item` (`source_item`),

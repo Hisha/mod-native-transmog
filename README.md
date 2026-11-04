@@ -32,7 +32,7 @@ Historical backfill is never automatic. An authorized in-game GM starts preview 
 
 ## Phase 3A persistent collection
 
-Eligible visible armor and weapon appearances unlock when an item is newly stored or moved into a character's inventory. Collection ignores class, race, armor proficiency, weapon proficiency, and required skills: a mage can collect plate and a rogue can collect a two-handed sword. Phase 3C independently enforces compatibility whenever an appearance is applied.
+Eligible visible armor and weapon appearances unlock when an item is newly stored, moved into a character's inventory, or successfully equipped. The equipment path resolves the item actually occupying the server-side equipment slot and is idempotent, so an item already collected through loot, storage, or a quest creates no duplicate. Collection ignores class, race, armor proficiency, weapon proficiency, and required skills: a mage can collect plate and a rogue can collect a two-handed sword. Phase 3C independently enforces compatibility whenever an appearance is applied.
 
 Ownership lives in the character-database table `native_transmog_collection`. Account ownership uses the authenticated `WorldSession` account ID; character ownership uses the server-side character GUID. Both namespaces coexist. Switching scope never merges, copies, or deletes rows, and switching back restores the earlier namespace.
 
@@ -120,7 +120,13 @@ Add, appearance apply, and quest-backfill execution use AzerothCore's existing N
 
 1. Install this repository as `modules/mod-native-transmog` in the isolated Playerbot PTR build. Confirm `mod-transmog` is excluded from that build/load; production remains unchanged.
 2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`. Existing ownership/provenance and all legacy tables remain untouched.
-3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow and build worldserver.
+3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow. Ensure AzerothCore's `worldserver.conf` contains:
+
+   ```ini
+   AddonChannel = 1
+   ```
+
+   The protected native FrameXML wardrobe uses AzerothCore's existing addon-message transport; it does not install or require a standalone addon. Then build worldserver.
 4. Rebuild/verify the EPF:
 
    ```bash

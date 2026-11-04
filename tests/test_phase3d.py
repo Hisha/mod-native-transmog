@@ -86,6 +86,26 @@ class PhaseThreeDContracts(unittest.TestCase):
                        "No compatible collected appearances"):
             self.assertIn(marker, LUA)
 
+    def test_lua_51_icon_remainder_and_known_head_catalog_regression(self):
+        self.assertNotIn("math.mod", LUA)
+        self.assertIn("(index-1)%ICONS_PER_ROW", LUA)
+        # The reported exception is inside a non-empty catalog loop; reaching
+        # it proves at least one server ITEM was parsed before rendering failed.
+        self.assertLess(LUA.index("for index,appearance in ipairs(catalog)"),
+                        LUA.index("(index-1)%ICONS_PER_ROW"))
+        column_row = [((index - 1) % 4, (index - 1) // 4) for index in range(1, 9)]
+        self.assertEqual(column_row, [(0, 0), (1, 0), (2, 0), (3, 0),
+                                      (0, 1), (1, 1), (2, 1), (3, 1)])
+
+    def test_known_plate_helmet_uses_collection_identity_and_shared_validator(self):
+        collected = {(51904, 4, 4, 1): 44695}
+        target = {"class": 4, "subclass": 4, "inventory": 1}
+        compatible = [entry for (display, item_class, subclass, inventory), entry in collected.items()
+                      if item_class == target["class"] and subclass == target["subclass"]
+                      and inventory == target["inventory"]]
+        self.assertEqual(compatible, [44695])
+        self.assertIn("ApplicationService::Instance().ValidateForTarget", WARDROBE)
+
     def test_request_validation_replay_and_rate_limit(self):
         for marker in ("MaximumRequestLength", "ParseUnsigned", "fields.size() == 4",
                        "snapshot.nonce != nonce", "snapshot.expires", "RateLimited", "requestCooldownMs"):

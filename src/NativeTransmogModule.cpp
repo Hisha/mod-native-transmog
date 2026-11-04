@@ -237,8 +237,7 @@ public:
           PLAYERHOOK_ON_SEND_LIST_INVENTORY, PLAYERHOOK_ON_BEFORE_RECEIVE_SPELL_LIST_FROM_TRAINER,
           PLAYERHOOK_ON_STORE_NEW_ITEM, PLAYERHOOK_ON_AFTER_MOVE_ITEM_TO_INVENTORY,
           PLAYERHOOK_ON_AFTER_MOVE_ITEM_FROM_INVENTORY, PLAYERHOOK_ON_AFTER_SET_VISIBLE_ITEM_SLOT,
-          PLAYERHOOK_ON_AFTER_STORE_OR_EQUIP_NEW_ITEM, PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST,
-          PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT }) { }
+          PLAYERHOOK_ON_EQUIP, PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST, PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT }) { }
 
     void OnPlayerLogin(Player* player) override
     {
@@ -295,6 +294,22 @@ public:
         native_transmog::ApplicationService::Instance().RemoveForTransferredItem(item);
     }
 
+    void OnPlayerEquip(Player* player, Item* item, std::uint8_t bag, std::uint8_t slot, bool) override
+    {
+        if (!player || !item || bag != INVENTORY_SLOT_BAG_0 || slot >= EQUIPMENT_SLOT_END)
+            return;
+
+        // OnPlayerEquip is post-success in the Playerbot core. Resolve the
+        // authoritative slot anyway so an attempted or stale item can never
+        // unlock an appearance.
+        Item* equipped = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (equipped != item || !equipped->IsEquipped() || equipped->GetOwnerGUID() != player->GetGUID())
+            return;
+
+        native_transmog::CollectionService::Instance().Unlock(
+            player, equipped, native_transmog::AcquisitionSource::Equipment);
+    }
+
     void OnPlayerAfterSetVisibleItemSlot(Player* player, std::uint8_t slot, Item* item) override
     {
         native_transmog::ApplicationService::Instance().ApplyVisible(player, slot, item);
@@ -321,16 +336,6 @@ public:
             return true;
         native_transmog::WardrobeService::Instance().HandleAddonWhisper(player, message);
         return false;
-    }
-
-    void OnPlayerAfterStoreOrEquipNewItem(Player* player, std::uint32_t, Item* item, std::uint8_t,
-        std::uint8_t, std::uint8_t, ItemTemplate const*, Creature*, VendorItem const*, bool stored) override
-    {
-        // Stored vendor items already pass through StoreNewItem. Direct-to-slot
-        // purchases use EquipNewItem and need this focused path.
-        if (!stored)
-            native_transmog::CollectionService::Instance().Unlock(
-                player, item, native_transmog::AcquisitionSource::Vendor);
     }
 
     void OnPlayerCompleteQuest(Player* player, Quest const* quest) override

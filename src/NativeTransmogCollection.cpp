@@ -147,6 +147,7 @@ char const* CollectionService::SourceName(AcquisitionSource source)
         case AcquisitionSource::Vendor: return "vendor";
         case AcquisitionSource::QuestCompletion: return "quest-completion";
         case AcquisitionSource::QuestBackfill: return "quest-backfill";
+        case AcquisitionSource::Equipment: return "equipment";
         default: return "unknown";
     }
 }
@@ -219,6 +220,11 @@ bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate,
             case AcquisitionSource::QuestBackfill:
                 sourceEnabled = _config.questBackfillEnabled;
                 break;
+            case AcquisitionSource::Equipment:
+                // Equipping is an independent collection path, not an item-
+                // acquisition path controlled by UnlockOnAcquire.
+                sourceEnabled = true;
+                break;
         }
         if (!_config.enabled || !sourceEnabled || !_databaseAvailable)
             return false;
@@ -267,7 +273,8 @@ std::uint32_t CollectionService::UnlockBatch(Player* player,
 
     std::lock_guard<std::mutex> lock(_mutex);
     bool sourceEnabled = source == AcquisitionSource::QuestCompletion ? _config.unlockAllQuestRewards :
-        source == AcquisitionSource::QuestBackfill ? _config.questBackfillEnabled : _config.unlockOnAcquire;
+        source == AcquisitionSource::QuestBackfill ? _config.questBackfillEnabled :
+        source == AcquisitionSource::Equipment ? true : _config.unlockOnAcquire;
     if (!_config.enabled || !sourceEnabled || !_databaseAvailable)
         return 0;
 

@@ -1,23 +1,28 @@
 # Phase 3D test results
 
-Test date: 2026-11-03.
+Test date: 2026-11-04.
 
 ## Passed
 
 - `python3 -m unittest discover -s tests -p 'test_phase*.py'`
-  - 88 tests passed across Phase 1–3C regressions and Phase 3D transport, catalog identity, canonical
-    resolution, shared compatibility, authorization, bounded pagination, stale snapshots, UI state,
-    feedback, and deferred Playerbot loading.
+  - 92 tests passed across Phase 1–3C regressions and Phase 3D transport, equipment-triggered collection,
+    catalog identity, canonical resolution, shared compatibility, authorization, bounded pagination,
+    stale snapshots, Lua 5.1 remainder compatibility, UI state, feedback, and deferred Playerbot loading.
 - `python3 content/build_epf.py --check`
   - Deterministic Phase 3D EPF SHA-256:
-    `bccf236b5330ee579a070e377879a91843c423e90ec505414c7799da2e4820d7`.
+    `b3076389bd7b524b5b043bc89e130a307cbe5f2fff82620efcbc43a0bf5acca9`.
+- FrameXML compatibility checks.
+  - `NativeTransmogFrame.xml` parsed successfully.
+  - `NativeTransmogFrame.lua` compiled with the available Lua 5.5 runtime; source-contract tests confirm
+    Lua 5.1-compatible `%` positioning arithmetic and reject `math.mod`. An exact Lua 5.1 binary was not
+    available in this environment.
 - Playerbot AzerothCore module compile and worldserver link.
-  - Temporary source/build tree, Release, GCC 15.2, C++20, `MODULES=static`, `SCRIPTS=none`, warnings enabled.
+  - Retained temporary source/build tree, Release, GCC 15.2, C++20, `MODULES=static`, `SCRIPTS=none`.
   - A retained local MySQL development snapshot supplied headers/library; no system package was changed.
   - All module translation units compiled, `libmodules.a` linked, and `worldserver` linked at 100%.
   - Generated loader/archive contain `Addmod_native_transmogScripts` and no `Addmod_transmogScripts`.
   - Final temporary worldserver SHA-256:
-    `303ff61ac056e594ec31469f7d2c9c68f33aa31c21c85c8557c39f7eb9b55d8a`.
+    `760c2c5e2608a690342f49830af972cb0e12cc93052b3fbb0f33d92633d90c15`.
 - XML parsing and `git diff --check` passed.
 
 ## Not run or not proven

@@ -90,6 +90,20 @@ These checks can be run without the Phase 3D client patch; they do not validate 
   explicitly exercised.
 - [ ] `/wardrobe` and `/nativetransmog` create no Phase 2 server session and grant no application authority.
 
+## Equipment-triggered collection validation
+
+Before opening the wardrobe, verify equipment-triggered collection independently:
+
+1. Record the current rows for the test account/character and choose an eligible, uncollected plate shoulder
+   item (Judgement Spaulders, item `16954`, is the reported regression case). Equip it successfully and confirm
+   exactly one composite appearance row is created under the configured account or character owner. Unequip and
+   re-equip it twice and confirm the row count and original provenance remain unchanged.
+2. Repeat with collection disabled and confirm no row is created. Attempt an invalid equip and confirm no row is
+   created. Equip an ineligible item category and confirm it remains excluded. Restore the reviewed configuration
+   before continuing.
+3. Confirm ordinary loot, inventory transfer, vendor, quest-completion, and quest-backfill collection still follow
+   their existing settings and remain idempotent.
+
 ## Patched-client wardrobe validation
 
 1. Log in through the Portalkeeper-prepared build-12340 client as a normal player with known collected
@@ -99,6 +113,11 @@ These checks can be run without the Phase 3D client patch; they do not validate 
 3. For every supported slot, confirm only collected, server-compatible appearances are shown. Verify an
    empty collection and empty equipment slot show meaningful empty/error states. Page through a collection
    larger than the configured page size and verify deterministic Next/Previous behavior.
+   As a focused regression, use Hipally's collected plate helmet identity `(51904, 4, 4, 1)` from item `44695`:
+   with a compatible plate helmet equipped, select Head and confirm item `44695` appears without a Lua error.
+   Confirm an uncollected helmet and incompatible armor remain absent, and that an already-applied `44695`
+   remains present with its applied marker. Capture the multipart `PAGE`/`ITEM`/`END` exchange if the catalog
+   is unexpectedly empty so server response and client rendering failures can be distinguished.
 4. Hover entries and confirm icon, localized item name, and tooltip resolve. Confirm the equipped item,
    applied appearance, preview selection, selected highlight, and applied check mark are distinct.
 5. Select an appearance. Confirm only the DressUpModel changes; inventory, equipment, nearby observers,

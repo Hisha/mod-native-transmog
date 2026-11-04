@@ -101,7 +101,7 @@ end
 local function renderCatalog()
  for index,appearance in ipairs(catalog) do
   local button=buttons[index] or createAppearanceButton(index)
-  local column,row=math.mod(index-1,ICONS_PER_ROW),math.floor((index-1)/ICONS_PER_ROW)
+  local column,row=(index-1)%ICONS_PER_ROW,math.floor((index-1)/ICONS_PER_ROW)
   button:ClearAllPoints(); button:SetPoint("TOPLEFT",8+column*(ICON_SIZE+ICON_GAP),-8-row*(ICON_SIZE+ICON_GAP))
   button.entry,button.selectionId,button.applied=appearance.entry,appearance.selection,appearance.applied
   button.icon:SetTexture(GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); button:Show()
