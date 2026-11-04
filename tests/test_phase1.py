@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static and package-level regression tests for the Phase 1 prototype."""
+"""Static and package-level regression tests for the native wardrobe."""
 
 from __future__ import annotations
 
@@ -56,24 +56,23 @@ class PhaseOneTests(unittest.TestCase):
         self.assertTrue(children[0].tag.endswith("Script"))
         self.assertEqual(children[0].attrib["file"], "NativeTransmogFrame.lua")
 
-    def test_prototype_behaviors_are_present(self) -> None:
+    def test_phase1_preview_behaviors_are_preserved(self) -> None:
         for token in (
             'model:SetUnit("player")',
-            "getModel():TryOn(button.itemId)",
+            "model:TryOn(button.entry)",
             "NativeTransmog_SelectSlot",
             "NativeTransmog_ResetPreview",
             "NativeTransmog_Rotate",
-            'SLASH_NATIVETRANSMOG1 = "/wardrobe"',
+            'SLASH_NATIVETRANSMOG1="/wardrobe"',
         ):
             self.assertIn(token, self.lua)
 
-    def test_catalog_is_deterministic_and_matches_fixture(self) -> None:
-        all_ids = []
+    def test_prototype_catalog_is_not_the_normal_data_source(self) -> None:
+        self.assertNotIn("APPEARANCE_CATALOG", self.lua)
+        self.assertIn('sendRequest("CAT"', self.lua)
         for definition in self.catalog.values():
-            all_ids.extend(definition["items"])
-        self.assertEqual(len(all_ids), len(set(all_ids)))
-        lua_ids = [int(value) for value in re.findall(r"\{ id = (\d+), name = ", self.lua)]
-        self.assertCountEqual(lua_ids, all_ids)
+            for item_id in definition["items"]:
+                self.assertNotRegex(self.lua, rf"\b{item_id}\b")
 
     def test_configuration_defaults_and_registration(self) -> None:
         config = (ROOT / "conf/mod_native_transmog.conf.dist").read_text(encoding="utf-8")

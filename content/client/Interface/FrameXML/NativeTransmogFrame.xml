@@ -44,13 +44,25 @@
           </Anchors>
         </FontString>
         <FontString name="$parentHint" inherits="GameFontDisableSmall" justifyH="LEFT" justifyV="TOP"
-            text="Select an appearance to preview it. This prototype never changes your equipped items.">
-          <Size x="330" y="34" />
+            text="Preview is local. Apply and Remove wait for server confirmation.">
+          <Size x="330" y="18" />
           <Anchors>
             <Anchor point="TOPLEFT">
               <Offset x="396" y="-74" />
             </Anchor>
           </Anchors>
+        </FontString>
+        <FontString name="$parentActual" inherits="GameFontHighlightSmall" justifyH="LEFT">
+          <Size x="330" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="396" y="-94" /></Anchor></Anchors>
+        </FontString>
+        <FontString name="$parentApplied" inherits="GameFontHighlightSmall" justifyH="LEFT">
+          <Size x="330" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="396" y="-108" /></Anchor></Anchors>
+        </FontString>
+        <FontString name="$parentPreview" inherits="GameFontHighlightSmall" justifyH="LEFT">
+          <Size x="330" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="396" y="-122" /></Anchor></Anchors>
+        </FontString>
+        <FontString name="$parentStatus" inherits="GameFontNormalSmall" justifyH="CENTER">
+          <Size x="340" y="18" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-20" y="19" /></Anchor></Anchors>
         </FontString>
       </Layer>
     </Layers>
@@ -173,10 +185,10 @@
       </Frame>
 
       <Frame name="$parentBrowserPanel">
-        <Size x="346" y="325" />
+        <Size x="346" y="250" />
         <Anchors>
           <Anchor point="TOPLEFT">
-            <Offset x="394" y="-112" />
+            <Offset x="394" y="-144" />
           </Anchor>
         </Anchors>
         <Backdrop bgFile="Interface\Tooltips\UI-Tooltip-Background"
@@ -187,7 +199,7 @@
         </Backdrop>
         <Frames>
           <ScrollFrame name="$parentScroll" inherits="UIPanelScrollFrameTemplate">
-            <Size x="306" y="293" />
+            <Size x="306" y="218" />
             <Anchors>
               <Anchor point="TOPLEFT">
                 <Offset x="10" y="-12" />
@@ -195,18 +207,35 @@
             </Anchors>
             <ScrollChild>
               <Frame name="$parentChild">
-                <Size x="306" y="293" />
+                <Size x="306" y="218" />
               </Frame>
             </ScrollChild>
           </ScrollFrame>
         </Frames>
       </Frame>
+      <Button name="$parentPrevious" inherits="UIPanelButtonTemplate" text="Previous">
+        <Size x="76" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-270" y="76" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_PreviousPage();</OnClick></Scripts>
+      </Button>
+      <Button name="$parentNext" inherits="UIPanelButtonTemplate" text="Next">
+        <Size x="76" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-190" y="76" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_NextPage();</OnClick></Scripts>
+      </Button>
+      <Button name="$parentApply" inherits="UIPanelButtonTemplate" text="Apply Appearance">
+        <Size x="130" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-154" y="47" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_Apply();</OnClick></Scripts>
+      </Button>
+      <Button name="$parentRemove" inherits="UIPanelButtonTemplate" text="Remove Appearance">
+        <Size x="130" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-20" y="47" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_Remove();</OnClick></Scripts>
+      </Button>
     </Frames>
     <Scripts>
       <OnLoad>NativeTransmog_OnLoad(self);</OnLoad>
       <OnEvent>NativeTransmog_OnEvent(self, event, ...);</OnEvent>
       <OnShow>NativeTransmog_OnShow(self);</OnShow>
       <OnHide>NativeTransmog_OnHide(self);</OnHide>
+      <OnUpdate>NativeTransmog_FrameUpdate();</OnUpdate>
       <OnDragStart>self:StartMoving();</OnDragStart>
       <OnDragStop>self:StopMovingOrSizing();</OnDragStop>
     </Scripts>

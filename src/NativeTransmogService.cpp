@@ -21,6 +21,7 @@ constexpr char AddonPrefix[] = "NTRANSMOG";
 constexpr char ContentPackage[] = "mod-native-transmog";
 constexpr char DedicatedCreatureSymbol[] = "dedicated-transmogrifier";
 constexpr std::uint32_t SessionValidationIntervalMs = 500;
+constexpr std::uint32_t SessionLifetimeMs = 300000;
 
 ContentResourcesV1::Provider const* FindContentProvider(std::string& reason)
 {
@@ -289,12 +290,12 @@ bool Service::ValidateInteraction(Player* player, Creature* creature) const
 
 void Service::SendOpen(Player* player, std::uint32_t token) const
 {
-    player->Whisper(std::string(AddonPrefix) + "\t1\tOPEN\t" + std::to_string(token), LANG_ADDON, player);
+    player->Whisper(std::string(AddonPrefix) + "\t2\tOPEN\t" + std::to_string(token), LANG_ADDON, player);
 }
 
 void Service::SendClose(Player* player, std::uint32_t token) const
 {
-    player->Whisper(std::string(AddonPrefix) + "\t1\tCLOSE\t" + std::to_string(token), LANG_ADDON, player);
+    player->Whisper(std::string(AddonPrefix) + "\t2\tCLOSE\t" + std::to_string(token), LANG_ADDON, player);
 }
 
 bool Service::AuthorizeInteraction(Player* player, Creature* creature)
@@ -309,7 +310,7 @@ bool Service::AuthorizeInteraction(Player* player, Creature* creature)
         if (!token)
             token = _nextToken++;
         _sessions[player->GetGUID().GetCounter()] = {
-            creature->GetGUID(), player->GetMapId(), token, SessionValidationIntervalMs
+            creature->GetGUID(), player->GetMapId(), token, SessionValidationIntervalMs, SessionLifetimeMs
         };
     }
     SendOpen(player, token);
@@ -327,7 +328,18 @@ void Service::UpdateSession(Player* player, std::uint32_t diff)
         auto found = _sessions.find(player->GetGUID().GetCounter());
         if (found == _sessions.end())
             return;
-        if (found->second.validationTimer > diff)
+        if (found->second.lifetime <= diff)
+        {
+            found->second.lifetime = 0;
+            session = found->second;
+        }
+        else
+            found->second.lifetime -= diff;
+        if (!found->second.lifetime)
+        {
+            // Validation below closes the session outside the mutex.
+        }
+        else if (found->second.validationTimer > diff)
         {
             found->second.validationTimer -= diff;
             return;
@@ -337,7 +349,7 @@ void Service::UpdateSession(Player* player, std::uint32_t diff)
     }
 
     Creature* creature = ObjectAccessor::GetCreature(*player, session.creatureGuid);
-    if (player->GetMapId() != session.mapId || !ValidateInteraction(player, creature) ||
+    if (!session.lifetime || player->GetMapId() != session.mapId || !ValidateInteraction(player, creature) ||
         Resolve(creature) == ServiceResolution::None)
         CloseSession(player);
 }
@@ -381,10 +393,23 @@ bool Service::ValidateSession(Player* player)
         session = found->second;
     }
     Creature* creature = ObjectAccessor::GetCreature(*player, session.creatureGuid);
-    if (player->GetMapId() == session.mapId && ValidateInteraction(player, creature) &&
+    if (session.lifetime && player->GetMapId() == session.mapId && ValidateInteraction(player, creature) &&
         Resolve(creature) != ServiceResolution::None)
         return true;
     CloseSession(player);
     return false;
+}
+
+bool Service::ValidateSession(Player* player, std::uint32_t token)
+{
+    if (!player || !token)
+        return false;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto found = _sessions.find(player->GetGUID().GetCounter());
+        if (found == _sessions.end() || found->second.token != token || !found->second.lifetime)
+            return false;
+    }
+    return ValidateSession(player);
 }
 }

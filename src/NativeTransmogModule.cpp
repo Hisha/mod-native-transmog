@@ -2,6 +2,7 @@
 #include "NativeTransmogCollection.h"
 #include "NativeTransmogQuestCollection.h"
 #include "NativeTransmogService.h"
+#include "NativeTransmogWardrobe.h"
 
 #include "AllCreatureScript.h"
 #include "Chat.h"
@@ -26,6 +27,7 @@ namespace
 native_transmog::ServiceConfig serviceConfig;
 native_transmog::CollectionConfig collectionConfig;
 native_transmog::ApplicationConfig applicationConfig;
+native_transmog::WardrobeConfig wardrobeConfig;
 
 char const* ScopeName(native_transmog::RegistrationScope scope)
 {
@@ -143,16 +145,26 @@ public:
             sConfigMgr->GetOption<bool>("NativeTransmog.Collection.UnlockAllQuestRewards", true);
         collectionConfig.questBackfillEnabled =
             sConfigMgr->GetOption<bool>("NativeTransmog.Collection.QuestBackfill.Enable", true);
+        wardrobeConfig.enabled = applicationConfig.enabled && collectionConfig.enabled;
+        wardrobeConfig.pageSize = sConfigMgr->GetOption<std::uint32_t>(
+            "NativeTransmog.Wardrobe.PageSize", 24);
+        wardrobeConfig.requestCooldownMs = sConfigMgr->GetOption<std::uint32_t>(
+            "NativeTransmog.Wardrobe.RequestCooldownMs", 250);
+        wardrobeConfig.snapshotLifetimeMs = sConfigMgr->GetOption<std::uint32_t>(
+            "NativeTransmog.Wardrobe.SnapshotLifetimeMs", 30000);
 
         native_transmog::Service::Instance().Configure(serviceConfig);
         native_transmog::CollectionService::Instance().Configure(collectionConfig);
         native_transmog::ApplicationService::Instance().Configure(applicationConfig);
+        native_transmog::WardrobeService::Instance().Configure(wardrobeConfig);
         native_transmog::QuestBackfillService::Instance().Configure(
             collectionConfig.enabled && collectionConfig.questBackfillEnabled);
         if (reload && collectionConfig.enabled)
             native_transmog::CollectionService::Instance().Initialize();
         if (reload && applicationConfig.enabled)
             native_transmog::ApplicationService::Instance().Initialize();
+        if (reload && wardrobeConfig.enabled)
+            native_transmog::WardrobeService::Instance().Initialize();
         if (reload)
             LOG_INFO("server.loading",
                 "Native Transmog Phase 3C configuration reloaded "
@@ -178,6 +190,8 @@ public:
             native_transmog::CollectionService::Instance().Initialize();
         if (applicationConfig.enabled)
             native_transmog::ApplicationService::Instance().Initialize();
+        if (wardrobeConfig.enabled)
+            native_transmog::WardrobeService::Instance().Initialize();
         LOG_INFO("server.loading",
             "Native Transmog Phase 2 NPC service initialized (dedicated: {}, custom: {}, spawn registrations: {}).",
             serviceConfig.defaultNpcEnabled, serviceConfig.customNpcEnabled, serviceConfig.allowSpawnRegistration);
@@ -216,12 +230,15 @@ public:
 class NativeTransmogPlayerScript final : public PlayerScript
 {
 public:
+    using PlayerScript::OnPlayerCanUseChat;
+
     NativeTransmogPlayerScript() : PlayerScript("NativeTransmogPlayerScript",
         { PLAYERHOOK_ON_UPDATE, PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_BEFORE_LOGOUT, PLAYERHOOK_ON_MAP_CHANGED,
           PLAYERHOOK_ON_SEND_LIST_INVENTORY, PLAYERHOOK_ON_BEFORE_RECEIVE_SPELL_LIST_FROM_TRAINER,
           PLAYERHOOK_ON_STORE_NEW_ITEM, PLAYERHOOK_ON_AFTER_MOVE_ITEM_TO_INVENTORY,
           PLAYERHOOK_ON_AFTER_MOVE_ITEM_FROM_INVENTORY, PLAYERHOOK_ON_AFTER_SET_VISIBLE_ITEM_SLOT,
-          PLAYERHOOK_ON_AFTER_STORE_OR_EQUIP_NEW_ITEM, PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST }) { }
+          PLAYERHOOK_ON_AFTER_STORE_OR_EQUIP_NEW_ITEM, PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST,
+          PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT }) { }
 
     void OnPlayerLogin(Player* player) override
     {
@@ -239,6 +256,7 @@ public:
         native_transmog::Service::Instance().CloseSession(player, false);
         native_transmog::ApplicationService::Instance().ReleasePlayer(player);
         native_transmog::CollectionService::Instance().ReleasePlayer(player);
+        native_transmog::WardrobeService::Instance().ReleasePlayer(player);
     }
 
     void OnPlayerMapChanged(Player* player) override
@@ -280,6 +298,29 @@ public:
     void OnPlayerAfterSetVisibleItemSlot(Player* player, std::uint8_t slot, Item* item) override
     {
         native_transmog::ApplicationService::Instance().ApplyVisible(player, slot, item);
+        native_transmog::WardrobeService::Instance().EquipmentChanged(player, slot, item);
+    }
+
+    bool OnPlayerCanUseChat(Player* player, std::uint32_t type, std::uint32_t language,
+        std::string& message, Player* receiver) override
+    {
+        if (type != CHAT_MSG_WHISPER || language != LANG_ADDON || !player || receiver != player)
+            return true;
+        if (message.rfind("NTRANSMOG\t", 0) != 0)
+            return true;
+        // Outbound server messages pass through Player::Whisper and therefore
+        // this hook too. Let only the response vocabulary reach FrameXML;
+        // consume every client-originated request/unknown version for our prefix.
+        bool const response = message.rfind("NTRANSMOG\t2\tOPEN\t", 0) == 0 ||
+            message.rfind("NTRANSMOG\t2\tCLOSE\t", 0) == 0 ||
+            message.rfind("NTRANSMOG\t2\tPAGE\t", 0) == 0 ||
+            message.rfind("NTRANSMOG\t2\tITEM\t", 0) == 0 ||
+            message.rfind("NTRANSMOG\t2\tEND\t", 0) == 0 ||
+            message.rfind("NTRANSMOG\t2\tRESULT\t", 0) == 0;
+        if (response)
+            return true;
+        native_transmog::WardrobeService::Instance().HandleAddonWhisper(player, message);
+        return false;
     }
 
     void OnPlayerAfterStoreOrEquipNewItem(Player* player, std::uint32_t, Item* item, std::uint8_t,

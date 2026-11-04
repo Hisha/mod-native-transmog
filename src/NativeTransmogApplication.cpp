@@ -283,6 +283,19 @@ bool ApplicationService::GetOverride(Item const* item, AppearanceOverride& appea
     return true;
 }
 
+ApplicationResult ApplicationService::ValidateForTarget(Player const* player, ItemTemplate const* target,
+    ItemTemplate const* source, std::uint8_t equipmentSlot) const
+{
+    ApplicationConfig config;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (!_config.enabled)
+            return ApplicationResult::Disabled;
+        config = _config;
+    }
+    return CompatibilityValidator::Validate(player, target, source, config, equipmentSlot);
+}
+
 void ApplicationService::LoadPlayer(Player* player)
 {
     if (!player)
@@ -315,7 +328,8 @@ void ApplicationService::LoadPlayer(Player* player)
             AppearanceKey resolved;
             bool valid = target && target->GetOwnerGUID() == player->GetGUID() &&
                 CollectionService::ResolveAppearance(source, resolved) && resolved == appearanceOverride.appearance;
-            std::uint8_t equipmentSlot = target && target->IsEquipped() ? target->GetSlot() : NULL_SLOT;
+            std::uint8_t equipmentSlot = target && target->IsEquipped() ? target->GetSlot() :
+                static_cast<std::uint8_t>(NULL_SLOT);
             if (!valid ||
                 CompatibilityValidator::Validate(player, target->GetTemplate(), source, config, equipmentSlot) !=
                     ApplicationResult::Ok)

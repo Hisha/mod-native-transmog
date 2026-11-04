@@ -2,7 +2,15 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phase 1's in-game validated preview wardrobe, Phase 2's server-authorized NPC service, Phase 3A's persistent collection, and Phase 3B's quest reward collection/backfill are preserved. Phase 3C adds server-authorized application of collected appearances, compatibility validation, item-instance persistence, lifecycle cleanup, visible synchronization, and GM diagnostics. It does **not** grant items, add client application buttons, migrate legacy records, or save outfits.
+Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them: the native wardrobe now pages through the authenticated player's collected, compatible appearances and applies or removes them only after server confirmation. It does **not** grant items, migrate legacy records, add saved outfits, or introduce a second transmog engine.
+
+## Phase 3D native wardrobe integration
+
+Protected FrameXML and the server exchange version-2 `NTRANSMOG` addon messages over a stock `LANG_ADDON` self-whisper. The client uses build-12340 `SendAddonMessage`; the Playerbot core exposes the authenticated message through `PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT`, where the module consumes only its exact protocol. Replies arrive through `CHAT_MSG_ADDON`. This requires no standalone addon, custom opcode, chat command, core patch, Content Manager change, or Portalkeeper change. See the [transport decision](docs/PHASE3D_TRANSPORT_DESIGN.md).
+
+Catalog pages come from `CollectionService` using the configured account or character scope. The composite identity remains `(display ID, item class, item subclass, inventory type)`. A startup-built item-template index selects the lowest-entry representative that passes the shared Phase 3C validator for the current player and equipped target, so the original physical item is not required and a restricted duplicate cannot hide a legitimate representative.
+
+Each bounded page is tied to a server-issued nonce, NPC session, equipment slot, and item-instance GUID. Apply and Remove revalidate that snapshot and then call the existing Phase 3C `ApplicationService`; equipment changes invalidate it. The UI separately displays equipped, applied, and previewed states. Reset Preview and Close send no mutation request. `/wardrobe` and `/nativetransmog` remain preview-only because they have no server token.
 
 ## Phase 3C appearance application
 
@@ -52,15 +60,15 @@ The module does not change `ScriptName`, gossip rows, or the `npcflag` of existi
 
 The inspected hook order cannot safely append a new gossip option to every scripted NPC: the global hook runs before AzerothCore clears the menu, while consuming it would suppress the existing creature script. Phase 2 therefore opens the wardrobe immediately on a registered supported interaction instead of replacing or rewriting the NPC's menu. NPCs with no client-interactable service flag cannot initiate an interaction, and the module deliberately does not add one.
 
-## Server-to-client authorization
+## Wardrobe transport and authorization
 
-The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 1, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token.
+The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 2, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Client catalog/apply/remove messages use the same prefix and are accepted only as authenticated self-whispers.
 
 This uses the stock addon-message wire protocol without installing an addon, inventing an opcode, or exposing normal chat text. It is also a pattern already supported by the inspected Playerbot branch and other native FrameXML modules in this environment.
 
-The server creates a session only after resolving the actual server-side `Creature*`, confirming it is registered, and calling `GetNPCIfCanInteractWith` for proximity, map, reaction, life-state, control-state, and existence checks. Combat is rejected. Every 500 ms the session is revalidated and is closed when the player moves away, enters combat, the creature disappears, eligibility is removed, or the map changes; logout removes it without sending a packet. The client never supplies an entry or spawn ID.
+The server creates a session only after resolving the actual server-side `Creature*`, confirming it is registered, and calling `GetNPCIfCanInteractWith` for proximity, map, reaction, life-state, control-state, and existence checks. Combat is rejected. Every 500 ms the session is revalidated and is closed when the player moves away, enters combat, the creature disappears, eligibility is removed, the five-minute lifetime ends, or the map changes; logout removes it without sending a packet. The client never supplies an entry or spawn ID.
 
-Addon messages are not cryptographic: arbitrary client Lua could imitate an `OPEN` display message. That only reveals the local preview window and cannot create a server session. Phase 3C adds no client application request or button. Its server API immediately revalidates the live session/NPC and independently resolves ownership, item, slot, and policy; the client token alone never grants permission.
+Addon messages are not cryptographic: arbitrary client Lua can imitate UI traffic. This grants no authority. Every request is associated with the hook-provided authenticated player, requires the live server token, and independently resolves collection ownership, equipped item, canonical source, and compatibility. Snapshot nonces are short-lived, replay-bound, rate-limited, and invalidated by equipment changes.
 
 ## Configuration
 
@@ -77,6 +85,9 @@ NativeTransmog.Collection.QuestBackfill.Enable = 1
 NativeTransmog.Application.Enable = 1
 NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0
+NativeTransmog.Wardrobe.PageSize = 24
+NativeTransmog.Wardrobe.RequestCooldownMs = 250
+NativeTransmog.Wardrobe.SnapshotLifetimeMs = 30000
 ```
 
 Collection is account-wide by default. Disabling account-wide mode selects existing/per-character rows without touching account rows. Application can be disabled independently for rendering rollback. The two weapon-direction settings are independent and default to the conservative disabled policy.
@@ -130,12 +141,10 @@ The checked-in EPF is deterministic Schema 3 content. It adds the XML immediatel
 
 ```bash
 python3 content/build_epf.py --check
-python3 -m unittest tests/test_phase1.py tests/test_phase2.py tests/test_phase3a.py tests/test_phase3b.py tests/test_phase3c.py
-python3 tests/verify_catalog.py \
-  /path/to/azerothcore-wotlk/data/sql/base/db_world/item_template.sql
+python3 -m unittest discover -s tests -p 'test_phase*.py'
 ```
 
-The checks cover all earlier regressions plus Phase 3C authority, ownership, compatibility, persistence ordering, lifecycle hooks, rendering, removal, diagnostics, and directional weapon policy. See [test results](docs/TEST_RESULTS.md) and the [Phase 3C PTR plan](docs/PHASE3C_PTR_VALIDATION.md).
+The checks cover all earlier regressions plus Phase 3D transport, catalog identity, canonical resolution, shared compatibility, authorization, bounded pagination, stale snapshots, UI state, feedback, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 3D PTR plan](docs/PHASE3D_PTR_VALIDATION.md).
 
 ## Known limitations and future mobile NPCs
 
@@ -143,11 +152,10 @@ The checks cover all earlier regressions plus Phase 3C authority, ownership, com
 - Phase 2 opens immediately on supported gossip/quest, vendor, and trainer interactions; it cannot safely inject an option into arbitrary scripted gossip on this branch.
 - Client service types that bypass all inspected hooks are not covered. Registration never changes their flags to manufacture an interaction path.
 - Vehicle-passenger creatures are explicitly rejected in Phase 2. Entry resolution itself is location- and spawn-independent, so the registry is suitable for a future mobile Transmogrifier, but passenger interaction and moving-distance/session semantics require dedicated validation before removing this guard.
-- The preview catalog remains a deterministic fixture and is not yet filtered by the persisted collection.
+- Addon transport requires AzerothCore's addon channel to be enabled and has build-12340's 255-byte message limit; pages are therefore multipart.
 - Backfill can prove only active persisted rewarded rows and uses current quest definitions; it cannot reconstruct missing repeat history, old choices, or historical reward definitions. Offline targets are intentionally unsupported.
-- There is no client application button yet; Phase 3C application is exposed only through the server service boundary and GM diagnostics.
 - A live config reload that disables application does not proactively refresh every online visible slot; use a controlled restart/relog or equipment refresh.
-- No saved outfit, client collection filtering, legacy integration, or migration from `mod-transmog` exists.
+- No saved outfit, search, favorites, cost system, legacy integration, or migration from `mod-transmog` exists.
 
 No code change outside this repository is required. The target Content Manager must already include managed server resources and `ContentResourceApiV1` (Milestone 2), and its `2026_09_25_06_content_managed_server_resources.sql` migration must be present before building/activating this EPF.
 

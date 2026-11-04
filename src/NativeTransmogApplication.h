@@ -85,6 +85,8 @@ public:
     ApplicationResult Remove(Player* player, std::uint8_t equipmentSlot,
         ApplicationAuthorization authorization);
     bool GetOverride(Item const* item, AppearanceOverride& appearanceOverride) const;
+    ApplicationResult ValidateForTarget(Player const* player, ItemTemplate const* target,
+        ItemTemplate const* source, std::uint8_t equipmentSlot) const;
 
     void LoadPlayer(Player* player);
     void ReleasePlayer(Player const* player);

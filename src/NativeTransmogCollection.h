@@ -71,6 +71,8 @@ struct CollectionFilter
 {
     // -1 means all values. These map directly to ItemTemplate fields.
     std::int16_t itemClass = -1;
+    std::vector<std::uint8_t> itemSubclasses;
+    std::vector<std::uint8_t> inventoryTypes;
     std::int16_t inventoryType = -1;
 };
 

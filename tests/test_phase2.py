@@ -105,16 +105,16 @@ class PhaseTwoTests(unittest.TestCase):
     def test_authorized_transport_and_debug_separation(self) -> None:
         self.assertIn('player->Whisper(std::string(AddonPrefix)', SERVICE)
         self.assertIn("LANG_ADDON", SERVICE)
-        self.assertIn('local TRANSPORT_PREFIX = "NTRANSMOG"', LUA)
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "2"', LUA)
         self.assertIn('frame:RegisterEvent("CHAT_MSG_ADDON")', LUA)
-        self.assertIn('channel ~= "WHISPER"', LUA)
-        self.assertIn('sender ~= UnitName("player")', LUA)
+        self.assertIn('channel~="WHISPER"', LUA)
+        self.assertIn('sender~=UnitName("player")', LUA)
         self.assertIn("NativeTransmog_OpenAuthorized", LUA)
         debug_body = re.search(
             r"function NativeTransmog_DebugToggle\(\)(.*?)\nend", LUA, re.DOTALL
         )
         self.assertIsNotNone(debug_body)
-        self.assertIn("authorizedSessionToken = nil", debug_body.group(1))
+        self.assertIn("authorizedToken=nil", debug_body.group(1))
         self.assertNotIn("SendAddonMessage", debug_body.group(1))
 
     def test_session_cleanup_hooks_are_present(self) -> None:

@@ -344,7 +344,21 @@ std::vector<AppearanceRecord> CollectionService::List(Player const* player, Coll
     std::string predicates;
     if (filter.itemClass >= 0)
         predicates += " AND `item_class` = " + std::to_string(filter.itemClass);
-    if (filter.inventoryType >= 0)
+    if (!filter.itemSubclasses.empty())
+    {
+        predicates += " AND `item_subclass` IN (";
+        for (std::size_t index = 0; index < filter.itemSubclasses.size(); ++index)
+            predicates += (index ? "," : "") + std::to_string(filter.itemSubclasses[index]);
+        predicates += ')';
+    }
+    if (!filter.inventoryTypes.empty())
+    {
+        predicates += " AND `inventory_type` IN (";
+        for (std::size_t index = 0; index < filter.inventoryTypes.size(); ++index)
+            predicates += (index ? "," : "") + std::to_string(filter.inventoryTypes[index]);
+        predicates += ')';
+    }
+    else if (filter.inventoryType >= 0)
         predicates += " AND `inventory_type` = " + std::to_string(filter.inventoryType);
 
     if (QueryResult result = CharacterDatabase.Query(
@@ -381,7 +395,21 @@ std::uint32_t CollectionService::Count(Player const* player, CollectionFilter co
     std::string predicates;
     if (filter.itemClass >= 0)
         predicates += " AND `item_class` = " + std::to_string(filter.itemClass);
-    if (filter.inventoryType >= 0)
+    if (!filter.itemSubclasses.empty())
+    {
+        predicates += " AND `item_subclass` IN (";
+        for (std::size_t index = 0; index < filter.itemSubclasses.size(); ++index)
+            predicates += (index ? "," : "") + std::to_string(filter.itemSubclasses[index]);
+        predicates += ')';
+    }
+    if (!filter.inventoryTypes.empty())
+    {
+        predicates += " AND `inventory_type` IN (";
+        for (std::size_t index = 0; index < filter.inventoryTypes.size(); ++index)
+            predicates += (index ? "," : "") + std::to_string(filter.inventoryTypes[index]);
+        predicates += ')';
+    }
+    else if (filter.inventoryType >= 0)
         predicates += " AND `inventory_type` = " + std::to_string(filter.inventoryType);
     QueryResult result = CharacterDatabase.Query(
         "SELECT COUNT(*) FROM `native_transmog_collection` "

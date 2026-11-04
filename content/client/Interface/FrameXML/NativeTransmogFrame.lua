@@ -1,262 +1,203 @@
--- Native Transmog Phase 2 wardrobe for WoW 3.3.5a build 12340.
--- Loaded from the protected FrameXML tree. This is not an addon.
-
-local TRANSPORT_PREFIX = "NTRANSMOG"
-local authorizedSessionToken = nil
-
+-- Native Transmog Phase 3D protected FrameXML for WoW 3.3.5a build 12340.
+local PREFIX, VERSION = "NTRANSMOG", "2"
 local SLOT_ORDER = { "HEAD", "SHOULDERS", "CHEST", "MAIN_HAND", "OFF_HAND" }
+local SLOT_LABELS = { HEAD="Head Appearances", SHOULDERS="Shoulder Appearances", CHEST="Chest Appearances",
+    MAIN_HAND="Main-Hand Appearances", OFF_HAND="Off-Hand Appearances" }
+local authorizedToken, selectedSlot, selectedSlotId = nil, "HEAD", 1
+local requestId, snapshotNonce, cursor, nextCursor, hasNext = 0, nil, 0, 0, false
+local cursorHistory, catalog, incomingCatalog, buttons = {}, {}, {}, {}
+local selectedAppearance, actualItem, appliedItem, pending = nil, nil, nil, nil
+local modelRotation, scheduledRefresh = 0, nil
+local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 4, 58, 14
 
-local SLOT_LABELS = {
-    HEAD = "Head Appearances",
-    SHOULDERS = "Shoulder Appearances",
-    CHEST = "Chest Appearances",
-    MAIN_HAND = "Main-Hand Appearances",
-    OFF_HAND = "Off-Hand Appearances",
+local RESULT_TEXT = {
+ ["appearance is not collected"]="Appearance not collected.",
+ ["appearance is restricted from this class"]="Your class cannot use that appearance.",
+ ["appearance is restricted from this race"]="Your race cannot use that appearance.",
+ ["appearance required skill is missing"]="You do not meet the skill requirement.",
+ ["appearance required spell is missing"]="You do not meet the spell requirement.",
+ ["armor proficiency is missing"]="You lack the required armor proficiency.",
+ ["weapon proficiency is missing"]="You lack the required weapon proficiency.",
+ ["armor/weapon class mismatch"]="Appearance incompatible with equipped item.",
+ ["armor subclass mismatch"]="Armor type incompatible with equipped item.",
+ ["equipment inventory type mismatch"]="Appearance incompatible with this slot.",
+ ["weapon subclass mismatch"]="Weapon family incompatible with equipped item.",
+ ["two-hand appearance on one-hand target is disabled"]="Two-hand appearances are disabled for one-hand items.",
+ ["one-hand appearance on two-hand target is disabled"]="One-hand appearances are disabled for two-hand items.",
+ ["item has no appearance override"]="The equipped item has no appearance to remove.",
+ ["SESSION_EXPIRED"]="The Transmogrifier session expired.", ["NO_ITEM"]="No item is equipped in this slot.",
+ ["EQUIPMENT_CHANGED"]="Equipment changed; refreshing the wardrobe.",
+ ["STALE"]="The catalog changed; refresh and try again.",
+ ["RATE_LIMITED"]="Please wait a moment before making another request.",
+ ["MALFORMED"]="The wardrobe request was rejected.",
+ ["application database unavailable"]="The transmogrification database is unavailable.",
+ ["application disabled"]="Appearance application is disabled.",
+ ["no authorized Transmogrifier session"]="The Transmogrifier session expired.",
+ ["target equipment item missing"]="No item is equipped in this slot."
 }
 
--- Every ID is a stock item in the AzerothCore build-12340 item_template baseline.
--- The catalog is deliberately small and deterministic; it is not an unlock list.
-local APPEARANCE_CATALOG = {
-    HEAD = {
-        { id = 46140, name = "Conqueror's Deathbringer Hood" },
-        { id = 47693, name = "Hood of Fiery Aftermath" },
-        { id = 40416, name = "Valorous Frostfire Circlet" },
-    },
-    SHOULDERS = {
-        { id = 46136, name = "Conqueror's Deathbringer Shoulderpads" },
-        { id = 47708, name = "Duskstalker Shoulderpads" },
-        { id = 40419, name = "Valorous Frostfire Shoulderpads" },
-    },
-    CHEST = {
-        { id = 46137, name = "Conqueror's Deathbringer Robe" },
-        { id = 47606, name = "Royal Moonshroud Robe" },
-        { id = 40418, name = "Valorous Frostfire Robe" },
-    },
-    MAIN_HAND = {
-        { id = 19019, name = "Thunderfury, Blessed Blade of the Windseeker" },
-        { id = 50730, name = "Glorenzelg, High-Blade of the Silver Hand" },
-        { id = 49623, name = "Shadowmourne" },
-        { id = 46017, name = "Val'anyr, Hammer of Ancient Kings" },
-    },
-    OFF_HAND = {
-        { id = 40401, name = "Voice of Reason" },
-        { id = 45682, name = "Pulsing Spellshield" },
-        { id = 50729, name = "Icecrown Glacial Wall" },
-    },
-}
-
-local ICONS_PER_ROW = 4
-local ICON_SIZE = 58
-local ICON_GAP = 14
-local buttons = {}
-local selectedItems = {}
-local selectedSlot = "HEAD"
-local modelRotation = 0
-
-local function getModel()
-    return NativeTransmogFramePreviewPanelModel
+local function splitTabs(value)
+ local fields, start = {}, 1
+ while true do
+  local separator = string.find(value or "", "\t", start, true)
+  if not separator then table.insert(fields, string.sub(value or "", start)); return fields end
+  table.insert(fields, string.sub(value, start, separator - 1)); start = separator + 1
+ end
 end
-
-local function setButtonSelected(button, selected)
-    if selected then
-        button.selection:Show()
-    else
-        button.selection:Hide()
-    end
+local function getModel() return NativeTransmogFramePreviewPanelModel end
+local function setStatus(text, failure)
+ NativeTransmogFrameStatus:SetText(text or "")
+ NativeTransmogFrameStatus:SetTextColor(failure and 1 or .25, failure and .25 or 1, .25)
 end
-
+local function itemLabel(entry, emptyText)
+ if not entry or entry == 0 then return emptyText end
+ return GetItemInfo(entry) or ("Item " .. entry)
+end
+local function refreshStateLabels()
+ NativeTransmogFrameActual:SetText("Equipped: " .. itemLabel(actualItem, "None"))
+ NativeTransmogFrameApplied:SetText("Applied: " .. itemLabel(appliedItem, "Original appearance"))
+ NativeTransmogFramePreview:SetText("Preview: " .. itemLabel(selectedAppearance and selectedAppearance.entry, "Applied appearance"))
+end
+local function setButtonEnabled(button, enabled)
+ if enabled then button:Enable() else button:Disable() end
+end
 local function refreshSelection()
-    for _, button in ipairs(buttons) do
-        setButtonSelected(button, button.itemId and selectedItems[selectedSlot] == button.itemId)
-    end
+ for _, button in ipairs(buttons) do
+  if button.entry and selectedAppearance and button.selectionId == selectedAppearance.selection then button.selection:Show()
+  else button.selection:Hide() end
+  if button.applied then button.appliedMark:Show() else button.appliedMark:Hide() end
+ end
+ setButtonEnabled(NativeTransmogFrameApply, authorizedToken and selectedAppearance and not pending)
+ setButtonEnabled(NativeTransmogFrameRemove, authorizedToken and appliedItem and appliedItem ~= 0 and not pending)
+ setButtonEnabled(NativeTransmogFramePrevious, authorizedToken and #cursorHistory > 0 and not pending)
+ setButtonEnabled(NativeTransmogFrameNext, authorizedToken and hasNext and not pending)
+ refreshStateLabels()
 end
-
 local function showTooltip(button)
-    if not button.itemId then
-        return
-    end
-
-    GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
-    GameTooltip:SetHyperlink("item:" .. button.itemId)
-    if not GameTooltipTextLeft1:GetText() then
-        GameTooltipTextLeft1:SetText(button.itemName or ("Item " .. button.itemId))
-    end
-    GameTooltip:Show()
+ if not button.entry then return end
+ GameTooltip:SetOwner(button, "ANCHOR_RIGHT"); GameTooltip:SetHyperlink("item:" .. button.entry); GameTooltip:Show()
 end
-
-local function hideTooltip()
-    GameTooltip:Hide()
-end
-
 local function previewItem(button)
-    if not button.itemId then
-        return
-    end
-
-    selectedItems[selectedSlot] = button.itemId
-    getModel():TryOn(button.itemId)
-    refreshSelection()
+ if not button.entry then return end
+ selectedAppearance = { selection=button.selectionId, entry=button.entry }
+ local model=getModel(); model:SetUnit("player"); model:TryOn(button.entry); model:SetRotation(modelRotation)
+ refreshSelection()
 end
-
 local function createAppearanceButton(index)
-    local button = CreateFrame("Button", "NativeTransmogAppearanceButton" .. index,
-        NativeTransmogFrameBrowserPanelScrollChild)
-    button:SetWidth(ICON_SIZE)
-    button:SetHeight(ICON_SIZE)
-
-    button.icon = button:CreateTexture(nil, "ARTWORK")
-    button.icon:SetPoint("TOPLEFT", 3, -3)
-    button.icon:SetPoint("BOTTOMRIGHT", -3, 3)
-    button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    button.border = button:CreateTexture(nil, "OVERLAY")
-    button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-    button.border:SetAllPoints(button)
-
-    button.highlight = button:CreateTexture(nil, "HIGHLIGHT")
-    button.highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
-    button.highlight:SetBlendMode("ADD")
-    button.highlight:SetAllPoints(button)
-
-    button.selection = button:CreateTexture(nil, "OVERLAY")
-    button.selection:SetTexture("Interface\\Buttons\\CheckButtonHilight")
-    button.selection:SetBlendMode("ADD")
-    button.selection:SetPoint("TOPLEFT", -6, 6)
-    button.selection:SetPoint("BOTTOMRIGHT", 6, -6)
-    button.selection:Hide()
-
-    button:SetScript("OnClick", previewItem)
-    button:SetScript("OnEnter", showTooltip)
-    button:SetScript("OnLeave", hideTooltip)
-    buttons[index] = button
-    return button
+ local button=CreateFrame("Button", "NativeTransmogAppearanceButton"..index, NativeTransmogFrameBrowserPanelScrollChild)
+ button:SetWidth(ICON_SIZE); button:SetHeight(ICON_SIZE)
+ button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetPoint("TOPLEFT",3,-3); button.icon:SetPoint("BOTTOMRIGHT",-3,3)
+ button.icon:SetTexCoord(.08,.92,.08,.92)
+ button.border=button:CreateTexture(nil,"OVERLAY"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetAllPoints(button)
+ button.highlight=button:CreateTexture(nil,"HIGHLIGHT"); button.highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+ button.highlight:SetBlendMode("ADD"); button.highlight:SetAllPoints(button)
+ button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\CheckButtonHilight")
+ button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-6,6); button.selection:SetPoint("BOTTOMRIGHT",6,-6); button.selection:Hide()
+ button.appliedMark=button:CreateTexture(nil,"OVERLAY"); button.appliedMark:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+ button.appliedMark:SetWidth(18); button.appliedMark:SetHeight(18); button.appliedMark:SetPoint("BOTTOMRIGHT",-2,2); button.appliedMark:Hide()
+ button:SetScript("OnClick",previewItem); button:SetScript("OnEnter",showTooltip); button:SetScript("OnLeave",function() GameTooltip:Hide() end)
+ buttons[index]=button; return button
 end
-
-local function refreshCatalog()
-    local catalog = APPEARANCE_CATALOG[selectedSlot]
-    local rows = math.ceil(#catalog / ICONS_PER_ROW)
-    local childHeight = math.max(293, rows * (ICON_SIZE + ICON_GAP) + 8)
-    NativeTransmogFrameBrowserPanelScrollChild:SetHeight(childHeight)
-
-    for index, appearance in ipairs(catalog) do
-        local button = buttons[index] or createAppearanceButton(index)
-        local column = (index - 1) % ICONS_PER_ROW
-        local row = math.floor((index - 1) / ICONS_PER_ROW)
-        button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", 8 + column * (ICON_SIZE + ICON_GAP),
-            -8 - row * (ICON_SIZE + ICON_GAP))
-        button.itemId = appearance.id
-        button.itemName = appearance.name
-        button.icon:SetTexture(GetItemIcon(appearance.id) or "Interface\\Icons\\INV_Misc_QuestionMark")
-        button:Show()
-    end
-
-    for index = #catalog + 1, #buttons do
-        buttons[index].itemId = nil
-        buttons[index]:Hide()
-    end
-
-    NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
-    NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(0)
-    refreshSelection()
+local function renderCatalog()
+ for index,appearance in ipairs(catalog) do
+  local button=buttons[index] or createAppearanceButton(index)
+  local column,row=math.mod(index-1,ICONS_PER_ROW),math.floor((index-1)/ICONS_PER_ROW)
+  button:ClearAllPoints(); button:SetPoint("TOPLEFT",8+column*(ICON_SIZE+ICON_GAP),-8-row*(ICON_SIZE+ICON_GAP))
+  button.entry,button.selectionId,button.applied=appearance.entry,appearance.selection,appearance.applied
+  button.icon:SetTexture(GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); button:Show()
+ end
+ for index=#catalog+1,#buttons do buttons[index].entry=nil; buttons[index]:Hide() end
+ NativeTransmogFrameBrowserPanelScrollChild:SetHeight(math.max(238,math.ceil(#catalog/ICONS_PER_ROW)*(ICON_SIZE+ICON_GAP)+8))
+ NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(0)
+ if #catalog==0 and not pending then setStatus("No compatible collected appearances for this slot.",false) end
+ refreshSelection()
 end
-
+local function sendRequest(operation,tail)
+ if not authorizedToken or not SendAddonMessage then
+  setStatus("Preview-only mode. Interact with a Transmogrifier to apply appearances.",true); return false
+ end
+ SendAddonMessage(PREFIX,VERSION.."\t"..operation.."\t"..authorizedToken.."\t"..tail,"WHISPER",UnitName("player"))
+ pending={operation=operation,started=GetTime()}; setStatus("Waiting for server...",false); refreshSelection(); return true
+end
+local function requestCatalog(newCursor)
+ requestId=requestId+1; snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}
+ cursor=newCursor or 0; hasNext=false; renderCatalog()
+ sendRequest("CAT",requestId.."\t"..selectedSlotId.."\t"..cursor)
+end
+function NativeTransmog_Apply()
+ if selectedAppearance and snapshotNonce then sendRequest("APPLY",requestId.."\t"..snapshotNonce.."\t"..selectedAppearance.selection) end
+end
+function NativeTransmog_Remove() if snapshotNonce then sendRequest("REMOVE",requestId.."\t"..snapshotNonce) end end
+function NativeTransmog_NextPage() if hasNext then table.insert(cursorHistory,cursor); requestCatalog(nextCursor) end end
+function NativeTransmog_PreviousPage() if #cursorHistory>0 then requestCatalog(table.remove(cursorHistory)) end end
 function NativeTransmog_ResetPreview()
-    selectedItems = {}
-    modelRotation = 0
-    local model = getModel()
-    model:SetUnit("player")
-    model:SetRotation(modelRotation)
-    refreshSelection()
+ selectedAppearance=nil; modelRotation=0; local model=getModel(); model:SetUnit("player"); model:SetRotation(0); refreshSelection()
 end
-
 function NativeTransmog_SelectSlot(slotId)
-    selectedSlot = SLOT_ORDER[slotId] or "HEAD"
-    refreshCatalog()
+ selectedSlotId=slotId; selectedSlot=SLOT_ORDER[slotId] or "HEAD"; cursorHistory={}
+ NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
+ if authorizedToken and NativeTransmogFrame:IsShown() then requestCatalog(0) else catalog={}; renderCatalog() end
 end
-
-function NativeTransmog_Rotate(amount)
-    modelRotation = modelRotation + amount
-    getModel():SetRotation(modelRotation)
-end
-
-function NativeTransmog_BeginRotation(model)
-    model.rotating = true
-    model.rotationCursorX = GetCursorPosition()
-end
-
-function NativeTransmog_EndRotation(model)
-    model.rotating = false
-end
-
+function NativeTransmog_Rotate(amount) modelRotation=modelRotation+amount; getModel():SetRotation(modelRotation) end
+function NativeTransmog_BeginRotation(model) model.rotating=true; model.rotationCursorX=GetCursorPosition() end
+function NativeTransmog_EndRotation(model) model.rotating=false end
 function NativeTransmog_UpdateRotation(model)
-    if not model.rotating then
-        return
-    end
-
-    local cursorX = GetCursorPosition()
-    local delta = (cursorX - model.rotationCursorX) / UIParent:GetEffectiveScale()
-    model.rotationCursorX = cursorX
-    NativeTransmog_Rotate(delta * 0.01)
+ if not model.rotating then return end
+ local cursorX=GetCursorPosition(); local delta=(cursorX-model.rotationCursorX)/UIParent:GetEffectiveScale()
+ model.rotationCursorX=cursorX; NativeTransmog_Rotate(delta*.01)
 end
-
+function NativeTransmog_FrameUpdate()
+ if pending and GetTime()-pending.started>5 then pending=nil; setStatus("Server unavailable or request timed out.",true); refreshSelection() end
+ if scheduledRefresh and GetTime()>=scheduledRefresh then scheduledRefresh=nil; requestCatalog(cursor) end
+end
 function NativeTransmog_OnLoad(frame)
-    frame:RegisterForDrag("LeftButton")
-    frame:RegisterEvent("CHAT_MSG_ADDON")
-    if RegisterAddonMessagePrefix then
-        RegisterAddonMessagePrefix(TRANSPORT_PREFIX)
-    end
-    UISpecialFrames[#UISpecialFrames + 1] = frame:GetName()
-    NativeTransmog_SelectSlot(1)
+ frame:RegisterForDrag("LeftButton"); frame:RegisterEvent("CHAT_MSG_ADDON")
+ if RegisterAddonMessagePrefix then RegisterAddonMessagePrefix(PREFIX) end
+ UISpecialFrames[#UISpecialFrames+1]=frame:GetName(); NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
 end
-
 function NativeTransmog_OnShow()
-    NativeTransmog_ResetPreview()
-    PlaySound("igCharacterInfoOpen")
+ NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
+ if authorizedToken then cursorHistory={}; requestCatalog(0)
+ else setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
 end
-
 function NativeTransmog_OnHide()
-    NativeTransmog_EndRotation(getModel())
-    authorizedSessionToken = nil
-    GameTooltip:Hide()
-    PlaySound("igCharacterInfoClose")
+ NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil
+ GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
-
 function NativeTransmog_OpenAuthorized(token)
-    authorizedSessionToken = token
-    NativeTransmogFrame:Show()
+ authorizedToken=token
+ if NativeTransmogFrame:IsShown() then cursorHistory={}; requestCatalog(0) else NativeTransmogFrame:Show() end
 end
-
-function NativeTransmog_HasAuthorizedSession()
-    return authorizedSessionToken ~= nil
+function NativeTransmog_HasAuthorizedSession() return authorizedToken~=nil end
+function NativeTransmog_OnEvent(_,event,prefix,message,channel,sender)
+ if event~="CHAT_MSG_ADDON" or prefix~=PREFIX or channel~="WHISPER" or sender~=UnitName("player") then return end
+ local fields=splitTabs(message); if fields[1]~=VERSION then return end
+ local command=fields[2]
+ if command=="OPEN" and fields[3] then NativeTransmog_OpenAuthorized(fields[3]); return end
+ if command=="CLOSE" and authorizedToken==fields[3] then NativeTransmogFrame:Hide(); return end
+ if not authorizedToken or fields[3]~=authorizedToken then return end
+ if command=="PAGE" and tonumber(fields[4])==requestId then
+  snapshotNonce=fields[5]; nextCursor=tonumber(fields[8]) or 0; hasNext=fields[9]=="1"
+  actualItem=tonumber(fields[10]); appliedItem=tonumber(fields[11]); incomingCatalog={}
+ elseif command=="ITEM" and tonumber(fields[4])==requestId and fields[5]==snapshotNonce then
+  table.insert(incomingCatalog,{selection=tonumber(fields[6]),entry=tonumber(fields[7]),applied=fields[8]=="1"})
+ elseif command=="END" and tonumber(fields[4])==requestId and fields[5]==snapshotNonce then
+  pending=nil; catalog=incomingCatalog; setStatus(#catalog>0 and ("Page contains "..#catalog.." compatible appearances.") or "",false); renderCatalog()
+ elseif command=="RESULT" and tonumber(fields[4])==requestId then
+  pending=nil; local operation,result=fields[5],fields[6] or "MALFORMED"; local success=result=="ok"
+  if success then
+   setStatus(operation=="REMOVE" and "Appearance removed." or "Appearance applied.",false); scheduledRefresh=GetTime()+.30
+  else
+   setStatus(RESULT_TEXT[result] or ("Request failed: "..result),true)
+   if result=="SESSION_EXPIRED" or result=="no authorized Transmogrifier session" then authorizedToken=nil end
+   if result=="EQUIPMENT_CHANGED" or result=="STALE" then scheduledRefresh=GetTime()+.30 end
+  end
+  refreshSelection()
+ end
 end
-
-function NativeTransmog_OnEvent(_, event, prefix, message, channel, sender)
-    if event ~= "CHAT_MSG_ADDON" or prefix ~= TRANSPORT_PREFIX or
-        channel ~= "WHISPER" or sender ~= UnitName("player") then
-        return
-    end
-
-    local version, command, token = string.match(message or "", "^(%d+)\t([A-Z]+)\t(%d+)$")
-    if version ~= "1" or not token then
-        return
-    end
-    if command == "OPEN" then
-        NativeTransmog_OpenAuthorized(token)
-    elseif command == "CLOSE" and authorizedSessionToken == token then
-        NativeTransmogFrame:Hide()
-    end
-end
-
 function NativeTransmog_DebugToggle()
-    if NativeTransmogFrame:IsShown() then
-        NativeTransmogFrame:Hide()
-    else
-        authorizedSessionToken = nil
-        NativeTransmogFrame:Show()
-    end
+ if NativeTransmogFrame:IsShown() then NativeTransmogFrame:Hide() else authorizedToken=nil; NativeTransmogFrame:Show() end
 end
-
-SLASH_NATIVETRANSMOG1 = "/wardrobe"
-SLASH_NATIVETRANSMOG2 = "/nativetransmog"
-SlashCmdList["NATIVETRANSMOG"] = NativeTransmog_DebugToggle
+SLASH_NATIVETRANSMOG1="/wardrobe"
+SLASH_NATIVETRANSMOG2="/nativetransmog"
+SlashCmdList["NATIVETRANSMOG"]=NativeTransmog_DebugToggle

@@ -62,6 +62,7 @@ public:
     void CloseSession(Player* player, bool notifyClient = true);
     bool HasSession(Player const* player) const;
     bool ValidateSession(Player* player);
+    bool ValidateSession(Player* player, std::uint32_t token);
 
 private:
     struct Session
@@ -70,6 +71,7 @@ private:
         std::uint32_t mapId = 0;
         std::uint32_t token = 0;
         std::uint32_t validationTimer = 0;
+        std::uint32_t lifetime = 0;
     };
 
     Service() = default;

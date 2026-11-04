@@ -48,6 +48,24 @@ The Phase 2 implementation was checked against Playerbot revision `8a4e76eac` in
 
 No core, Content Manager, FrameForge, Portalkeeper, or `mod-transmog` code change is required. Deployment does require Content Manager Milestone 2 and its existing `2026_09_25_06_content_managed_server_resources.sql` schema migration. The previous fixed entry `900100` is no longer declared, inserted, or referenced by module SQL/C++; a row created by an earlier unreleased migration is inert legacy data and is not deleted automatically because the module cannot prove ownership of a world row it did not allocate.
 
+## Phase 3D inbound transport findings
+
+The same Playerbot revision's `WorldSession::HandleMessagechatOpcode` accepts build-12340
+`SendAddonMessage(..., "WHISPER", target)` as `CHAT_MSG_WHISPER` plus `LANG_ADDON`, enforces the core's
+255-byte limit and addon flood accounting, and passes the authenticated `Player*` into script hooks.
+`Player::Whisper` calls `ScriptMgr::OnPlayerCanUseChat(Player*, type, language, message, receiver)` before
+delivery. `PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT` can therefore consume only exact `NTRANSMOG` self-whisper
+requests by returning false. Server-created replies traverse the same hook, so the implementation explicitly
+passes the response vocabulary (`OPEN/CLOSE/PAGE/ITEM/END/RESULT`) while consuming requests and unknown
+module-prefixed input. No opcode or core patch is needed.
+
+Loaded item templates are exposed by `ObjectMgr::GetItemTemplateStore`; Phase 3D indexes them once at world
+startup rather than searching templates per click. `ItemTemplate::Name1`, client item cache APIs, and normal
+item hyperlinks allow the client to render names/icons/tooltips from the canonical entry without transmitting
+free-form strings. The collection table's composite-key ordering and indexed owner prefix support bounded
+cursor queries. The existing `CompatibilityValidator` is callable through a small read-only
+`ApplicationService::ValidateForTarget` facade, avoiding a second compatibility policy.
+
 ## Phase 3B Playerbot quest findings
 
 Phase 3B was inspected against the same Playerbot revision `8a4e76eac8c4`:
