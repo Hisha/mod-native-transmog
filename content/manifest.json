@@ -2,8 +2,8 @@
   "schema": 3,
   "package": "mod-native-transmog",
   "name": "Native Transmog Wardrobe",
-  "version": "3.0.0-phase3d",
-  "description": "Native build-12340 collected-appearance wardrobe with server-authorized preview, application, and removal.",
+  "version": "4.0.0-phase4b",
+  "description": "Native build-12340 paper-doll wardrobe with server-authorized collection, preview, hide, application, and removal.",
   "creatureTemplates": [
     {
       "symbol": "dedicated-transmogrifier",

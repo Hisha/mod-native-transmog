@@ -1,5 +1,7 @@
 #include "NativeTransmogService.h"
 
+#include "NativeTransmogWardrobe.h"
+
 #include "Creature.h"
 #include "DatabaseEnv.h"
 #include "Log.h"
@@ -314,6 +316,7 @@ bool Service::AuthorizeInteraction(Player* player, Creature* creature)
         };
     }
     SendOpen(player, token);
+    WardrobeService::Instance().SendEquipmentState(player, token);
     return true;
 }
 

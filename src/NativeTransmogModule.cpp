@@ -347,6 +347,7 @@ public:
         // consume every client-originated request/unknown version for our prefix.
         bool const response = message.rfind("NTRANSMOG\t2\tOPEN\t", 0) == 0 ||
             message.rfind("NTRANSMOG\t2\tCLOSE\t", 0) == 0 ||
+            message.rfind("NTRANSMOG\t2\tSTATE\t", 0) == 0 ||
             message.rfind("NTRANSMOG\t2\tPAGE\t", 0) == 0 ||
             message.rfind("NTRANSMOG\t2\tITEM\t", 0) == 0 ||
             message.rfind("NTRANSMOG\t2\tEND\t", 0) == 0 ||

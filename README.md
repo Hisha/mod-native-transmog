@@ -2,7 +2,15 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A expands the native wardrobe to every visually relevant 3.3.5a equipment slot and adds a free, explicit Hide Appearance state. It does **not** grant items, add equipment sets or saved outfits, price ordinary applications, migrate legacy `mod-transmog` records, or introduce a second transmog engine.
+Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A expands the wardrobe to every visually relevant 3.3.5a equipment slot and adds a free, explicit Hide Appearance state. Phase 4B presents those slots as a native paper doll around the character model. It does **not** grant items, add equipment sets or saved outfits, price ordinary applications, migrate legacy `mod-transmog` records, or introduce a second transmog engine.
+
+## Phase 4B native paper doll
+
+The wardrobe uses a local equipment-slot template built on Blizzard's `ItemButtonTemplate`, stock inventory-slot textures returned by `GetInventorySlotInfo`, live equipped icons from `GetInventoryItemTexture`, `GameTooltip:SetInventoryItem`, dialog/tooltip borders, rotation button art, and `DressUpModel`. It does not inherit `PaperDollItemSlotButtonTemplate`: that template's handlers own CharacterFrame equip, drag, event, and gear-flyout state. The local template retains the native icon treatment while making every click wardrobe-only. See [Phase 4B architecture](docs/PHASE4B_ARCHITECTURE.md).
+
+The fourteen visual slots form left and right columns around the model; main hand, off hand, and ranged form the familiar bottom row. Empty usable slots show Blizzard's native empty-slot texture and explain that an item must be equipped. They never request a catalog or enable Apply/Remove. The client uses WotLK's `UnitHasRelicSlot("player")` convention to render the non-dressable ranged/relic position inactive for death knights, paladins, druids, and shamans instead of maintaining a class-name exception list. Server compatibility remains authoritative for every item and appearance.
+
+When an authorized session opens, the server sends additive version-2 `STATE` replies for the equipped item instances. The paper doll shows a small stock ready-check marker for an applied appearance and stock pass marker for hidden state; original items have no marker. Catalog `PAGE` replies refresh the selected marker after Apply, Hide, or Remove. These indicators never follow a local preview selection.
 
 ## Phase 4A full slots and Hide Appearance
 
@@ -72,7 +80,7 @@ The inspected hook order cannot safely append a new gossip option to every scrip
 
 ## Wardrobe transport and authorization
 
-The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 2, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Client catalog/apply/hide/remove messages use the same prefix and are accepted only as authenticated self-whispers.
+The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 2, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Additive `STATE` replies carry server-confirmed per-slot original/applied/hidden presentation for paper-doll markers. Client catalog/apply/hide/remove messages use the same prefix and are accepted only as authenticated self-whispers.
 
 This uses the stock addon-message wire protocol without installing an addon, inventing an opcode, or exposing normal chat text. It is also a pattern already supported by the inspected Playerbot branch and other native FrameXML modules in this environment.
 
@@ -161,11 +169,12 @@ python3 content/build_epf.py --check
 python3 -m unittest discover -s tests -p 'test_phase*.py'
 ```
 
-The checks cover all earlier regressions plus the 14-slot allowlist, filtering, explicit hidden state, migration, authorization, weapon policy, empty collections, state transitions, reload/equipment paths, pagination, UI state, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 4A PTR plan](docs/PHASE4A_PTR_VALIDATION.md).
+The checks cover all earlier regressions plus the 14-slot allowlist and mapping, paper-doll positioning, equipped and empty icons, class-inapplicable presentation, tooltips, confirmed state markers, filtering, hidden state, migration, authorization, weapon policy, pagination, UI state, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 4B PTR plan](docs/PHASE4B_PTR_VALIDATION.md).
 
 ## Known limitations and future mobile NPCs
 
-- Phase 4A build-12340 client rendering has not been performed. Automated checks and a Playerbot compile/link do not prove the local model, observer model, every race/gender geometry, enchant visuals, relog/restart, or mirror-image behavior.
+- Phase 4B build-12340 client rendering has not been performed. Automated geometry checks and a Playerbot compile/link do not prove pixel layout at every UI scale, local/observer models, every race/gender geometry, enchant visuals, relog/restart, or mirror-image behavior.
+- Hidden preview uses `DressUpModel:UndressSlot` when the build exposes it. A guarded fallback reconstructs the model from physical item links; on clients without the slot API, that fallback can temporarily show other overridden slots' original appearances until Reset Preview.
 - Phase 2 opens immediately on supported gossip/quest, vendor, and trainer interactions; it cannot safely inject an option into arbitrary scripted gossip on this branch.
 - Client service types that bypass all inspected hooks are not covered. Registration never changes their flags to manufacture an interaction path.
 - Vehicle-passenger creatures are explicitly rejected in Phase 2. Entry resolution itself is location- and spawn-independent, so the registry is suitable for a future mobile Transmogrifier, but passenger interaction and moving-distance/session semantics require dedicated validation before removing this guard.

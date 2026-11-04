@@ -32,6 +32,7 @@ public:
     void Configure(WardrobeConfig const& config);
     void Initialize();
     bool HandleAddonWhisper(Player* player, std::string const& message);
+    void SendEquipmentState(Player* player, std::uint32_t token) const;
     void EquipmentChanged(Player* player, std::uint8_t equipmentSlot, Item* item);
     void ReleasePlayer(Player const* player);
 

@@ -1,4 +1,4 @@
--- Native Transmog Phase 4A protected FrameXML for WoW 3.3.5a build 12340.
+-- Native Transmog Phase 4B protected FrameXML for WoW 3.3.5a build 12340.
 local PREFIX, VERSION = "NTRANSMOG", "2"
 local SLOT_ORDER = { "HEAD", "SHOULDERS", "SHIRT", "CHEST", "WAIST", "LEGS", "FEET", "WRISTS",
     "HANDS", "BACK", "MAIN_HAND", "OFF_HAND", "RANGED", "TABARD" }
@@ -9,12 +9,15 @@ local SLOT_LABELS = { HEAD="Head Appearances", SHOULDERS="Shoulder Appearances",
     WRISTS="Wrist Appearances", HANDS="Hand Appearances", BACK="Back Appearances",
     MAIN_HAND="Main-Hand Appearances", OFF_HAND="Off-Hand Appearances", RANGED="Ranged Appearances",
     TABARD="Tabard Appearances" }
+
 local authorizedToken, selectedSlot, selectedSlotId = nil, "HEAD", 1
 local requestId, snapshotNonce, cursor, nextCursor, hasNext = 0, nil, 0, 0, false
 local cursorHistory, catalog, incomingCatalog, buttons = {}, {}, {}, {}
-local selectedAppearance, actualItem, appliedItem, hiddenApplied, overridePresent, canHide, pending = nil, nil, nil, false, false, false, nil
+local slotButtons, overrideStates = {}, {}
+local selectedAppearance, actualItem, appliedItem = nil, nil, nil
+local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local modelRotation, scheduledRefresh = 0, nil
-local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 4, 58, 14
+local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 5, 52, 10
 
 local RESULT_TEXT = {
  ["appearance is not collected"]="Appearance not collected.",
@@ -51,6 +54,7 @@ local function splitTabs(value)
   table.insert(fields, string.sub(value, start, separator - 1)); start = separator + 1
  end
 end
+
 local function getModel() return NativeTransmogFramePreviewPanelModel end
 local function setStatus(text, failure)
  NativeTransmogFrameStatus:SetText(text or "")
@@ -59,6 +63,18 @@ end
 local function itemLabel(entry, emptyText)
  if not entry or entry == 0 then return emptyText end
  return GetItemInfo(entry) or ("Item " .. entry)
+end
+local function slotIsUsable(wireSlot)
+ -- WotLK uses the ranged slot for non-dressable relics on four class families.
+ return wireSlot ~= 13 or not UnitHasRelicSlot("player")
+end
+local function getInventorySlot(wireSlot)
+ local inventorySlot, emptyTexture = GetInventorySlotInfo(SLOT_INVENTORY_NAMES[wireSlot])
+ return inventorySlot, emptyTexture
+end
+local function slotHasItem(wireSlot)
+ local inventorySlot = getInventorySlot(wireSlot)
+ return inventorySlot and GetInventoryItemTexture("player", inventorySlot) ~= nil
 end
 local function refreshStateLabels()
  NativeTransmogFrameActual:SetText("Equipped: " .. itemLabel(actualItem, "None"))
@@ -74,6 +90,40 @@ end
 local function setButtonEnabled(button, enabled)
  if enabled then button:Enable() else button:Disable() end
 end
+
+local function refreshEquipmentSelection()
+ for wireSlot, button in pairs(slotButtons) do
+  if wireSlot == selectedSlotId then button.selection:Show() else button.selection:Hide() end
+ end
+end
+local function refreshEquipmentIndicator(wireSlot)
+ local button = slotButtons[wireSlot]
+ if not button then return end
+ local state = overrideStates[wireSlot]
+ button.transmogMark:Hide(); button.hiddenMark:Hide()
+ if button.hasItem and state == 1 then button.transmogMark:Show()
+ elseif button.hasItem and state == 2 then button.hiddenMark:Show() end
+end
+local function updateEquipmentSlot(wireSlot)
+ local button = slotButtons[wireSlot]
+ if not button then return end
+ local inventorySlot, emptyTexture = getInventorySlot(wireSlot)
+ local texture = inventorySlot and GetInventoryItemTexture("player", inventorySlot)
+ button.inventorySlot, button.hasItem, button.usable = inventorySlot, texture ~= nil, slotIsUsable(wireSlot)
+ SetItemButtonTexture(button, texture or emptyTexture)
+ SetItemButtonCount(button, texture and GetInventoryItemCount("player", inventorySlot) or 0)
+ if button.usable then
+  button:SetAlpha(1); SetItemButtonTextureVertexColor(button, texture and 1 or .65, texture and 1 or .65, texture and 1 or .65)
+ else
+  button:SetAlpha(.45); SetItemButtonTextureVertexColor(button, .45, .45, .45)
+ end
+ refreshEquipmentIndicator(wireSlot)
+end
+local function updateEquipmentSlots()
+ for wireSlot=1,#SLOT_ORDER do updateEquipmentSlot(wireSlot) end
+ refreshEquipmentSelection()
+end
+
 local function refreshSelection()
  for _, button in ipairs(buttons) do
   if button.appearance and selectedAppearance and button.selectionId == selectedAppearance.selection and
@@ -81,36 +131,43 @@ local function refreshSelection()
   else button.selection:Hide() end
   if button.applied then button.appliedMark:Show() else button.appliedMark:Hide() end
  end
- setButtonEnabled(NativeTransmogFrameApply, authorizedToken and selectedAppearance and not pending)
- setButtonEnabled(NativeTransmogFrameRemove, authorizedToken and overridePresent and not pending)
+ setButtonEnabled(NativeTransmogFrameApply, authorizedToken and hasPhysicalItem and selectedAppearance and not pending)
+ setButtonEnabled(NativeTransmogFrameRemove, authorizedToken and hasPhysicalItem and overridePresent and not pending)
  setButtonEnabled(NativeTransmogFramePrevious, authorizedToken and #cursorHistory > 0 and not pending)
  setButtonEnabled(NativeTransmogFrameNext, authorizedToken and hasNext and not pending)
- refreshStateLabels()
+ NativeTransmogFrameApply:SetText(selectedAppearance and selectedAppearance.isHide and "Hide Appearance" or "Apply Appearance")
+ refreshStateLabels(); refreshEquipmentSelection()
 end
-local function showTooltip(button)
+
+local function showAppearanceTooltip(button)
  if not button.appearance then return end
  GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
  if button.isHide then
-  GameTooltip:SetText("Hide Appearance",1,1,1); GameTooltip:AddLine("Makes this equipped item's model invisible without changing the item.",.8,.8,.8,true)
+  GameTooltip:SetText("Hide Appearance",1,1,1)
+  GameTooltip:AddLine("Makes this equipped item's model invisible without changing the item.",.8,.8,.8,true)
  else GameTooltip:SetHyperlink("item:" .. button.entry) end
  GameTooltip:Show()
 end
 local function previewItem(button)
- if not button.appearance then return end
+ if not button.appearance or not hasPhysicalItem then return end
  selectedAppearance = { selection=button.selectionId, entry=button.entry, isHide=button.isHide }
  local model=getModel(); model:SetUnit("player")
  if button.isHide then
-  model:Undress()
   local hiddenSlot=GetInventorySlotInfo(SLOT_INVENTORY_NAMES[selectedSlotId])
-  for _,slotName in ipairs(SLOT_INVENTORY_NAMES) do
-   local inventorySlot=GetInventorySlotInfo(slotName)
-   if inventorySlot and inventorySlot~=hiddenSlot then
-    local link=GetInventoryItemLink("player",inventorySlot); if link then model:TryOn(link) end
+  if model.UndressSlot then
+   model:UndressSlot(hiddenSlot)
+  else
+   -- Fallback clients rebuild physical links and may temporarily show other slots' originals.
+   model:Undress()
+   for _,slotName in ipairs(SLOT_INVENTORY_NAMES) do
+    local inventorySlot=GetInventorySlotInfo(slotName)
+    if inventorySlot and inventorySlot~=hiddenSlot then
+     local link=GetInventoryItemLink("player",inventorySlot); if link then model:TryOn(link) end
+    end
    end
   end
  else model:TryOn(button.entry) end
- model:SetRotation(modelRotation)
- refreshSelection()
+ model:SetRotation(modelRotation); refreshSelection()
 end
 local function createAppearanceButton(index)
  local button=CreateFrame("Button", "NativeTransmogAppearanceButton"..index, NativeTransmogFrameBrowserPanelScrollChild)
@@ -125,7 +182,7 @@ local function createAppearanceButton(index)
  button.appliedMark=button:CreateTexture(nil,"OVERLAY"); button.appliedMark:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
  button.appliedMark:SetWidth(18); button.appliedMark:SetHeight(18); button.appliedMark:SetPoint("BOTTOMRIGHT",-2,2); button.appliedMark:Hide()
  button.hideLabel=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); button.hideLabel:SetPoint("BOTTOM",0,3)
- button:SetScript("OnClick",previewItem); button:SetScript("OnEnter",showTooltip); button:SetScript("OnLeave",function() GameTooltip:Hide() end)
+ button:SetScript("OnClick",previewItem); button:SetScript("OnEnter",showAppearanceTooltip); button:SetScript("OnLeave",function() GameTooltip:Hide() end)
  buttons[index]=button; return button
 end
 local function renderCatalog()
@@ -139,10 +196,15 @@ local function renderCatalog()
   button.hideLabel:SetText(appearance.isHide and "HIDE" or ""); button:Show()
  end
  for index=#catalog+1,#buttons do buttons[index].appearance=nil; buttons[index].entry=nil; buttons[index]:Hide() end
- NativeTransmogFrameBrowserPanelScrollChild:SetHeight(math.max(238,math.ceil(#catalog/ICONS_PER_ROW)*(ICON_SIZE+ICON_GAP)+8))
+ NativeTransmogFrameBrowserPanelScrollChild:SetHeight(math.max(264,math.ceil(#catalog/ICONS_PER_ROW)*(ICON_SIZE+ICON_GAP)+8))
  NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(0)
- if #catalog==(canHide and 1 or 0) and not pending then setStatus("No compatible collected appearances for this slot.",false) end
+ if #catalog==(canHide and 1 or 0) and not pending and hasPhysicalItem then setStatus("No compatible collected appearances for this slot.",false) end
  refreshSelection()
+end
+local function clearCatalogForUnavailableSlot(message)
+ snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}; cursorHistory={}
+ actualItem=nil; appliedItem=nil; hiddenApplied=false; overridePresent=false; canHide=false; hasPhysicalItem=false
+ renderCatalog(); setStatus(message, false)
 end
 local function sendRequest(operation,tail)
  if not authorizedToken or not SendAddonMessage then
@@ -152,26 +214,33 @@ local function sendRequest(operation,tail)
  pending={operation=operation,started=GetTime()}; setStatus("Waiting for server...",false); refreshSelection(); return true
 end
 local function requestCatalog(newCursor)
- requestId=requestId+1; snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}
+ if not slotIsUsable(selectedSlotId) then clearCatalogForUnavailableSlot("This slot has no customizable appearance for your class."); return end
+ if not slotHasItem(selectedSlotId) then clearCatalogForUnavailableSlot("Equip an item to customize this slot."); return end
+ hasPhysicalItem=true; requestId=requestId+1; snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}
  cursor=newCursor or 0; hasNext=false; canHide=false; hiddenApplied=false; overridePresent=false; renderCatalog()
  sendRequest("CAT",requestId.."\t"..selectedSlotId.."\t"..cursor)
 end
+
 function NativeTransmog_Apply()
- if selectedAppearance and snapshotNonce then
+ if hasPhysicalItem and selectedAppearance and snapshotNonce then
   if selectedAppearance.isHide then sendRequest("HIDE",requestId.."\t"..snapshotNonce)
   else sendRequest("APPLY",requestId.."\t"..snapshotNonce.."\t"..selectedAppearance.selection) end
  end
 end
-function NativeTransmog_Remove() if snapshotNonce then sendRequest("REMOVE",requestId.."\t"..snapshotNonce) end end
+function NativeTransmog_Remove() if hasPhysicalItem and snapshotNonce then sendRequest("REMOVE",requestId.."\t"..snapshotNonce) end end
 function NativeTransmog_NextPage() if hasNext then table.insert(cursorHistory,cursor); requestCatalog(nextCursor) end end
 function NativeTransmog_PreviousPage() if #cursorHistory>0 then requestCatalog(table.remove(cursorHistory)) end end
 function NativeTransmog_ResetPreview()
  selectedAppearance=nil; modelRotation=0; local model=getModel(); model:SetUnit("player"); model:SetRotation(0); refreshSelection()
 end
 function NativeTransmog_SelectSlot(slotId)
- selectedSlotId=slotId; selectedSlot=SLOT_ORDER[slotId] or "HEAD"; cursorHistory={}
- NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
- if authorizedToken and NativeTransmogFrame:IsShown() then requestCatalog(0) else catalog={}; renderCatalog() end
+ if not SLOT_ORDER[slotId] then return end
+ selectedSlotId=slotId; selectedSlot=SLOT_ORDER[slotId]; cursorHistory={}
+ NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot]); updateEquipmentSlot(slotId); refreshEquipmentSelection()
+ if not slotIsUsable(slotId) then clearCatalogForUnavailableSlot("This slot has no customizable appearance for your class.")
+ elseif not slotHasItem(slotId) then clearCatalogForUnavailableSlot("Equip an item to customize this slot.")
+ elseif authorizedToken and NativeTransmogFrame:IsShown() then requestCatalog(0)
+ else hasPhysicalItem=true; catalog={}; renderCatalog() end
 end
 function NativeTransmog_Rotate(amount) modelRotation=modelRotation+amount; getModel():SetRotation(modelRotation) end
 function NativeTransmog_BeginRotation(model) model.rotating=true; model.rotationCursorX=GetCursorPosition() end
@@ -181,39 +250,98 @@ function NativeTransmog_UpdateRotation(model)
  local cursorX=GetCursorPosition(); local delta=(cursorX-model.rotationCursorX)/UIParent:GetEffectiveScale()
  model.rotationCursorX=cursorX; NativeTransmog_Rotate(delta*.01)
 end
+
+function NativeTransmog_EquipmentSlot_OnLoad(button)
+ local wireSlot=button:GetID(); slotButtons[wireSlot]=button
+ button.selection=_G[button:GetName().."Selection"]
+ button.transmogMark=_G[button:GetName().."TransmogMark"]
+ button.hiddenMark=_G[button:GetName().."HiddenMark"]
+ updateEquipmentSlot(wireSlot)
+end
+function NativeTransmog_EquipmentSlot_OnClick(button)
+ local wireSlot=button:GetID()
+ if not button.usable then setStatus("This slot has no customizable appearance for your class.",false); return end
+ NativeTransmog_SelectSlot(wireSlot)
+end
+function NativeTransmog_EquipmentSlot_OnEnter(button)
+ GameTooltip:SetOwner(button,"ANCHOR_RIGHT")
+ if not button.usable then
+  GameTooltip:SetText(SLOT_LABELS[SLOT_ORDER[button:GetID()]],1,1,1)
+  GameTooltip:AddLine("This slot has no customizable appearance for your class.",.8,.8,.8,true)
+ elseif button.hasItem and button.inventorySlot then
+  GameTooltip:SetInventoryItem("player",button.inventorySlot)
+  local state=overrideStates[button:GetID()]
+  if state==2 then GameTooltip:AddLine("Appearance: Hidden",.6,.8,1)
+  elseif state==1 then GameTooltip:AddLine("Transmogrified appearance active",.6,.8,1) end
+ else
+  GameTooltip:SetText(SLOT_LABELS[SLOT_ORDER[button:GetID()]],1,1,1)
+  GameTooltip:AddLine("Equip an item to customize this slot.",.8,.8,.8,true)
+ end
+ GameTooltip:Show()
+end
+function NativeTransmog_EquipmentSlot_OnLeave() GameTooltip:Hide() end
+
 function NativeTransmog_FrameUpdate()
  if pending and GetTime()-pending.started>5 then pending=nil; setStatus("Server unavailable or request timed out.",true); refreshSelection() end
  if scheduledRefresh and GetTime()>=scheduledRefresh then scheduledRefresh=nil; requestCatalog(cursor) end
 end
 function NativeTransmog_OnLoad(frame)
  frame:RegisterForDrag("LeftButton"); frame:RegisterEvent("CHAT_MSG_ADDON")
+ frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED"); frame:RegisterEvent("PLAYER_ENTERING_WORLD")
  if RegisterAddonMessagePrefix then RegisterAddonMessagePrefix(PREFIX) end
  UISpecialFrames[#UISpecialFrames+1]=frame:GetName(); NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
 end
 function NativeTransmog_OnShow()
- NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
- if authorizedToken then cursorHistory={}; requestCatalog(0)
- else setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
+ updateEquipmentSlots(); NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
+ if not slotIsUsable(selectedSlotId) or not slotHasItem(selectedSlotId) then NativeTransmog_SelectSlot(selectedSlotId)
+ elseif authorizedToken then cursorHistory={}; requestCatalog(0)
+ else hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
 end
 function NativeTransmog_OnHide()
  NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
 function NativeTransmog_OpenAuthorized(token)
- authorizedToken=token
+ authorizedToken=token; updateEquipmentSlots()
  if NativeTransmogFrame:IsShown() then cursorHistory={}; requestCatalog(0) else NativeTransmogFrame:Show() end
 end
 function NativeTransmog_HasAuthorizedSession() return authorizedToken~=nil end
-function NativeTransmog_OnEvent(_,event,prefix,message,channel,sender)
+function NativeTransmog_OnEvent(_,event,...)
+ if event=="PLAYER_EQUIPMENT_CHANGED" then
+  local changedInventorySlot=...
+  for wireSlot=1,#SLOT_ORDER do
+   local inventorySlot=getInventorySlot(wireSlot)
+   if inventorySlot==changedInventorySlot then
+    overrideStates[wireSlot]=nil; updateEquipmentSlot(wireSlot)
+    if wireSlot==selectedSlotId and NativeTransmogFrame:IsShown() then
+     if authorizedToken and slotHasItem(wireSlot) then scheduledRefresh=GetTime()+.35
+     else NativeTransmog_SelectSlot(wireSlot) end
+    end
+    break
+   end
+  end
+  return
+ elseif event=="PLAYER_ENTERING_WORLD" then updateEquipmentSlots(); return end
+
+ local prefix,message,channel,sender=...
  if event~="CHAT_MSG_ADDON" or prefix~=PREFIX or channel~="WHISPER" or sender~=UnitName("player") then return end
  local fields=splitTabs(message); if fields[1]~=VERSION then return end
  local command=fields[2]
  if command=="OPEN" and fields[3] then NativeTransmog_OpenAuthorized(fields[3]); return end
  if command=="CLOSE" and authorizedToken==fields[3] then NativeTransmogFrame:Hide(); return end
  if not authorizedToken or fields[3]~=authorizedToken then return end
- if command=="PAGE" and tonumber(fields[4])==requestId then
+ if command=="STATE" then
+  local wireSlot,state=tonumber(fields[4]),tonumber(fields[5])
+  if wireSlot and SLOT_ORDER[wireSlot] and state and state>=0 and state<=2 then
+   overrideStates[wireSlot]=state; refreshEquipmentIndicator(wireSlot)
+  end
+ elseif command=="PAGE" and tonumber(fields[4])==requestId then
   snapshotNonce=fields[5]; nextCursor=tonumber(fields[8]) or 0; hasNext=fields[9]=="1"
-  actualItem=tonumber(fields[10]); appliedItem=tonumber(fields[11]); canHide=fields[12]=="1"; hiddenApplied=fields[13]=="1"; overridePresent=fields[14]=="1"; incomingCatalog={}
+  actualItem=tonumber(fields[10]); appliedItem=tonumber(fields[11]); canHide=fields[12]=="1"; hiddenApplied=fields[13]=="1"; overridePresent=fields[14]=="1"; incomingCatalog={}; hasPhysicalItem=true
+  if hiddenApplied then overrideStates[selectedSlotId]=2
+  elseif overridePresent and appliedItem and appliedItem>0 then overrideStates[selectedSlotId]=1
+  else overrideStates[selectedSlotId]=0 end
+  refreshEquipmentIndicator(selectedSlotId)
   if canHide then table.insert(incomingCatalog,{selection=0,isHide=true,applied=hiddenApplied}) end
  elseif command=="ITEM" and tonumber(fields[4])==requestId and fields[5]==snapshotNonce then
   table.insert(incomingCatalog,{selection=tonumber(fields[6]),entry=tonumber(fields[7]),applied=fields[8]=="1"})

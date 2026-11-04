@@ -182,6 +182,33 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
     return true;
 }
 
+void WardrobeService::SendEquipmentState(Player* player, std::uint32_t token) const
+{
+    if (!player)
+        return;
+
+    for (std::uint32_t wireSlot = 1; wireSlot <= 14; ++wireSlot)
+    {
+        std::uint8_t equipmentSlot = ResolveSlot(wireSlot);
+        Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, equipmentSlot);
+        AppearanceOverride appearanceOverride;
+        std::uint32_t state = 0;
+        std::uint32_t appearanceItem = 0;
+        if (item && ApplicationService::Instance().GetOverride(item, appearanceOverride))
+        {
+            if (appearanceOverride.state == OverrideState::Hidden)
+                state = ApplicationService::Instance().CanHide(equipmentSlot) ? 2 : 0;
+            else
+            {
+                state = 1;
+                appearanceItem = appearanceOverride.appearanceItem;
+            }
+        }
+        Send(player, "STATE\t" + std::to_string(token) + '\t' + std::to_string(wireSlot) + '\t' +
+            std::to_string(state) + '\t' + std::to_string(appearanceItem));
+    }
+}
+
 std::uint8_t WardrobeService::ResolveSlot(std::uint32_t wireSlot) const
 {
     switch (wireSlot)

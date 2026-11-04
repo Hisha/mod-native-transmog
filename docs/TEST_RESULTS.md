@@ -1,4 +1,50 @@
-# Phase 4A test results
+# Test results
+
+## Phase 4B
+
+Test date: 2026-11-04.
+
+### Passed
+
+- Full module suite: `python3 -m unittest discover -s tests -p 'test_phase*.py'`
+  - 128 tests passed, including 15 Phase 4B contracts for FrameXML parsing, native equipment templates,
+    paper-doll placement, all fourteen slot mappings, actual/empty icon APIs, class-inapplicable ranged/relic
+    presentation, catalog requests, tooltips, confirmed applied/hidden indicators, pagination/Hide placement,
+    Apply/Remove/Reset, preview fallback, frame bounds, and Lua 5.1 syntax restrictions.
+- Lua validation:
+  - `NativeTransmogFrame.lua` parsed successfully through the local x86_64 Lua 5.1 shared runtime using
+    `luaL_loadbuffer`.
+- FrameXML validation:
+  - `NativeTransmogFrame.xml` parsed successfully with Python `xml.etree.ElementTree`.
+- Existing catalog fixture against Playerbot `item_template.sql` passed for all head, shoulder, chest, main-hand,
+  and off-hand fixtures.
+- AzerothCore C++ codestyle checks passed.
+- Playerbot AzerothCore Release compile/link:
+  - Playerbot revision `8a4e76eac8c4`, GCC 15.2, C++20, `MODULES=static`, `SCRIPTS=none`.
+  - All seven module translation units compiled, `libmodules.a` linked, and `worldserver` linked at 100%.
+  - Generated loader and final binary contain `Addmod_native_transmogScripts`; final binary contains
+    `WardrobeService::SendEquipmentState`.
+  - Worldserver SHA-256: `9c56e1b1470f7d5c9c7c9babc4b092e6dd826fa87541f89c49df40d052ba766e`.
+- EPF deterministic build/check/rebuild:
+  - Four members; two consecutive builds were byte-for-byte identical and `--check` passed.
+  - SHA-256: `005c2bd90ed32157b570d01bf1277416fe6d3fa2d75565759573f7ac8bed7ede`.
+- `git diff --check` passed.
+
+### Not run or not proven
+
+No build-12340 WoW client, live MySQL updater/startup, Content Manager activation, Portalkeeper publication, PTR
+deployment, NPC interaction, addon-message delivery, observer synchronization, or pixel/layout inspection was
+performed. The UI has not been visually validated. In particular, actual-client availability of
+`DressUpModel:UndressSlot`, layout at supported UI scales, the guarded hidden-preview fallback, race/gender model
+geometry, enchants, mirror images, relog/restart, and weapon gameplay remain PTR validation items in
+`PHASE4B_PTR_VALIDATION.md`.
+
+No deployment, database mutation, client publication, commit, or push was performed.
+
+Status: **Phase 4B implementation and local automated/build validation are complete; actual-client visual and PTR
+validation remain separate and unverified.**
+
+## Phase 4A
 
 Test date: 2026-11-04.
 
