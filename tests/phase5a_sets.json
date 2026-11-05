@@ -1,0 +1,24 @@
+{
+  "source": "AzerothCore WotLK base db_world.item_template (verified 2026-11-05)",
+  "sets": [
+    {
+      "id": 217,
+      "classMask": 2,
+      "label": "Judgement Armor",
+      "expectedVisualSlots": 8,
+      "items": [16951, 16952, 16953, 16954, 16955, 16956, 16957, 16958]
+    },
+    {
+      "id": 875,
+      "classMask": 2,
+      "label": "Turalyon Tier 9 variants",
+      "expectedVisualSlots": 5,
+      "items": [
+        48564, 48566, 48568, 48572, 48574,
+        48575, 48576, 48577, 48578, 48579,
+        48580, 48581, 48582, 48583, 48584,
+        48900, 48901, 48902, 48903, 48904
+      ]
+    }
+  ]
+}

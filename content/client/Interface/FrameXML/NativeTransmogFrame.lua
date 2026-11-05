@@ -1,5 +1,5 @@
--- Native Transmog Phase 4C protected FrameXML for WoW 3.3.5a build 12340.
-local PREFIX, VERSION = "NTRANSMOG", "2"
+-- Native Transmog Phase 5A protected FrameXML for WoW 3.3.5a build 12340.
+local PREFIX, VERSION = "NTRANSMOG", "3"
 local SLOT_ORDER = { "HEAD", "SHOULDERS", "SHIRT", "CHEST", "WAIST", "LEGS", "FEET", "WRISTS",
     "HANDS", "BACK", "MAIN_HAND", "OFF_HAND", "RANGED", "TABARD" }
 local SLOT_INVENTORY_NAMES = { "HeadSlot", "ShoulderSlot", "ShirtSlot", "ChestSlot", "WaistSlot", "LegsSlot",
@@ -9,6 +9,8 @@ local SLOT_LABELS = { HEAD="Head Appearances", SHOULDERS="Shoulder Appearances",
     WRISTS="Wrist Appearances", HANDS="Hand Appearances", BACK="Back Appearances",
     MAIN_HAND="Main-Hand Appearances", OFF_HAND="Off-Hand Appearances", RANGED="Ranged Appearances",
     TABARD="Tabard Appearances" }
+local EQUIPMENT_SLOT_LABELS = { [0]="Head",[2]="Shoulders",[3]="Shirt",[4]="Chest",[5]="Waist",[6]="Legs",
+    [7]="Feet",[8]="Wrists",[9]="Hands",[14]="Back",[15]="Main Hand",[16]="Off Hand",[17]="Ranged",[18]="Tabard" }
 
 local authorizedToken, selectedSlot, selectedSlotId = nil, "HEAD", 1
 local requestId, snapshotNonce, cursor, nextCursor, hasNext = 0, nil, 0, 0, false
@@ -18,6 +20,11 @@ local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
 local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 5, 52, 10
+local browserMode, setFilter, setCursor, setNextCursor, setHasNext = "APPEARANCES", 0, 0, 0, false
+local setRequestId = 0
+local setHistory, setCatalog, incomingSets, selectedSet, setPieces = {}, {}, {}, nil, {}
+local setRows, pieceRows = {}, {}
+local requestCatalog, renderPieces
 
 local RESULT_TEXT = {
  ["appearance is not collected"]="Appearance not collected.",
@@ -94,6 +101,74 @@ end
 local function setButtonEnabled(button, enabled)
  if enabled then button:Enable() else button:Disable() end
 end
+local function setShown(frame,shown) if shown then frame:Show() else frame:Hide() end end
+
+local function sendReadOnly(operation,tail)
+ if not SendAddonMessage then setStatus("Set catalog transport is unavailable.",true); return end
+ SendAddonMessage(PREFIX,VERSION.."\t"..operation..(tail and ("\t"..tail) or ""),"WHISPER",UnitName("player"))
+ pending={operation=operation,started=GetTime()}; setStatus("Waiting for server...",false)
+end
+
+local function createSetRow(index)
+ local row=CreateFrame("Button","NativeTransmogSetRow"..index,NativeTransmogFrameSetsPanelListScrollChild)
+ row:SetWidth(170); row:SetHeight(27)
+ row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",5,-3); row.name:SetWidth(125); row.name:SetJustifyH("LEFT")
+ row.progress=row:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall"); row.progress:SetPoint("RIGHT",-5,0)
+ row.highlight=row:CreateTexture(nil,"HIGHLIGHT"); row.highlight:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight"); row.highlight:SetBlendMode("ADD"); row.highlight:SetAllPoints(row)
+ row:SetScript("OnClick",function(self) setRequestId=setRequestId+1; selectedSet=self.set; setPieces={}; renderPieces(); sendReadOnly("SETDETAIL",setRequestId.."\t"..self.set.id) end)
+ setRows[index]=row; return row
+end
+local function renderSets()
+ for index,set in ipairs(setCatalog) do
+  local row=setRows[index] or createSetRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*28); row.set=set
+  row.name:SetText(set.name); row.progress:SetText(set.collected.."/"..set.total)
+  row.name:SetTextColor(set.collected==set.total and .2 or 1,set.collected==set.total and 1 or .82,.2); row:Show()
+ end
+ for index=#setCatalog+1,#setRows do setRows[index]:Hide() end
+ NativeTransmogFrameSetsPanelListScrollChild:SetHeight(math.max(218,#setCatalog*28+4))
+ NativeTransmogFrameSetsPanelListScroll:SetVerticalScroll(0)
+ setButtonEnabled(NativeTransmogFrameSetsPrevious,#setHistory>0 and not pending)
+ setButtonEnabled(NativeTransmogFrameSetsNext,setHasNext and not pending)
+end
+local function createPieceRow(index)
+ local row=CreateFrame("Button","NativeTransmogPieceRow"..index,NativeTransmogFrameSetsPanelPieceScrollChild)
+ row:SetWidth(178); row:SetHeight(43)
+ row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetWidth(36); row.icon:SetHeight(36); row.icon:SetPoint("LEFT",3,0); row.icon:SetTexCoord(.08,.92,.08,.92)
+ row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",43,-3); row.name:SetWidth(130); row.name:SetJustifyH("LEFT")
+ row.source=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.source:SetPoint("TOPLEFT",43,-18); row.source:SetWidth(130); row.source:SetHeight(22); row.source:SetJustifyH("LEFT"); row.source:SetJustifyV("TOP")
+ row.mark=row:CreateTexture(nil,"OVERLAY"); row.mark:SetWidth(15); row.mark:SetHeight(15); row.mark:SetPoint("BOTTOMLEFT",27,2)
+ row:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetHyperlink("item:"..self.entry); GameTooltip:AddLine(self.sourceText,.75,.75,.75,true); GameTooltip:Show() end)
+ row:SetScript("OnLeave",function() GameTooltip:Hide() end)
+ pieceRows[index]=row; return row
+end
+renderPieces=function()
+ for index,piece in ipairs(setPieces) do
+  local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*44); row.entry=piece.entry; row.sourceText=piece.source
+  row.icon:SetTexture(GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row.name:SetText(itemLabel(piece.entry,"Unknown item")); row.source:SetText((EQUIPMENT_SLOT_LABELS[piece.slot] or "Equipment").." — "..piece.source)
+  row.mark:SetTexture(piece.collected and "Interface\\RaidFrame\\ReadyCheck-Ready" or "Interface\\RaidFrame\\ReadyCheck-NotReady"); row:Show()
+ end
+ for index=#setPieces+1,#pieceRows do pieceRows[index]:Hide() end
+ NativeTransmogFrameSetsPanelPieceScrollChild:SetHeight(math.max(262,#setPieces*44+4)); NativeTransmogFrameSetsPanelPieceScroll:SetVerticalScroll(0)
+end
+local function previewSet()
+ local model=getModel(); model:SetUnit("player"); model:Undress()
+ for _,piece in ipairs(setPieces) do model:TryOn(piece.entry) end
+ model:SetRotation(modelRotation)
+end
+local function requestSets(newCursor)
+ setRequestId=setRequestId+1; setCursor=newCursor or 0; incomingSets={}; setHasNext=false; selectedSet=nil; setPieces={}; renderPieces(); sendReadOnly("SETS",setRequestId.."\t"..setFilter.."\t"..setCursor)
+end
+function NativeTransmog_SetMode(mode)
+ browserMode=mode
+ local sets=mode=="SETS"; if sets then NativeTransmogFrameSetsPanel:Show(); NativeTransmogFrameBrowserPanel:Hide() else NativeTransmogFrameSetsPanel:Hide(); NativeTransmogFrameBrowserPanel:Show() end
+ setShown(NativeTransmogFrameSlotTitle,not sets); setShown(NativeTransmogFrameHint,not sets); setShown(NativeTransmogFrameActual,not sets); setShown(NativeTransmogFrameApplied,not sets); setShown(NativeTransmogFramePreview,not sets)
+ setShown(NativeTransmogFramePrevious,not sets); setShown(NativeTransmogFrameNext,not sets); setShown(NativeTransmogFrameApply,not sets); setShown(NativeTransmogFrameRemove,not sets)
+ if sets then setHistory={}; requestSets(0)
+ elseif authorizedToken then cursorHistory={}; requestCatalog(0) else NativeTransmog_ResetPreview() end
+end
+function NativeTransmog_SetFilter(filter) setFilter=filter; setHistory={}; requestSets(0) end
+function NativeTransmog_SetsNext() if setHasNext then table.insert(setHistory,setCursor); requestSets(setNextCursor) end end
+function NativeTransmog_SetsPrevious() if #setHistory>0 then requestSets(table.remove(setHistory)) end end
 
 local function refreshEquipmentSelection()
  for wireSlot, button in pairs(slotButtons) do
@@ -248,7 +323,8 @@ local function sendRequest(operation,tail)
  SendAddonMessage(PREFIX,VERSION.."\t"..operation.."\t"..authorizedToken.."\t"..tail,"WHISPER",UnitName("player"))
  pending={operation=operation,started=GetTime()}; setStatus("Waiting for server...",false); refreshSelection(); return true
 end
-local function requestCatalog(newCursor)
+-- local function requestCatalog is forward-declared because the Sets tab can return to it.
+requestCatalog=function(newCursor)
  if not slotIsUsable(selectedSlotId) then clearCatalogForUnavailableSlot(unavailableSlotMessage(selectedSlotId)); return end
  if not slotHasItem(selectedSlotId) then clearCatalogForUnavailableSlot("Equip an item to customize this slot."); return end
  hasPhysicalItem=true; requestId=requestId+1; snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}
@@ -336,6 +412,7 @@ function NativeTransmog_OnLoad(frame)
 end
 function NativeTransmog_OnShow()
  updateEquipmentSlots(); NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
+ if browserMode=="SETS" then requestSets(0); return end
  if not slotIsUsable(selectedSlotId) or not slotHasItem(selectedSlotId) then NativeTransmog_SelectSlot(selectedSlotId)
  elseif authorizedToken then cursorHistory={}; requestCatalog(0)
  else hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
@@ -346,7 +423,9 @@ function NativeTransmog_OnHide()
 end
 function NativeTransmog_OpenAuthorized(token)
  authorizedToken=token; updateEquipmentSlots()
- if NativeTransmogFrame:IsShown() then cursorHistory={}; requestCatalog(0) else NativeTransmogFrame:Show() end
+ if NativeTransmogFrame:IsShown() then
+  if browserMode=="APPEARANCES" then cursorHistory={}; requestCatalog(0) end
+ else NativeTransmogFrame:Show() end
 end
 function NativeTransmog_HasAuthorizedSession() return authorizedToken~=nil end
 function NativeTransmog_OnEvent(_,event,...)
@@ -356,7 +435,7 @@ function NativeTransmog_OnEvent(_,event,...)
    local inventorySlot=getInventorySlot(wireSlot)
    if inventorySlot==changedInventorySlot then
     overrideStates[wireSlot]=nil; updateEquipmentSlot(wireSlot)
-    if wireSlot==selectedSlotId and NativeTransmogFrame:IsShown() then
+    if browserMode=="APPEARANCES" and wireSlot==selectedSlotId and NativeTransmogFrame:IsShown() then
      if authorizedToken and slotHasItem(wireSlot) then scheduledRefresh=GetTime()+.35
      else NativeTransmog_SelectSlot(wireSlot) end
     end
@@ -384,6 +463,20 @@ function NativeTransmog_OnEvent(_,event,...)
    refreshEquipmentIndicator(wireSlot)
   end
   return
+ elseif command=="SETPAGE" and tonumber(fields[3])==setRequestId then
+  setFilter=tonumber(fields[4]) or 0; setCursor=tonumber(fields[5]) or 0; setNextCursor=tonumber(fields[6]) or 0; setHasNext=fields[7]=="1"; incomingSets={}; return
+ elseif command=="SET" and tonumber(fields[3])==setRequestId then
+  table.insert(incomingSets,{id=tonumber(fields[4]),collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7] or "Unknown set"}); return
+ elseif command=="SETEND" and tonumber(fields[3])==setRequestId then
+  pending=nil; setCatalog=incomingSets; renderSets(); setStatus(#setCatalog>0 and "Select a set to preview its pieces." or "No sets match this filter.",false); return
+ elseif command=="SETDETAIL" and tonumber(fields[3])==setRequestId then
+  selectedSet={id=tonumber(fields[4]),collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7]}; setPieces={}; return
+ elseif command=="SETPIECE" and tonumber(fields[3])==setRequestId and selectedSet and tonumber(fields[4])==selectedSet.id then
+  table.insert(setPieces,{entry=tonumber(fields[6]),slot=tonumber(fields[7]),collected=fields[8]=="1",source=fields[9] or "Source unknown"}); return
+ elseif command=="SETDETAILEND" and tonumber(fields[3])==setRequestId and selectedSet and tonumber(fields[4])==selectedSet.id then
+  pending=nil; renderPieces(); previewSet(); setStatus(selectedSet.name.." — "..selectedSet.collected.."/"..selectedSet.total.." collected",false); return
+ elseif command=="RESULT" and fields[3]=="0" and tonumber(fields[4])==setRequestId then
+  pending=nil; setStatus(RESULT_TEXT[fields[6]] or ("Set request failed: "..(fields[6] or "MALFORMED")),true); renderSets(); return
  elseif command=="PAGE" and tonumber(fields[4])==requestId then
   if not authorizedToken or fields[3]~=authorizedToken then return end
   snapshotNonce=fields[5]; nextCursor=tonumber(fields[8]) or 0; hasNext=fields[9]=="1"

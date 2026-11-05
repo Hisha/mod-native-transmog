@@ -161,8 +161,8 @@ class PhaseFourCTooltipTests(unittest.TestCase):
         for class_name in ("PALADIN", "DRUID", "SHAMAN", "DEATHKNIGHT"):
             self.assertNotIn(class_name, message)
 
-    def test_no_transport_version_opcode_or_database_change(self):
-        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "2"', LUA)
+    def test_phase5a_transport_version_and_no_database_change(self):
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "3"', LUA)
         self.assertFalse(list((ROOT / "data/sql").rglob("*phase4c*")))
 
 

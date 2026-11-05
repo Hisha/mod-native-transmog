@@ -60,6 +60,8 @@ private:
     void SendError(Player* player, std::uint32_t token, std::uint32_t requestId,
         char const* operation, char const* result) const;
     void HandleCatalog(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleSets(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleSetDetail(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleApply(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleHide(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleRemove(Player* player, std::vector<std::uint32_t> const& fields);

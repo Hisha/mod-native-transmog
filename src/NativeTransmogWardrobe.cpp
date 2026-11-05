@@ -4,6 +4,7 @@
 #include "ItemTemplate.h"
 #include "NativeTransmogApplication.h"
 #include "NativeTransmogService.h"
+#include "NativeTransmogSetCatalog.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "SharedDefines.h"
@@ -18,9 +19,10 @@ namespace native_transmog
 namespace
 {
 constexpr char AddonPrefix[] = "NTRANSMOG";
-constexpr std::uint32_t ProtocolVersion = 2;
+constexpr std::uint32_t ProtocolVersion = 3;
 constexpr std::size_t MaximumRequestLength = 160;
 constexpr std::uint32_t MaximumCursor = 1000000;
+constexpr std::uint32_t SetPageSize = 8;
 
 bool ParseUnsigned(std::string_view value, std::uint32_t& result)
 {
@@ -162,8 +164,10 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
 
     if (RateLimited(player))
     {
-        std::uint32_t token = fields.empty() ? 0 : fields[0];
-        std::uint32_t request = fields.size() < 2 ? 0 : fields[1];
+        bool readOnlySetRequest = parts[2] == "SETS" || parts[2] == "SETDETAIL";
+        std::uint32_t token = readOnlySetRequest || fields.empty() ? 0 : fields[0];
+        std::uint32_t request = readOnlySetRequest ? (fields.empty() ? 0 : fields[0]) :
+            (fields.size() < 2 ? 0 : fields[1]);
         SendError(player, token, request, "REQUEST", "RATE_LIMITED");
         return true;
     }
@@ -172,6 +176,10 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         SendEquipmentState(player, 0);
     else if (parts[2] == "CAT" && fields.size() == 4)
         HandleCatalog(player, fields);
+    else if (parts[2] == "SETS" && fields.size() == 3)
+        HandleSets(player, fields);
+    else if (parts[2] == "SETDETAIL" && fields.size() == 2)
+        HandleSetDetail(player, fields);
     else if (parts[2] == "APPLY" && fields.size() == 4)
         HandleApply(player, fields);
     else if (parts[2] == "HIDE" && fields.size() == 3)
@@ -182,6 +190,67 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         SendError(player, fields.empty() ? 0 : fields[0], fields.size() < 2 ? 0 : fields[1],
             "REQUEST", "MALFORMED");
     return true;
+}
+
+void WardrobeService::HandleSets(Player* player, std::vector<std::uint32_t> const& fields)
+{
+    std::uint32_t requestId = fields[0], filter = fields[1], cursor = fields[2];
+    if (filter > 2 || cursor > MaximumCursor)
+    {
+        SendError(player, 0, requestId, "SETS", "MALFORMED");
+        return;
+    }
+
+    std::vector<std::pair<EquipmentSet const*, SetProgress>> visible;
+    for (EquipmentSet const* set : SetCatalog::Instance().ListFor(player))
+    {
+        SetProgress progress = SetCatalog::Instance().Progress(player, *set);
+        bool complete = progress.total && progress.collected == progress.total;
+        if ((filter == 1 && complete) || (filter == 2 && !complete) || !progress.total)
+            continue;
+        visible.emplace_back(set, progress);
+    }
+    cursor = std::min<std::uint32_t>(cursor, static_cast<std::uint32_t>(visible.size()));
+    std::uint32_t end = std::min<std::uint32_t>(cursor + SetPageSize, visible.size());
+    Send(player, "SETPAGE\t" + std::to_string(requestId) + '\t' + std::to_string(filter) + '\t' + std::to_string(cursor) + '\t' +
+        std::to_string(end) + '\t' + std::to_string(end < visible.size() ? 1 : 0) + '\t' +
+        std::to_string(end - cursor));
+    for (std::uint32_t index = cursor; index < end; ++index)
+    {
+        EquipmentSet const& set = *visible[index].first;
+        SetProgress progress = visible[index].second;
+        Send(player, "SET\t" + std::to_string(requestId) + '\t' + std::to_string(set.id) + '\t' + std::to_string(progress.collected) + '\t' +
+            std::to_string(progress.total) + '\t' + set.name);
+    }
+    Send(player, "SETEND\t" + std::to_string(requestId));
+}
+
+void WardrobeService::HandleSetDetail(Player* player, std::vector<std::uint32_t> const& fields)
+{
+    std::uint32_t requestId = fields[0];
+    EquipmentSet const* set = SetCatalog::Instance().FindFor(player, fields[1]);
+    if (!set)
+    {
+        SendError(player, 0, requestId, "SETDETAIL", "NOT_FOUND");
+        return;
+    }
+    SetProgress progress = SetCatalog::Instance().Progress(player, *set);
+    Send(player, "SETDETAIL\t" + std::to_string(requestId) + '\t' + std::to_string(set->id) + '\t' + std::to_string(progress.collected) + '\t' +
+        std::to_string(progress.total) + '\t' + set->name);
+    std::uint32_t index = 0;
+    for (SetPiece const& piece : set->pieces)
+    {
+        if (!SetCatalog::Instance().IsPieceEligible(player, piece))
+            continue;
+        std::uint32_t item = SetCatalog::Instance().RepresentativeFor(player, piece);
+        if (!item)
+            continue;
+        bool collected = SetCatalog::Instance().IsPieceCollected(player, piece);
+        Send(player, "SETPIECE\t" + std::to_string(requestId) + '\t' + std::to_string(set->id) + '\t' + std::to_string(++index) + '\t' +
+            std::to_string(item) + '\t' + std::to_string(piece.equipmentSlot) + '\t' +
+            std::to_string(collected ? 1 : 0) + '\t' + piece.source);
+    }
+    Send(player, "SETDETAILEND\t" + std::to_string(requestId) + '\t' + std::to_string(set->id));
 }
 
 void WardrobeService::SendEquipmentState(Player* player, std::uint32_t token) const

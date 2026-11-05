@@ -1,5 +1,41 @@
 # Test results
 
+## Phase 5A
+
+Test date: 2026-11-05.
+
+### Passed
+
+- Focused set-catalog suite: `python3 -m unittest tests.test_phase5a`
+  - 17 tests passed for authoritative discovery, verified Judgement/Tier 9 fixtures, class/race filtering, variant
+    slot grouping, composite-identity progress, source resolution/unknown fallback, recursion bounds, pagination,
+    protocol validation, missing-piece presentation, native tooltips, full-set preview, and application separation.
+- Full module suite: `python3 -m unittest discover -s tests -p 'test_*.py'`
+  - 166 tests passed, including all Phase 1–4C regressions.
+- Installed AzerothCore base-data audit:
+  - 390 explicitly class-backed gameplay-set candidates; 102 paladin-visible candidates.
+  - Source coverage at visual-slot grouping: 312 complete, 5 partial, 73 unresolved.
+  - ItemSet 217 resolves to eight Judgement slots; ItemSet 875 collapses twenty Tier 9 item variants to five slots.
+- Lua/FrameXML validation:
+  - `NativeTransmogFrame.lua` returned `0` from `luaL_loadbuffer` using the local x86_64 Lua 5.1 runtime.
+  - `NativeTransmogFrame.xml` parsed successfully with Python `xml.etree.ElementTree`.
+- Playerbot AzerothCore revision `8a4e76eac8c4` Release worldserver compiled and linked successfully with the
+  Phase 5A module sources.
+- Deterministic EPF verification:
+  - Four members; `python3 content/build_epf.py --check` passed.
+  - SHA-256: `14b2f0a953447bca38f2550b5181059aca9ddb6ed530968b2d3c618997eefe19`.
+- `git diff --check` passed.
+
+### Not run or not proven
+
+No build-12340 client, live world/character database, Content Manager activation, Portalkeeper publication, PTR
+deployment, race/faction matrix, tooltip cache behavior, every multi-source item, or live DressUpModel combination
+was exercised. Startup counts must be confirmed from the deployed realm log because the live DBC may differ from
+the installed base-data audit. No deployment, database mutation, commit, or push was performed.
+
+Status: **Phase 5A implementation and local automated/build validation are complete; live PTR behavior remains
+separate and unverified.**
+
 ## Phase 4C
 
 Test date: 2026-11-05.

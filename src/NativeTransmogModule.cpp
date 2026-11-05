@@ -2,6 +2,7 @@
 #include "NativeTransmogCollection.h"
 #include "NativeTransmogQuestCollection.h"
 #include "NativeTransmogService.h"
+#include "NativeTransmogSetCatalog.h"
 #include "NativeTransmogWardrobe.h"
 
 #include "AllCreatureScript.h"
@@ -181,6 +182,8 @@ public:
         if (reload && applicationConfig.enabled)
             native_transmog::ApplicationService::Instance().Initialize();
         if (reload && wardrobeConfig.enabled)
+            native_transmog::SetCatalog::Instance().Initialize();
+        if (reload && wardrobeConfig.enabled)
             native_transmog::WardrobeService::Instance().Initialize();
         if (reload)
             RefreshOnlineVisibleEquipment();
@@ -209,6 +212,8 @@ public:
             native_transmog::CollectionService::Instance().Initialize();
         if (applicationConfig.enabled)
             native_transmog::ApplicationService::Instance().Initialize();
+        if (wardrobeConfig.enabled)
+            native_transmog::SetCatalog::Instance().Initialize();
         if (wardrobeConfig.enabled)
             native_transmog::WardrobeService::Instance().Initialize();
         LOG_INFO("server.loading",

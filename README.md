@@ -2,7 +2,11 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A adds every visually relevant slot and Hide Appearance; Phase 4B presents them as a native paper doll. Phase 4C adds persisted-unlock chat notifications and authoritative appearance details to wardrobe and CharacterFrame tooltips. It does **not** grant items, add equipment sets or saved outfits, price ordinary applications, migrate legacy `mod-transmog` records, or introduce a second transmog engine.
+Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A adds every visually relevant slot and Hide Appearance; Phase 4B presents them as a native paper doll. Phase 4C adds persisted-unlock chat notifications and authoritative appearance details to wardrobe and CharacterFrame tooltips. Phase 5A adds read-only browsing and preview for authentic gameplay equipment sets. It does **not** grant items, apply whole sets, add saved outfits, price ordinary applications, migrate legacy `mod-transmog` records, or introduce a second transmog engine.
+
+## Phase 5A equipment sets
+
+The wardrobe has `Appearances` and `Sets` modes. Sets are discovered from valid `ItemSet.dbc` identities and `item_template.ItemSet`, filtered by explicit class/race restrictions, and matched against the existing composite appearance collection. The server builds acquisition metadata from world loot, reference loot, vendors, and quest rewards at startup. Unknown paths remain explicitly unknown. Browsing and preview require no NPC session; every mutation retains the existing Transmogrifier authorization. See [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
 
 ## Phase 4C notifications and tooltips
 
@@ -146,7 +150,7 @@ Add, appearance apply, and quest-backfill execution use AzerothCore's existing N
 ## Installation and PTR deployment
 
 1. Install this repository as `modules/mod-native-transmog` in the isolated Playerbot PTR build. Confirm `mod-transmog` is excluded from that build/load; production remains unchanged.
-2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`; Phase 4A adds `2026_11_04_00_native_transmog_hidden_state.sql`. Phase 4C adds no migration. Existing override rows become collected-appearance state `0`; ownership/provenance and all legacy tables remain untouched.
+2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`; Phase 4A adds `2026_11_04_00_native_transmog_hidden_state.sql`. Phases 4C and 5A add no migration. Existing override rows become collected-appearance state `0`; ownership/provenance and all legacy tables remain untouched.
 3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow. Ensure AzerothCore's `worldserver.conf` contains:
 
    ```ini
@@ -177,7 +181,7 @@ python3 content/build_epf.py --check
 python3 -m unittest discover -s tests -p 'test_phase*.py'
 ```
 
-The checks cover all earlier regressions plus centralized persisted-unlock notifications, duplicate/backfill suppression, detailed wardrobe and CharacterFrame tooltips, read-only state synchronization, relic wording, the 14-slot paper doll, hidden state, authorization, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 4C PTR plan](docs/PHASE4C_PTR_VALIDATION.md).
+The checks cover all earlier regressions plus gameplay-set discovery, class/race filtering, appearance-identity grouping, source resolution, read-only pagination/detail validation, full-set preview contracts, notifications, tooltips, the 14-slot paper doll, hidden state, authorization, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
 
 ## Known limitations and future mobile NPCs
 

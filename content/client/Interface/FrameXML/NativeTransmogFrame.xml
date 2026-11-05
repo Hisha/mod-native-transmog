@@ -77,6 +77,14 @@
         <Anchors><Anchor point="TOPRIGHT"><Offset x="-5" y="-5" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmogFrame:Hide();</OnClick></Scripts>
       </Button>
+      <Button name="$parentAppearancesTab" inherits="UIPanelButtonTemplate" text="Appearances">
+        <Size x="104" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="650" y="-40" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_SetMode("APPEARANCES");</OnClick></Scripts>
+      </Button>
+      <Button name="$parentSetsTab" inherits="UIPanelButtonTemplate" text="Sets">
+        <Size x="104" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentAppearancesTab" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_SetMode("SETS");</OnClick></Scripts>
+      </Button>
 
       <Frame name="$parentPreviewPanel">
         <Size x="420" y="452" />
@@ -183,6 +191,45 @@
             <Size x="365" y="260" /><Anchors><Anchor point="TOPLEFT"><Offset x="10" y="-12" /></Anchor></Anchors>
             <ScrollChild><Frame name="$parentChild"><Size x="365" y="260" /></Frame></ScrollChild>
           </ScrollFrame>
+        </Frames>
+      </Frame>
+      <Frame name="$parentSetsPanel" hidden="true">
+        <Size x="408" y="405" />
+        <Anchors><Anchor point="TOPLEFT"><Offset x="458" y="-72" /></Anchor></Anchors>
+        <Backdrop bgFile="Interface\Tooltips\UI-Tooltip-Background"
+            edgeFile="Interface\Tooltips\UI-Tooltip-Border" tile="true">
+          <BackgroundInsets><AbsInset left="4" right="4" top="4" bottom="4" /></BackgroundInsets>
+          <TileSize><AbsValue val="16" /></TileSize><EdgeSize><AbsValue val="16" /></EdgeSize>
+        </Backdrop>
+        <Frames>
+          <Button name="$parentAll" inherits="UIPanelButtonTemplate" text="All">
+            <Size x="58" y="20" /><Anchors><Anchor point="TOPLEFT"><Offset x="10" y="-10" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_SetFilter(0);</OnClick></Scripts>
+          </Button>
+          <Button name="$parentIncomplete" inherits="UIPanelButtonTemplate" text="Incomplete">
+            <Size x="83" y="20" /><Anchors><Anchor point="LEFT" relativeTo="$parentAll" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_SetFilter(1);</OnClick></Scripts>
+          </Button>
+          <Button name="$parentComplete" inherits="UIPanelButtonTemplate" text="Complete">
+            <Size x="76" y="20" /><Anchors><Anchor point="LEFT" relativeTo="$parentIncomplete" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_SetFilter(2);</OnClick></Scripts>
+          </Button>
+          <ScrollFrame name="$parentListScroll" inherits="UIPanelScrollFrameTemplate">
+            <Size x="171" y="292" /><Anchors><Anchor point="TOPLEFT"><Offset x="10" y="-40" /></Anchor></Anchors>
+            <ScrollChild><Frame name="$parentChild"><Size x="171" y="292" /></Frame></ScrollChild>
+          </ScrollFrame>
+          <ScrollFrame name="$parentPieceScroll" inherits="UIPanelScrollFrameTemplate">
+            <Size x="179" y="336" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-28" y="-40" /></Anchor></Anchors>
+            <ScrollChild><Frame name="$parentChild"><Size x="179" y="336" /></Frame></ScrollChild>
+          </ScrollFrame>
+          <Button name="$parentPrevious" inherits="UIPanelButtonTemplate" text="Previous">
+            <Size x="76" y="22" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="10" y="10" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_SetsPrevious();</OnClick></Scripts>
+          </Button>
+          <Button name="$parentNext" inherits="UIPanelButtonTemplate" text="Next">
+            <Size x="76" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentPrevious" relativePoint="RIGHT"><Offset x="5" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_SetsNext();</OnClick></Scripts>
+          </Button>
         </Frames>
       </Frame>
       <Button name="$parentPrevious" inherits="UIPanelButtonTemplate" text="Previous">
