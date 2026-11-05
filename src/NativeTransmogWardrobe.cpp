@@ -229,7 +229,7 @@ void WardrobeService::HandleSets(Player* player, std::vector<std::uint32_t> cons
         EquipmentSet const& set = *visible[index].first;
         SetProgress progress = visible[index].second;
         Send(player, "SET\t" + std::to_string(requestId) + '\t' + std::to_string(set.id) + '\t' + std::to_string(progress.collected) + '\t' +
-            std::to_string(progress.total) + '\t' + set.name);
+            std::to_string(progress.total) + '\t' + set.name + '\t' + set.expansion + '\t' + set.family + '\t' + set.category);
     }
     Send(player, "SETEND\t" + std::to_string(requestId));
 }

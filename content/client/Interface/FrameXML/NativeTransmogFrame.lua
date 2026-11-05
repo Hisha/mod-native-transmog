@@ -104,6 +104,11 @@ local function setButtonEnabled(button, enabled)
  if enabled then button:Enable() else button:Disable() end
 end
 local function setShown(frame,shown) if shown then frame:Show() else frame:Hide() end end
+local function truncateLabel(text,maximum)
+ text=text or ""
+ if string.len(text)<=maximum then return text end
+ return string.sub(text,1,maximum-3).."..."
+end
 
 local function sendReadOnly(operation,tail)
  if not SendAddonMessage then setStatus("Set catalog transport is unavailable.",true); return false end
@@ -114,44 +119,54 @@ end
 
 local function createSetRow(index)
  local row=CreateFrame("Button","NativeTransmogSetRow"..index,NativeTransmogFrameSetsPanelListScrollChild)
- row:SetWidth(170); row:SetHeight(27)
- row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",5,-3); row.name:SetWidth(125); row.name:SetJustifyH("LEFT")
- row.progress=row:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall"); row.progress:SetPoint("RIGHT",-5,0)
+ row:SetWidth(170); row:SetHeight(34)
+ row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",5,-3); row.name:SetWidth(126); row.name:SetJustifyH("LEFT")
+ row.meta=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.meta:SetPoint("TOPLEFT",5,-18); row.meta:SetWidth(155); row.meta:SetJustifyH("LEFT")
+ row.progress=row:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall"); row.progress:SetPoint("TOPRIGHT",-5,-3)
+ row.selected=row:CreateTexture(nil,"BACKGROUND"); row.selected:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight"); row.selected:SetBlendMode("ADD"); row.selected:SetAllPoints(row)
  row.highlight=row:CreateTexture(nil,"HIGHLIGHT"); row.highlight:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight"); row.highlight:SetBlendMode("ADD"); row.highlight:SetAllPoints(row)
  row:SetScript("OnClick",function(self) requestSetDetail(self.set) end)
+ row:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_LEFT"); GameTooltip:SetText(self.set.name,1,.82,0,true); GameTooltip:AddLine((self.set.expansion or "").." • "..(self.set.category or "PvE").." • "..(self.set.family or "Set"),.75,.75,.75,true); GameTooltip:Show() end)
+ row:SetScript("OnLeave",function() GameTooltip:Hide() end)
  setRows[index]=row; return row
 end
 local function renderSets()
  for index,set in ipairs(setCatalog) do
-  local row=setRows[index] or createSetRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*28); row.set=set
-  row.name:SetText(set.name); row.progress:SetText(set.collected.."/"..set.total)
+  local row=setRows[index] or createSetRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*35); row.set=set
+  row.name:SetText(truncateLabel(set.name,22)); row.meta:SetText((set.category or "PvE").." • "..(set.family or "Set")); row.progress:SetText(set.collected.."/"..set.total)
   row.name:SetTextColor(set.collected==set.total and .2 or 1,set.collected==set.total and 1 or .82,.2); row:Show()
+  setShown(row.selected,selectedSet and selectedSet.id==set.id)
  end
  for index=#setCatalog+1,#setRows do setRows[index]:Hide() end
- NativeTransmogFrameSetsPanelListScrollChild:SetHeight(math.max(218,#setCatalog*28+4))
+ NativeTransmogFrameSetsPanelListScrollChild:SetHeight(math.max(292,#setCatalog*35+4))
  NativeTransmogFrameSetsPanelListScroll:SetVerticalScroll(0)
  setButtonEnabled(NativeTransmogFrameSetsPanelPrevious,#setHistory>0 and not pending)
  setButtonEnabled(NativeTransmogFrameSetsPanelNext,setHasNext and not pending)
 end
 local function createPieceRow(index)
  local row=CreateFrame("Button","NativeTransmogPieceRow"..index,NativeTransmogFrameSetsPanelPieceScrollChild)
- row:SetWidth(178); row:SetHeight(43)
+ row:SetWidth(178); row:SetHeight(39)
  row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetWidth(36); row.icon:SetHeight(36); row.icon:SetPoint("LEFT",3,0); row.icon:SetTexCoord(.08,.92,.08,.92)
  row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",43,-3); row.name:SetWidth(130); row.name:SetJustifyH("LEFT")
- row.source=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.source:SetPoint("TOPLEFT",43,-18); row.source:SetWidth(130); row.source:SetHeight(22); row.source:SetJustifyH("LEFT"); row.source:SetJustifyV("TOP")
+ row.slot=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.slot:SetPoint("TOPLEFT",43,-19); row.slot:SetWidth(130); row.slot:SetJustifyH("LEFT")
  row.mark=row:CreateTexture(nil,"OVERLAY"); row.mark:SetWidth(15); row.mark:SetHeight(15); row.mark:SetPoint("BOTTOMLEFT",27,2)
- row:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetHyperlink("item:"..self.entry); if not GetItemInfo(self.entry) and self.itemName then GameTooltip:AddLine(self.itemName,1,.82,0,true) end; GameTooltip:AddLine(self.sourceText,.75,.75,.75,true); GameTooltip:Show() end)
+ row:SetScript("OnEnter",function(self)
+  GameTooltip:SetOwner(self,"ANCHOR_NONE"); GameTooltip:SetPoint("TOPRIGHT",NativeTransmogFrameSetsPanel,"TOPLEFT",-6,0)
+  GameTooltip:SetHyperlink("item:"..self.entry)
+  if not GetItemInfo(self.entry) and self.itemName then GameTooltip:AddLine(self.itemName,1,.82,0,true) end
+  GameTooltip:AddLine(" "); GameTooltip:AddLine("Source",1,.82,0); GameTooltip:AddLine(self.sourceText,.75,.75,.75,true); GameTooltip:Show()
+ end)
  row:SetScript("OnLeave",function() GameTooltip:Hide() end)
  pieceRows[index]=row; return row
 end
 renderPieces=function()
  for index,piece in ipairs(setPieces) do
-  local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*44); row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
-  row.icon:SetTexture(GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row.name:SetText(itemLabel(piece.entry,"Unknown item",piece.name)); row.source:SetText((EQUIPMENT_SLOT_LABELS[piece.slot] or "Equipment").." — "..piece.source)
+  local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*40); row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
+  row.icon:SetTexture(GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row.name:SetText(truncateLabel(itemLabel(piece.entry,"Unknown item",piece.name),24)); row.slot:SetText(EQUIPMENT_SLOT_LABELS[piece.slot] or "Equipment")
   row.mark:SetTexture(piece.collected and "Interface\\RaidFrame\\ReadyCheck-Ready" or "Interface\\RaidFrame\\ReadyCheck-NotReady"); row:Show()
  end
  for index=#setPieces+1,#pieceRows do pieceRows[index]:Hide() end
- NativeTransmogFrameSetsPanelPieceScrollChild:SetHeight(math.max(262,#setPieces*44+4)); NativeTransmogFrameSetsPanelPieceScroll:SetVerticalScroll(0)
+ NativeTransmogFrameSetsPanelPieceScrollChild:SetHeight(math.max(336,#setPieces*40+4)); NativeTransmogFrameSetsPanelPieceScroll:SetVerticalScroll(0)
 end
 local function previewSet()
  local model=getModel(); model:SetUnit("player"); model:Undress()
@@ -169,6 +184,7 @@ requestSetDetail=function(set)
  setRequestId=setRequestId+1; selectedSet=set; setPieces={}; incomingPieces={}; renderPieces()
  activeSetRequest={id=setRequestId,kind="SETDETAIL",phase="INFO",setId=set.id}
  if not sendReadOnly("SETDETAIL",setRequestId.."\t"..set.id) then activeSetRequest=nil end
+ renderSets()
 end
 local function cancelSetRequest()
  setRequestId=setRequestId+1; activeSetRequest=nil; incomingSets={}; incomingSetIds={}; incomingPieces={}
@@ -501,7 +517,7 @@ function NativeTransmog_OnEvent(_,event,...)
   local request=matchingSetRequest("SETS",tonumber(fields[3])); local setId=tonumber(fields[4])
   if not request or request.phase~="ROWS" or not setId or incomingSetIds[setId] then return end
   if #incomingSets>=request.expected then return end
-  incomingSetIds[setId]=true; table.insert(incomingSets,{id=setId,collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7] or "Unknown set"}); return
+  incomingSetIds[setId]=true; table.insert(incomingSets,{id=setId,collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7] or "Unknown set",expansion=fields[8],family=fields[9],category=fields[10]}); return
  elseif command=="SETEND" then
   local request=matchingSetRequest("SETS",tonumber(fields[3])); if not request or request.phase~="ROWS" then return end
   activeSetRequest=nil; pending=nil

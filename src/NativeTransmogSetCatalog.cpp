@@ -10,8 +10,10 @@
 #include "SharedDefines.h"
 
 #include <algorithm>
-#include <array>
 #include <functional>
+#include <iterator>
+#include <limits>
+#include <map>
 #include <set>
 #include <unordered_set>
 
@@ -20,32 +22,46 @@ namespace native_transmog
 namespace
 {
 constexpr std::size_t MaximumSetPieces = 32;
+constexpr std::uint32_t VariantIdBase = 1000000;
 
-// ItemSet.dbc identifies gameplay sets, but does not classify them as tier, PvP, or miscellaneous.
-// Keep this reviewed catalog explicit: membership, names, and restrictions still come from live DBC/template data.
-constexpr std::array<std::uint32_t, 93> CuratedSetIds = {
-    // Classic Tier 1 and Tier 2 class armor.
-    201, 202, 203, 204, 205, 206, 207, 208, 209,
-    210, 211, 212, 213, 214, 215, 216, 217, 218,
-    // WotLK arena armor families (all arena seasons remain alternatives in their authentic ItemSet identity).
-    765, 766, 767, 768, 769, 770, 771, 772,
-    773, 774, 775, 776, 777, 778, 779, 780,
-    // Death knight Tier 7 damage and tank armor.
-    792, 793,
-    // WotLK Tier 9 class/spec/faction armor.
-    843, 844, 845, 846, 847, 848, 849, 850, 851, 852,
-    853, 854, 855, 856, 857, 858, 859, 860, 861, 862,
-    863, 864, 865, 866, 867, 868, 869, 870, 871, 872,
-    873, 874, 875, 876, 877, 878, 879, 880,
-    // WotLK Tier 10 class/spec armor.
-    883, 884, 885, 886, 887, 888, 889, 890, 891, 892,
-    893, 894, 895, 896, 897, 898, 899, 900, 901
+struct VerifiedSetDefinition
+{
+    std::uint32_t itemSetId;
+    std::uint32_t classMask;
+    char const* expansion;
+    char const* family;
+    char const* category;
+    bool legacy;
 };
 
-bool IsCuratedSet(std::uint32_t id)
+constexpr VerifiedSetDefinition VerifiedSets[] = {
+#define SET(id, classMask, expansion, family, category, legacy) \
+    { id, classMask, expansion, family, category, legacy },
+#include "NativeTransmogVerifiedCatalog.inc"
+#undef SET
+};
+
+VerifiedSetDefinition const* FindDefinition(std::uint32_t id)
 {
-    return std::find(CuratedSetIds.begin(), CuratedSetIds.end(), id) != CuratedSetIds.end();
+    auto found = std::find_if(std::begin(VerifiedSets), std::end(VerifiedSets),
+        [id](VerifiedSetDefinition const& definition) { return definition.itemSetId == id; });
+    return found == std::end(VerifiedSets) ? nullptr : found;
 }
+
+struct VisualGroup
+{
+    AppearanceKey appearance;
+    std::uint8_t equipmentSlot = 0;
+    std::vector<std::uint32_t> alternatives;
+    std::set<std::uint32_t> itemLevels;
+    std::uint32_t minimumItemLevel = std::numeric_limits<std::uint32_t>::max();
+};
+
+struct DiscoveredSet
+{
+    std::string name;
+    std::map<std::uint8_t, std::vector<VisualGroup>> slots;
+};
 
 std::string Clean(std::string value, std::size_t maximum = 120)
 {
@@ -100,7 +116,7 @@ void AddSource(std::unordered_map<std::uint32_t, std::vector<std::string>>& sour
 std::string JoinSources(std::vector<std::string> const& sources)
 {
     if (sources.empty())
-        return "Source unknown";
+        return "Source not resolved in installed world data";
     std::string result;
     for (std::string const& source : sources)
     {
@@ -109,6 +125,38 @@ std::string JoinSources(std::vector<std::string> const& sources)
         result += source;
     }
     return Clean(std::move(result));
+}
+
+std::string VariantName(std::string const& base, std::vector<SetPiece> const& pieces, std::size_t variantCount)
+{
+    if (variantCount <= 1)
+        return base;
+    std::uint32_t minimum = std::numeric_limits<std::uint32_t>::max();
+    std::uint32_t maximum = 0;
+    for (SetPiece const& piece : pieces)
+        for (std::uint32_t item : piece.alternatives)
+            if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(item))
+            {
+                minimum = std::min(minimum, itemTemplate->ItemLevel);
+                maximum = std::max(maximum, itemTemplate->ItemLevel);
+            }
+    if (minimum == std::numeric_limits<std::uint32_t>::max())
+        return base;
+    return base + " (item level " + std::to_string(minimum) +
+        (minimum == maximum ? ")" : "-" + std::to_string(maximum) + ")");
+}
+
+bool IsItemEligibleForPlayer(Player const* player, ItemTemplate const* itemTemplate)
+{
+    if (!player || !itemTemplate)
+        return false;
+    std::uint32_t raceMask = 1U << (player->getRace() - 1);
+    if (itemTemplate->AllowableRace != static_cast<std::uint32_t>(-1) && itemTemplate->AllowableRace &&
+        !(itemTemplate->AllowableRace & raceMask))
+        return false;
+    if (itemTemplate->HasFlag2(ITEM_FLAG2_FACTION_HORDE) && player->GetTeamId(true) != TEAM_HORDE)
+        return false;
+    return !itemTemplate->HasFlag2(ITEM_FLAG2_FACTION_ALLIANCE) || player->GetTeamId(true) == TEAM_ALLIANCE;
 }
 }
 
@@ -120,46 +168,40 @@ SetCatalog& SetCatalog::Instance()
 
 void SetCatalog::Initialize()
 {
-    std::unordered_map<std::uint32_t, EquipmentSet> discovered;
+    std::unordered_map<std::uint32_t, DiscoveredSet> discovered;
     std::unordered_set<std::uint32_t> catalogItems;
+    std::unordered_set<std::uint32_t> legacyItems;
     for (auto const& [entry, itemTemplate] : *sObjectMgr->GetItemTemplateStore())
     {
-        if (!itemTemplate.ItemSet || !IsCuratedSet(itemTemplate.ItemSet) ||
-            !sItemSetStore.LookupEntry(itemTemplate.ItemSet))
+        VerifiedSetDefinition const* definition = FindDefinition(itemTemplate.ItemSet);
+        if (!definition || !sItemSetStore.LookupEntry(itemTemplate.ItemSet))
             continue;
         AppearanceKey appearance;
         std::uint8_t equipmentSlot = EquipmentSlotFor(itemTemplate.InventoryType);
         if (equipmentSlot == NULL_SLOT || !CollectionService::ResolveAppearance(&itemTemplate, appearance))
             continue;
 
-        EquipmentSet& set = discovered[itemTemplate.ItemSet];
-        set.id = itemTemplate.ItemSet;
+        DiscoveredSet& set = discovered[itemTemplate.ItemSet];
         ItemSetEntry const* dbcSet = sItemSetStore.LookupEntry(itemTemplate.ItemSet);
-        set.name = Clean(dbcSet && dbcSet->name[0] ? dbcSet->name[0] : ("Item Set " + std::to_string(set.id)));
-        if (itemTemplate.AllowableClass && itemTemplate.AllowableClass != static_cast<std::uint32_t>(-1))
+        set.name = Clean(dbcSet && dbcSet->name[0] ? dbcSet->name[0] :
+            ("Item Set " + std::to_string(itemTemplate.ItemSet)));
+        auto& groups = set.slots[equipmentSlot];
+        auto found = std::find_if(groups.begin(), groups.end(), [&](VisualGroup const& group)
         {
-            std::uint32_t mask = itemTemplate.AllowableClass & CLASSMASK_ALL_PLAYABLE;
-            if (mask)
-            {
-                set.classMask = set.hasExplicitClassMask ? set.classMask & mask : mask;
-                set.hasExplicitClassMask = true;
-            }
-        }
-
-        auto found = std::find_if(set.pieces.begin(), set.pieces.end(), [&](SetPiece const& piece)
-        {
-            return piece.equipmentSlot == equipmentSlot;
+            return group.appearance == appearance;
         });
-        if (found == set.pieces.end())
-        {
-            set.pieces.push_back({ equipmentSlot, entry, { entry }, "Source unknown" });
-        }
+        if (found == groups.end())
+            groups.push_back({ appearance, equipmentSlot, { entry }, { itemTemplate.ItemLevel },
+                itemTemplate.ItemLevel });
         else
         {
             found->alternatives.push_back(entry);
-            found->representativeItem = std::min(found->representativeItem, entry);
+            found->itemLevels.insert(itemTemplate.ItemLevel);
+            found->minimumItemLevel = std::min(found->minimumItemLevel, itemTemplate.ItemLevel);
         }
         catalogItems.insert(entry);
+        if (definition->legacy)
+            legacyItems.insert(entry);
     }
 
     std::unordered_map<std::uint32_t, std::vector<std::string>> sources;
@@ -178,7 +220,22 @@ void SetCatalog::Initialize()
         } while (result->NextRow());
     }
 
-    // Direct creature loot is exact. Reference loot is resolved once at startup below; no UI request queries loot.
+    // Resolve authoritative spawn map names once so boss sources can include their raid/dungeon when known.
+    std::unordered_map<std::uint32_t, std::vector<std::string>> creatureMaps;
+    if (QueryResult result = WorldDatabase.Query(
+        "SELECT DISTINCT `id1`, `map` FROM `creature` ORDER BY `id1`, `map`"))
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            std::uint32_t creature = fields[0].Get<std::uint32_t>();
+            if (MapEntry const* map = sMapStore.LookupEntry(fields[1].Get<std::uint32_t>()))
+                if (map->name[0] && *map->name[0])
+                    creatureMaps[creature].push_back(Clean(map->name[0], 48));
+        } while (result->NextRow());
+    }
+
+    // Direct creature loot is exact. Reference loot is resolved once at startup; UI requests never query loot.
     std::unordered_map<std::uint32_t, std::vector<std::uint32_t>> referenceItems;
     std::unordered_map<std::uint32_t, std::vector<std::uint32_t>> referenceEdges;
     if (QueryResult result = WorldDatabase.Query(
@@ -220,7 +277,7 @@ void SetCatalog::Initialize()
     };
 
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT `l`.`Item`, `l`.`Reference`, `c`.`name` FROM `creature_loot_template` `l` "
+        "SELECT `l`.`Item`, `l`.`Reference`, `c`.`entry`, `c`.`name` FROM `creature_loot_template` `l` "
         "JOIN `creature_template` `c` ON `c`.`lootid` = `l`.`Entry` "
         "ORDER BY `l`.`Item`, `l`.`Reference`, `c`.`entry`"))
     {
@@ -229,14 +286,19 @@ void SetCatalog::Initialize()
             Field* fields = result->Fetch();
             std::uint32_t item = fields[0].Get<std::uint32_t>();
             std::uint32_t reference = fields[1].Get<std::uint32_t>();
-            std::string creature = fields[2].Get<std::string>();
+            std::uint32_t creatureEntry = fields[2].Get<std::uint32_t>();
+            std::string creature = fields[3].Get<std::string>();
+            std::string source = "Drops from: " + creature;
+            auto locations = creatureMaps.find(creatureEntry);
+            if (locations != creatureMaps.end() && !locations->second.empty())
+                source += " - " + locations->second.front();
             if (catalogItems.count(item))
-                AddSource(sources, item, "Drops from: " + creature);
+                AddSource(sources, item, source);
             if (reference)
             {
                 std::unordered_set<std::uint32_t> visiting;
                 for (std::uint32_t referencedItem : resolve(reference, visiting, 0))
-                    AddSource(sources, referencedItem, "Drops from: " + creature);
+                    AddSource(sources, referencedItem, source);
             }
         } while (result->NextRow());
     }
@@ -255,62 +317,150 @@ void SetCatalog::Initialize()
         (void)questId;
         for (std::uint32_t item : quest->RewardItemId)
             if (catalogItems.count(item))
-                AddSource(sources, item, "Reward from: " + quest->GetTitle());
+                AddSource(sources, item, legacyItems.count(item) ?
+                    "Legacy quest reward: " + quest->GetTitle() + " (availability unresolved)" :
+                    "Reward from: " + quest->GetTitle());
         for (std::uint32_t item : quest->RewardChoiceItemId)
             if (catalogItems.count(item))
-                AddSource(sources, item, "Reward from: " + quest->GetTitle());
+                AddSource(sources, item, legacyItems.count(item) ?
+                    "Legacy quest reward: " + quest->GetTitle() + " (availability unresolved)" :
+                    "Reward from: " + quest->GetTitle());
     }
 
     _sets.clear();
     _byId.clear();
     _completeSourceSets = 0;
     _partialSourceSets = 0;
-    for (auto& [id, set] : discovered)
+    for (std::size_t definitionIndex = 0; definitionIndex < std::size(VerifiedSets); ++definitionIndex)
     {
-        for (SetPiece& piece : set.pieces)
+        VerifiedSetDefinition const& definition = VerifiedSets[definitionIndex];
+        auto discoveredSet = discovered.find(definition.itemSetId);
+        if (discoveredSet == discovered.end())
         {
-            std::sort(piece.alternatives.begin(), piece.alternatives.end());
-            std::vector<std::string> combined;
-            for (std::uint32_t item : piece.alternatives)
-                for (std::string const& source : sources[item])
-                    if (std::find(combined.begin(), combined.end(), source) == combined.end() && combined.size() < 3)
-                        combined.push_back(source);
-            piece.source = JoinSources(combined);
+            LOG_WARN("module.native_transmog", "Verified ItemSet {} ({}/{}) has no usable installed item templates.",
+                definition.itemSetId, definition.expansion, definition.family);
+            continue;
         }
-        std::sort(set.pieces.begin(), set.pieces.end(), [](SetPiece const& left, SetPiece const& right)
+        DiscoveredSet& raw = discoveredSet->second;
+        std::size_t visualVariantCount = 1;
+        std::set<std::uint32_t> itemLevels;
+        for (auto& [slot, groups] : raw.slots)
         {
-            if (left.equipmentSlot != right.equipmentSlot)
-                return left.equipmentSlot < right.equipmentSlot;
-            return left.representativeItem < right.representativeItem;
-        });
-        if (set.pieces.size() > MaximumSetPieces)
-        {
-            LOG_WARN("module.native_transmog", "ItemSet {} has {} visual identities; truncating to bounded maximum {}.",
-                set.id, set.pieces.size(), MaximumSetPieces);
-            set.pieces.resize(MaximumSetPieces);
+            (void)slot;
+            for (VisualGroup& group : groups)
+                std::sort(group.alternatives.begin(), group.alternatives.end());
+            std::sort(groups.begin(), groups.end(), [](VisualGroup const& left, VisualGroup const& right)
+            {
+                if (left.minimumItemLevel != right.minimumItemLevel)
+                    return left.minimumItemLevel < right.minimumItemLevel;
+                return left.alternatives.front() < right.alternatives.front();
+            });
+            visualVariantCount = std::max(visualVariantCount, groups.size());
+            for (VisualGroup const& group : groups)
+                itemLevels.insert(group.itemLevels.begin(), group.itemLevels.end());
         }
-        if (!set.pieces.empty() && set.hasExplicitClassMask && set.classMask)
-            _sets.push_back(std::move(set));
+
+        struct VariantSelection
+        {
+            std::uint32_t itemLevel;
+            std::size_t ordinal;
+        };
+        std::vector<VariantSelection> selections;
+        if (visualVariantCount == 1)
+            selections.push_back({ 0, 0 });
+        else
+            for (std::uint32_t itemLevel : itemLevels)
+            {
+                std::size_t variantsAtLevel = 1;
+                for (auto const& [slot, groups] : raw.slots)
+                {
+                    (void)slot;
+                    variantsAtLevel = std::max(variantsAtLevel, static_cast<std::size_t>(std::count_if(
+                        groups.begin(), groups.end(), [itemLevel](VisualGroup const& group)
+                        {
+                            return group.itemLevels.count(itemLevel) != 0;
+                        })));
+                }
+                for (std::size_t ordinal = 0; ordinal < variantsAtLevel; ++ordinal)
+                    selections.push_back({ itemLevel, ordinal });
+            }
+
+        std::set<std::vector<std::uint32_t>> emittedSignatures;
+        for (std::size_t selectionIndex = 0; selectionIndex < selections.size(); ++selectionIndex)
+        {
+            VariantSelection const& selection = selections[selectionIndex];
+            EquipmentSet set;
+            set.id = selectionIndex == 0 ? definition.itemSetId :
+                VariantIdBase + definition.itemSetId * 100 + static_cast<std::uint32_t>(selectionIndex);
+            set.itemSetId = definition.itemSetId;
+            set.expansion = definition.expansion;
+            set.family = definition.family;
+            set.category = definition.category;
+            set.classMask = definition.classMask;
+            set.sortOrder = static_cast<std::uint32_t>(definitionIndex * 100 + selectionIndex);
+            std::vector<std::uint32_t> signature;
+            for (auto const& [slot, groups] : raw.slots)
+            {
+                std::vector<VisualGroup const*> eligible;
+                for (VisualGroup const& group : groups)
+                    if (!selection.itemLevel || group.itemLevels.count(selection.itemLevel))
+                        eligible.push_back(&group);
+                // A visual shared across item levels remains shared. In incomplete/custom data, retain the
+                // nearest deterministic installed group rather than dropping a real equipment slot.
+                if (eligible.empty())
+                    eligible.push_back(&groups[std::min(selection.ordinal, groups.size() - 1)]);
+                VisualGroup const& group = *eligible[std::min(selection.ordinal, eligible.size() - 1)];
+                SetPiece piece{ slot, group.alternatives.front(), group.alternatives,
+                    definition.legacy ? "Legacy source unavailable in installed WotLK world data" :
+                        "Source not resolved in installed world data" };
+                std::vector<std::string> combined;
+                for (std::uint32_t item : piece.alternatives)
+                    for (std::string const& source : sources[item])
+                        if (std::find(combined.begin(), combined.end(), source) == combined.end() &&
+                            combined.size() < 3)
+                            combined.push_back(source);
+                if (!combined.empty())
+                    piece.source = JoinSources(combined);
+                signature.push_back(slot);
+                signature.push_back(group.appearance.displayId);
+                signature.push_back(group.appearance.itemClass);
+                signature.push_back(group.appearance.itemSubclass);
+                signature.push_back(group.appearance.inventoryType);
+                set.pieces.push_back(std::move(piece));
+            }
+            if (!emittedSignatures.insert(signature).second)
+                continue;
+            if (set.pieces.size() > MaximumSetPieces)
+            {
+                LOG_WARN("module.native_transmog", "ItemSet {} variant {} has {} visual pieces; truncating to {}.",
+                    set.itemSetId, selectionIndex, set.pieces.size(), MaximumSetPieces);
+                set.pieces.resize(MaximumSetPieces);
+            }
+            set.name = VariantName(raw.name, set.pieces, selections.size());
+            if (!set.pieces.empty())
+                _sets.push_back(std::move(set));
+        }
     }
     std::sort(_sets.begin(), _sets.end(), [](EquipmentSet const& left, EquipmentSet const& right)
     {
-        if (left.name != right.name)
-            return left.name < right.name;
+        if (left.sortOrder != right.sortOrder)
+            return left.sortOrder < right.sortOrder;
         return left.id < right.id;
     });
     for (std::size_t index = 0; index < _sets.size(); ++index)
     {
         _byId[_sets[index].id] = index;
         std::size_t resolved = std::count_if(_sets[index].pieces.begin(), _sets[index].pieces.end(),
-            [](SetPiece const& piece) { return piece.source != "Source unknown"; });
+            [](SetPiece const& piece) { return piece.source.find("installed") == std::string::npos; });
         if (resolved == _sets[index].pieces.size())
             ++_completeSourceSets;
         else if (resolved)
             ++_partialSourceSets;
     }
     LOG_INFO("server.loading",
-        "Native Transmog Phase 5A indexed {} curated Blizzard armor sets (sources: {} complete, {} partial).",
-        _sets.size(), _completeSourceSets, _partialSourceSets);
+        "Native Transmog Phase 5A indexed {} visual set variants from {} verified Blizzard ItemSet identities "
+        "(sources: {} complete, {} partial).",
+        _sets.size(), std::size(VerifiedSets), _completeSourceSets, _partialSourceSets);
 }
 
 bool SetCatalog::IsClassAppropriate(Player const* player, EquipmentSet const& set) const
@@ -358,12 +508,10 @@ bool SetCatalog::IsPieceCollected(Player const* player, SetPiece const& piece) c
 {
     if (!player)
         return false;
-    std::uint32_t raceMask = 1U << (player->getRace() - 1);
     for (std::uint32_t item : piece.alternatives)
     {
         ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(item);
-        if (!itemTemplate || (itemTemplate->AllowableRace != static_cast<std::uint32_t>(-1) &&
-            itemTemplate->AllowableRace && !(itemTemplate->AllowableRace & raceMask)))
+        if (!IsItemEligibleForPlayer(player, itemTemplate))
             continue;
         AppearanceKey appearance;
         if (CollectionService::ResolveAppearance(itemTemplate, appearance) &&
@@ -377,12 +525,10 @@ std::uint32_t SetCatalog::RepresentativeFor(Player const* player, SetPiece const
 {
     if (!player)
         return 0;
-    std::uint32_t raceMask = 1U << (player->getRace() - 1);
     for (std::uint32_t item : piece.alternatives)
     {
         ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(item);
-        if (itemTemplate && (itemTemplate->AllowableRace == static_cast<std::uint32_t>(-1) ||
-            !itemTemplate->AllowableRace || (itemTemplate->AllowableRace & raceMask)))
+        if (IsItemEligibleForPlayer(player, itemTemplate))
             return item;
     }
     return 0;

@@ -23,9 +23,13 @@ struct SetPiece
 struct EquipmentSet
 {
     std::uint32_t id = 0;
+    std::uint32_t itemSetId = 0;
     std::string name;
+    std::string expansion;
+    std::string family;
+    std::string category;
     std::uint32_t classMask = 0;
-    bool hasExplicitClassMask = false;
+    std::uint32_t sortOrder = 0;
     std::vector<SetPiece> pieces;
 };
 

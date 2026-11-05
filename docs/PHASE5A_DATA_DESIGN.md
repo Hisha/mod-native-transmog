@@ -1,106 +1,122 @@
-# Phase 5A data and protocol design
+# Phase 5A verified set catalog and UI design
 
-## Scope and evidence boundary
+## Scope and authority
 
-Phase 5A presents a reviewed catalog of Blizzard class armor. It does not attempt to infer cosmetic ensembles.
+Phase 5A is a read-only browser for Blizzard class armor represented by installed WotLK 3.3.5a
+`ItemSet.dbc` and `item_template` data. It does not infer sets from names or numeric ranges. The explicit source of
+truth is `src/NativeTransmogVerifiedCatalog.inc`; runtime membership, item names, displays, race/faction eligibility,
+and native item tooltips still come from the loaded server/client data.
 
-`ItemSet.dbc` is the client data definition for a gameplay item set: localized name, up to 17 item IDs in the 3.3.5a file layout, eight set-bonus spells and thresholds, and optional skill requirements. AzerothCore's `ItemSetEntry` exposes the localized name, the first ten item IDs, the bonus arrays, and skill requirements. The core loads it into `sItemSetStore` and validates nonzero `item_template.ItemSet` values against that store.
+The catalog intentionally excludes crafting, profession, resistance, dungeon, weapon, trinket, holiday, and other
+miscellaneous gameplay sets. ItemSet 881/882, for example, are shard/ring gameplay sets rather than armor ensembles.
+Classic PvP ranking sets are also outside this pass; Classic coverage is Tiers 1, 2, 2.5, and 3. TBC coverage
+includes Tiers 4–6, class-specific level-70 honor sets, and arena families. Wrath coverage includes Tiers 7–10 and
+arena families. These are documented omissions, not candidates selected or rejected by name matching.
 
-`ItemSet.dbc` has no field that distinguishes tier armor, class PvP armor, crafted sets, dungeon sets, trinket/ring sets, and other gameplay groupings. Automatic admission based on `ItemSet`, a class mask, a name, or an ID interval therefore cannot implement the intended browser without false positives. The catalog uses an explicit reviewed ItemSet-ID allowlist. For an admitted identity, the loaded DBC and `item_template.ItemSet` remain authoritative for its name and membership. The database column retains server variants beyond the ten item IDs exposed by the runtime structure. A visually coordinated collection with `ItemSet = 0` is not discovered. No membership is derived from item names, display IDs, armor subclass, or web data.
+The pre-polish catalog contained 93 ItemSet identities. The completed catalog contains 263 verified identities:
 
-This produces two deliberately different categories:
+| Expansion | Family | Category | Identities |
+| --- | --- | --- | ---: |
+| Classic | Tier 1 | PvE | 9 |
+| Classic | Tier 2 | PvE | 9 |
+| Classic | Tier 2.5 | PvE | 9 |
+| Classic | Tier 3 | PvE/legacy | 9 |
+| The Burning Crusade | Tier 4 | PvE | 17 |
+| The Burning Crusade | Tier 5 | PvE | 17 |
+| The Burning Crusade | Tier 6 | PvE | 17 |
+| The Burning Crusade | Level 70 Honor | PvP | 47 |
+| The Burning Crusade | Arena Seasons 1–4 plus DK Season 4 | PvP | 18 |
+| Wrath of the Lich King | Tier 7 | PvE | 19 |
+| Wrath of the Lich King | Tier 8 | PvE | 19 |
+| Wrath of the Lich King | Tier 9 | PvE | 38 |
+| Wrath of the Lich King | Tier 10 | PvE | 19 |
+| Wrath of the Lich King | Arena Seasons 5–8 | PvP | 16 |
 
-- A curated appearance set has a reviewed ItemSet identity in the allowlist and valid loaded DBC/template data. Phase 5A supports this category.
-- A gameplay item set can have a valid ItemSet identity without being suitable for the appearance browser. It is excluded unless explicitly reviewed.
-- A cosmetic ensemble may merely share art. It may have no ItemSet identity and may include offset pieces. Phase 5A does not support it. The `SetCatalog` boundary permits a future explicit, independently validated ensemble provider without changing the browser or progress protocol.
+By verified class mask, the 263 identities cover Warrior 25, Paladin 41, Hunter 17, Rogue 17, Priest 30,
+Death Knight 12, Shaman 43, Mage 17, Warlock 18, and Druid 43. Tier counts exceed class counts where a tier has
+legitimate specialization or faction identities. TBC and Wrath PvP identities likewise retain class/spec variants.
 
-## Discovery and class filtering
+The installed Playerbot base-data audit at revision `8a4e76eac8c4ccebf547113afe7b51d6c3e91641` resolves all 263
+identities with the expected five- or eight-slot membership. `tests/verify_set_catalog.py` repeats that audit against
+an `item_template.sql` input.
 
-The catalog is built once during world startup and configuration reload, after item templates and DBC stores are available. Every eligible armor or weapon appearance is resolved through `CollectionService::ResolveAppearance`. Nonvisual inventory types are omitted.
+The retained cardinality fixtures are ItemSet 217 (Judgement Armor: items 16951–16958, including 16953 and 16955,
+eight slots) and ItemSet 875 (Turalyon Tier 9: twenty templates including 48564, 48577, 48582, and 48902, five slots
+per distinct visual variant). These fixtures guard both eight-piece progress and alternative-template deduplication.
 
-For each admitted set, the index records the intersection of nonempty explicit playable `AllowableClass` masks. This prevents broad test/template alternatives from widening a class-specific family. Sets with no explicit class evidence, or contradictory masks with an empty intersection, are excluded conservatively. A player sees a set only when that mask includes the player's class. Individual faction/race variants are filtered by `AllowableRace` when totals and details are produced. This means:
+## Visual identities and progress
 
-- sets explicitly restricted to another class are excluded;
-- damage, healing, and tank sets remain separate when their ItemSet IDs are separate;
-- distinct ItemSet IDs remain distinct even if their art is similar;
-- armor proficiency alone is never treated as evidence of class ownership;
-- generic or ambiguous sets are not guessed into a class catalog.
+One ItemSet identity can contain several item-level or season variants. The runtime groups alternatives only when
+their full collection identity matches: display ID, item class, subclass, and inventory type. It then builds a
+separate browser entry for every distinct installed ensemble signature, aligned by item level and deterministic item
+ID order. Duplicate templates with the same composite appearance stay alternatives; distinct displays stay distinct.
+Repeated signatures are suppressed.
 
-Representative verified fixtures from AzerothCore's WotLK `item_template` data are:
+Against the audited base data this produces 540 browser entries from 263 ItemSet identities: Classic PvE 36, TBC
+PvE 51, TBC PvP 117, Wrath PvE 238, and Wrath PvP 98. The runtime startup count is authoritative if a realm's loaded
+DBC/templates differ. Synthetic variant IDs are server-owned protocol identifiers; the original ItemSet ID remains
+the first variant and membership never depends on collection ownership.
 
-- Judgement Armor: ItemSet 217; Judgement Spaulders 16953 and Judgement Crown 16955; explicit paladin mask 2.
-- Turalyon Tier 9 variants: ItemSet 875; Turalyon's Headpiece of Conquest 48564, Triumph 48577/48582, and base 48902; explicit paladin mask 2. These demonstrate multiple item variants under one authentic gameplay-set identity.
+Progress counts one selected visual per equipment slot. Tier 1, Tier 2, Tier 3, and Tier 6 therefore count eight;
+Tier 2.5, Tiers 4/5/7/8/9/10, and the PvP families count five. Collection checks use the unchanged account/character
+collection service. Browsing and `DressUpModel:TryOn` never unlock, equip, apply, or purchase an item.
 
-The IDs above were read from the installed AzerothCore base world SQL, not inferred from names or external sources. The live catalog still requires the set ID to resolve in the loaded DBC.
+Faction flags (`ITEM_FLAG2_FACTION_HORDE`/`ALLIANCE`), allowable race, and explicit reviewed class masks are checked
+before totals and representatives are exposed. This keeps Turalyon/Liadrin and comparable faction variants distinct
+while hiding an ineligible faction's pieces. Tier 3 uses reviewed class masks because the legacy templates themselves
+carry broad masks.
 
-### Curated catalog and installed-data audit
+## Acquisition metadata
 
-A deterministic audit of AzerothCore WotLK base `item_template` at core revision `8a4e76eac8c4ccebf547113afe7b51d6c3e91641` found 390 class-restricted gameplay-set candidates. That result is evidence that automatic classification is too broad, not an inclusion list.
+The immutable startup index is bounded to catalog items and at most three unique source lines per item/piece. It uses:
 
-The initial reviewed catalog contains these 93 ItemSet identities:
+- `npc_vendor`, including an honest `token/currency exchange` qualifier when `ExtendedCost` is nonzero;
+- direct creature loot and cycle-safe reference-loot expansion (maximum depth eight);
+- creature spawn maps plus loaded `Map.dbc` names for raid/dungeon location context when present;
+- guaranteed and choice quest rewards from loaded quest templates.
 
-- Classic Tier 1: 201, 202, 203, 204, 205, 206, 207, 208, 209.
-- Classic Tier 2: 210, 211, 212, 213, 214, 215, 216, 217, 218.
-- WotLK arena class/spec armor families: 765, 766, 767, 768, 769, 770, 771, 772, 773, 774, 775, 776, 777, 778, 779, 780. The authentic data groups season variants as alternatives under each identity.
-- Death knight Tier 7: 792 and 793.
-- WotLK Tier 9: 843 through 880, with every ID written individually in `CuratedSetIds`; this is a documented grouping, not a runtime numeric-range rule.
-- WotLK Tier 10: 883 through 901, likewise represented by explicit IDs.
+The index does not convert a vendor token exchange into a direct boss drop. A boss line is emitted only when the
+finished item is present in direct/reference creature loot. Multiple authoritative paths are deduplicated and
+retained. Gameobject/container loot, mail/event/script rewards, crafting, PvP rating/rank requirements, and exact
+extended-cost token/currency names are not indexed. Ordinary unresolved pieces say
+`Source not resolved in installed world data`; Tier 3 unresolved pieces say
+`Legacy source unavailable in installed WotLK world data`. A loaded Tier 3 reward quest is labeled
+`Legacy quest reward: … (availability unresolved)` because a quest template alone does not prove that removed
+Naxxramas content is reachable. None of these messages asserts that every unresolved item is unobtainable.
 
-Every other valid gameplay ItemSet is excluded from the main browser because it has not been explicitly classified as one of those reviewed armor categories. In particular, 881 and 882 are shard/ring gameplay sets, not armor ensembles. Dungeon, crafted, resistance, weapon, trinket, and miscellaneous sets are not admitted merely because they have a class mask, bonus, suggestive name, or nearby numeric ID. Additional Blizzard visual ensembles can be added only by reviewing a concrete ItemSet ID and its actual template membership. The startup log is authoritative for a realm because a curated ID is still rejected when its DBC identity, visual template, or class evidence is unavailable.
+Representative installed-data checks cover Judgement Crown 16955 in reference loot, TBC token-exchange item 29062
+in `npc_vendor` with extended cost 1200, Turalyon's Headpiece 48564 with extended cost 2686, Avenger's Crown 21387
+as quest 8628's reward, and legacy Redemption pieces 22429–22431 as loaded quest rewards whose live availability is
+not proven. These fixtures exercise Classic boss/reference loot, TBC and Wrath exchanges, a normal quest reward, and
+the legacy availability qualifier; they do not imply that every catalog source has been manually checked.
 
-All 93 curated IDs resolve in that audited base template data with nonempty class-mask intersections: 18 identities have eight visual armor slots and 75 have five. This audit checks the build input; the runtime still performs every DBC, appearance, class, and race check rather than trusting the audit count.
+## Sets UI and tooltips
 
-## Piece grouping and collection progress
+The 900×540 wardrobe and character preview are unchanged. The left set list keeps All/Incomplete/Complete filters,
+eight-row pagination, progress, a persistent selected-row highlight, and expansion/category/family metadata. The
+right list uses fixed 40-pixel rows containing only icon, bounded item name, collected/missing mark, and equipment
+slot. Names longer than 24 client characters receive an ellipsis; the full native item name remains in the tooltip.
+Eight-piece sets fit inside the existing 336-pixel piece viewport.
 
-The existing durable appearance identity is `(DisplayInfoID, item class, item subclass, inventory type)`. Completion requirements are grouped by visual equipment slot within one authentic ItemSet identity. Every item entry in that slot remains an alternative carrying its own complete composite identity; the group is collected when any race-eligible alternative identity is collected. This is necessary for authentic WotLK data such as ItemSet 875, which contains 20 Tier 9 entries and several difficulty/display variants but is still a five-slot armor set. It prevents variants in one slot from inflating the denominator while never matching collection state by display ID alone.
+Acquisition text is no longer rendered permanently in rows. Hover first builds the native item hyperlink tooltip,
+preserving quality color, stats, requirements, set bonuses, and stock behavior, then appends one separated Source
+section. Rebuilding the hyperlink on every hover prevents duplicate appended lines. The tooltip is anchored to the
+left of the Sets panel so it does not cover the rows.
 
-After race filtering:
+## Transport and failure behavior
 
-- total is the number of eligible visual equipment-slot groups;
-- collected is the number for which `CollectionService::IsCollected(player, identity)` succeeds for at least one race-eligible alternative;
-- missing is `total - collected`;
-- complete means `total > 0 && collected == total`.
+Protocol version 3 is unchanged. `SETS` remains an eight-entry paged read-only request; `SETDETAIL` remains bounded
+to 32 pieces. `SET` replies add expansion/family/category tail fields, which is compatible with the version-3 client
+parser and does not change mutation semantics. Requests remain owned by request ID and phase; repeated rows replace
+their ordinal, and stale replies after selection changes, pagination, closure, or reopening are ignored.
 
-This preserves the configured account-wide or character-specific collection owner because all checks go through `CollectionService`; there is no set-unlock table and exact item ownership is irrelevant.
+`CAT`, `APPLY`, `HIDE`, `REMOVE`, NPC authorization, persistence, and CharacterFrame tooltip synchronization are
+unchanged. Set browsing does not require an NPC session. No schema or configuration change is required.
 
-## Acquisition source index
+## Known limitations
 
-Source metadata is generated deterministically at world startup, not during browsing:
-
-- direct vendor rows from `npc_vendor`, joined to `creature_template`, become `Sold by: <vendor>`;
-- direct creature loot becomes `Drops from: <creature>`;
-- `reference_loot_template` is expanded with a cycle guard and a maximum depth of eight, then connected to creatures through `creature_loot_template`; this reports the actual dropping creature rather than an intermediate reference row;
-- fixed and choice rewards in loaded quest templates become `Reward from: <quest>`.
-
-Up to three distinct sources are retained per visual group and transport text is sanitized and bounded. A vendor row remains a vendor source when `ExtendedCost` is nonzero and is labeled as a token/currency exchange; the catalog does not claim that a token itself drops the finished item. Unresolved items say `Source unknown`.
-
-Not presently indexed: gameobject/container loot, crafting, mail/event/script rewards, PvP ranking, the contents/cost names of extended-cost exchanges, and location/instance names. These omissions prefer an honest unknown source to speculation. Refresh is deterministic: restart worldserver or reload module configuration, which rebuilds the immutable index.
-
-## Transport
-
-`NTRANSMOG` protocol version 3 adds read-only operations while retaining all version-2 mutation semantics:
-
-- `SETS <requestId> <filter> <cursor>`: filter 0 all, 1 incomplete, 2 complete. Cursor is bounded and pages contain at most eight summaries. Replies echo the request ID in `SETPAGE`, zero or more `SET`, and `SETEND`.
-- `SETDETAIL <requestId> <setId>`: the supplied ID is accepted only if it is in the startup catalog and appropriate to the authenticated player's class. Replies echo the request ID in one bounded header, eligible `SETPIECE` rows carrying entry, slot, progress, source, and authoritative server item name, and `SETDETAILEND`.
-
-Inputs use strict unsigned parsing, exact field counts, the existing request-length bound, cooldown, stable name/ID ordering, and no custom opcode. Set browsing does not require an NPC session. `CAT`, `APPLY`, `HIDE`, and `REMOVE` retain their existing server-issued NPC token and mutation snapshot checks. No client-supplied appearance or item identity is trusted.
-
-Set response ownership is a client-side state machine keyed by request ID, operation kind, expected set ID, and response phase. A page accepts at most eight unique rows; a detail accepts at most 32 ordinal pieces. Repeated rows are idempotent, a repeated header cannot erase accumulated pieces, and incomplete terminators do not publish partial data. Selection changes, mode changes, timeouts, and frame closure invalidate the active request, so late replies cannot mutate hidden or newer UI state.
-
-## UI and preview
-
-The native wardrobe now has `Appearances` and `Sets` modes. Appearances retains the Phase 4 paper doll, per-slot catalog, pagination, native tooltips, and authorized controls. Sets provides All/Incomplete/Complete filters, paged set rows with progress, visible collected/missing piece rows, native item tooltips, and bounded source text.
-
-Selecting a set rebuilds the existing `DressUpModel` locally with `SetUnit("player")`, `Undress()`, and ordered `TryOn(item)` calls. Rotation remains unchanged. Reset Preview calls `SetUnit("player")`, restoring the unit's current server-confirmed visible equipment/overrides. No item is equipped, overridden, purchased, or applied.
-
-WotLK's DressUpModel is last-write-wins for a slot and has no modern transmog-set API. It cannot reliably display non-dressable relics, hidden modern geometry rules, or every weapon/off-hand combination; Phase 5A sends one deterministic representative per grouped visual and uses only supported 3.3.5a calls.
-
-### Item-name resolution
-
-The generic `Item <entry>` label was not caused by a bad set member or a missing server template. The client UI called `GetItemInfo(entry)`, which returns `nil` until that build's local item cache has resolved the entry, while the protocol carried only the numeric entry and source text. The server already resolves the same representative through `ObjectMgr` and therefore now appends its authoritative `ItemTemplate::Name1` to `SETPIECE`. The row uses a cached localized client name first, the authoritative server name second, and `Item <entry>` only when neither side can resolve a name. The item ID and native hyperlink are never substituted.
-
-## Performance and failure behavior
-
-DBC/template discovery and source expansion occur once at startup/reload. Player requests scan only the in-memory class catalog and make cached collection-identity lookups. Network pages are fixed at eight sets; detail size is capped at 32 visual identities (with a startup warning if corrupt/custom data exceeds it). Missing DBC rows, invalid display data, unavailable source rows, and race-ineligible pieces are skipped safely.
-
-No database schema change is required.
+WotLK `DressUpModel` is last-write-wins per slot and has no modern transmog-set API. Client cache misses can briefly
+delay native icons/tooltips, although server-provided names keep rows meaningful. Installed custom/partial templates
+can yield different startup counts and are logged rather than invented. Actual protected-FrameXML geometry, tooltip
+placement at supported UI scales, rapid asynchronous switching, and every race/gender model combination still require
+the PTR checks in `PHASE5A_PTR_VALIDATION.md`.

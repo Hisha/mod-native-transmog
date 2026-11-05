@@ -2,11 +2,14 @@
 """Phase 5A gameplay-set discovery, progress, source, transport, and UI contracts."""
 
 from pathlib import Path
+from collections import Counter
 import json
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = (ROOT / "src/NativeTransmogSetCatalog.cpp").read_text()
+VERIFIED_CATALOG = (ROOT / "src/NativeTransmogVerifiedCatalog.inc").read_text()
 HEADER = (ROOT / "src/NativeTransmogSetCatalog.h").read_text()
 WARDROBE = (ROOT / "src/NativeTransmogWardrobe.cpp").read_text()
 PROTOCOL = (ROOT / "src/NativeTransmogProtocol.h").read_text()
@@ -14,6 +17,16 @@ LUA = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.lua").read_
 XML = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.xml").read_text()
 DESIGN = (ROOT / "docs/PHASE5A_DATA_DESIGN.md").read_text()
 FIXTURES = json.loads((ROOT / "tests/phase5a_sets.json").read_text())
+
+
+def verified_rows():
+    return [
+        (int(set_id), int(class_mask), expansion, family, category, legacy == "true")
+        for set_id, class_mask, expansion, family, category, legacy in re.findall(
+            r'SET\((\d+), (\d+), "([^"]+)", "([^"]+)", "([^"]+)", (true|false)\)',
+            VERIFIED_CATALOG,
+        )
+    ]
 
 
 class CatalogModel:
@@ -32,15 +45,33 @@ class CatalogModel:
 
 class PhaseFiveADataTests(unittest.TestCase):
     def test_curated_catalog_is_explicit_and_keeps_verified_sets(self):
-        self.assertIn("CuratedSetIds", CATALOG)
-        self.assertIn("IsCuratedSet(itemTemplate.ItemSet)", CATALOG)
-        curated_block = CATALOG[CATALOG.index("CuratedSetIds = {"):CATALOG.index("};", CATALOG.index("CuratedSetIds = {"))]
-        re_module = __import__("re")
-        curated_block = re_module.sub(r"//.*", "", curated_block)
-        curated_ids = {int(value) for value in re_module.findall(r"\b\d+\b", curated_block)}
-        self.assertEqual(len(curated_ids), 93)
-        self.assertTrue({201, 217, 765, 792, 843, 875, 883, 901} <= curated_ids)
+        rows = verified_rows()
+        curated_ids = {row[0] for row in rows}
+        self.assertEqual(len(rows), 263)
+        self.assertEqual(len(curated_ids), len(rows))
+        self.assertTrue({201, 217, 493, 521, 621, 668, 765, 787, 820, 843, 875, 883, 901} <= curated_ids)
         self.assertNotIn(881, curated_ids)  # Shard/ring gameplay set, not an armor ensemble.
+        self.assertIn('#include "NativeTransmogVerifiedCatalog.inc"', CATALOG)
+
+    def test_tier_family_completeness_and_pve_pvp_classification(self):
+        counts = Counter((row[2], row[3], row[4]) for row in verified_rows())
+        expected = {
+            ("Classic", "Tier 1", "PvE"): 9,
+            ("Classic", "Tier 2", "PvE"): 9,
+            ("Classic", "Tier 2.5", "PvE"): 9,
+            ("Classic", "Tier 3", "PvE"): 9,
+            ("The Burning Crusade", "Tier 4", "PvE"): 17,
+            ("The Burning Crusade", "Tier 5", "PvE"): 17,
+            ("The Burning Crusade", "Tier 6", "PvE"): 17,
+            ("Wrath of the Lich King", "Tier 7", "PvE"): 19,
+            ("Wrath of the Lich King", "Tier 8", "PvE"): 19,
+            ("Wrath of the Lich King", "Tier 9", "PvE"): 38,
+            ("Wrath of the Lich King", "Tier 10", "PvE"): 19,
+        }
+        for key, count in expected.items():
+            self.assertEqual(counts[key], count, key)
+        self.assertEqual(counts[("The Burning Crusade", "Level 70 Honor", "PvP")], 47)
+        self.assertEqual(sum(row[4] == "PvP" for row in verified_rows()), 81)
 
     def test_discovery_requires_itemset_and_loaded_dbc_identity(self):
         self.assertIn("itemTemplate.ItemSet", CATALOG)
@@ -60,9 +91,9 @@ class PhaseFiveADataTests(unittest.TestCase):
         self.assertEqual(fixtures[217]["classMask"], 2)
 
     def test_class_filter_uses_explicit_item_masks_not_armor_subclass(self):
-        self.assertIn("itemTemplate.AllowableClass", CATALOG)
-        self.assertIn("set.classMask & mask", CATALOG)
-        self.assertNotIn("set.classMask |=", CATALOG)
+        rows = verified_rows()
+        self.assertEqual({row[1] for row in rows}, {1, 2, 4, 8, 16, 32, 64, 128, 256, 1024})
+        self.assertIn("set.classMask = definition.classMask", CATALOG)
         self.assertIn("player->getClass()", CATALOG)
         class_filter = CATALOG[CATALOG.index("bool SetCatalog::IsClassAppropriate"):]
         self.assertNotIn("SubClass", class_filter[: class_filter.index("SetCatalog::ListFor")])
@@ -71,6 +102,9 @@ class PhaseFiveADataTests(unittest.TestCase):
         self.assertIn("discovered[itemTemplate.ItemSet]", CATALOG)
         self.assertIn("return left.id < right.id", CATALOG)
         self.assertIn("found->alternatives.push_back(entry)", CATALOG)
+        self.assertIn("group.appearance == appearance", CATALOG)
+        self.assertIn("emittedSignatures", CATALOG)
+        self.assertIn("group.itemLevels.count(selection.itemLevel)", CATALOG)
 
     def test_multiple_entries_in_one_visual_slot_are_one_required_piece(self):
         items = [
@@ -96,6 +130,9 @@ class PhaseFiveADataTests(unittest.TestCase):
     def test_race_variants_are_filtered_before_totals(self):
         self.assertIn("IsPieceEligible(player, piece)", CATALOG)
         self.assertIn("itemTemplate->AllowableRace", CATALOG)
+        self.assertIn("ITEM_FLAG2_FACTION_HORDE", CATALOG)
+        self.assertIn("ITEM_FLAG2_FACTION_ALLIANCE", CATALOG)
+        self.assertIn("player->GetTeamId(true)", CATALOG)
         self.assertIn("RepresentativeFor", CATALOG)
 
 
@@ -106,6 +143,9 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
         for label in ("Sold by: ", "Drops from: ", "Reward from: "):
             self.assertIn(label, CATALOG)
         self.assertIn("token/currency exchange", CATALOG)
+        self.assertIn("Legacy quest reward: ", CATALOG)
+        self.assertIn("availability unresolved", CATALOG)
+        self.assertIn("sMapStore.LookupEntry", CATALOG)
 
     def test_reference_resolution_is_bounded_and_cycle_safe(self):
         self.assertIn("depth < 8", CATALOG)
@@ -113,7 +153,8 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
         self.assertIn("resolvedReferences", CATALOG)
 
     def test_unknown_source_is_honest_and_visible(self):
-        self.assertIn('"Source unknown"', CATALOG)
+        self.assertIn('"Source not resolved in installed world data"', CATALOG)
+        self.assertIn('"Legacy source unavailable in installed WotLK world data"', CATALOG)
         self.assertIn('fields[9] or "Source unknown"', LUA)
         self.assertNotIn("Wowhead", CATALOG)
 
@@ -148,6 +189,9 @@ class PhaseFiveAUiTests(unittest.TestCase):
 
     def test_native_tooltips_and_full_set_preview(self):
         self.assertIn('GameTooltip:SetHyperlink("item:"..self.entry)', LUA)
+        self.assertIn('GameTooltip:AddLine("Source"', LUA)
+        self.assertIn('GameTooltip:SetPoint("TOPRIGHT",NativeTransmogFrameSetsPanel,"TOPLEFT"', LUA)
+        self.assertNotIn("row.source=", LUA)
         preview = LUA[LUA.index("local function previewSet"):LUA.index("local function requestSets")]
         self.assertIn('model:SetUnit("player")', preview)
         self.assertIn("model:Undress()", preview)
@@ -165,6 +209,12 @@ class PhaseFiveAUiTests(unittest.TestCase):
         self.assertIn('model:SetUnit("player")', reset)
         self.assertIn('sendRequest("APPLY"', LUA)
         self.assertNotIn("Apply Set", XML + LUA)
+
+    def test_long_names_are_truncated_and_rows_stay_within_piece_scroll(self):
+        self.assertIn("local function truncateLabel", LUA)
+        self.assertIn('truncateLabel(itemLabel(piece.entry,"Unknown item",piece.name),24)', LUA)
+        self.assertIn("#setPieces*40+4", LUA)
+        self.assertIn('row.slot:SetText(EQUIPMENT_SLOT_LABELS[piece.slot]', LUA)
 
 
 if __name__ == "__main__":

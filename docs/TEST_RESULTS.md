@@ -1,5 +1,40 @@
 # Test results
 
+## Phase 5A final polish and catalog completion
+
+Test date: 2026-11-05.
+
+### Passed
+
+- Full module suite: `python3 -m unittest discover -s tests -p 'test_*.py'`
+  - 181 tests passed, including explicit tier-family counts, class/faction visibility contracts, PvE/PvP metadata,
+    specialization/faction variants, five/eight-piece progress, composite-appearance deduplication, legacy/unknown
+    sources, tooltip formatting, bounded long-name rows, repeated set selection/pagination, and all existing
+    Appearances regressions.
+- Installed Playerbot base-data audits at revision `8a4e76eac8c4`:
+  - Existing appearance fixture audit passed.
+  - `tests/verify_set_catalog.py` verified 263 unique ItemSet identities, reviewed class masks, and expected five/eight
+    visual slots: Classic PvE 36; TBC PvE 51/PvP 65; Wrath PvE 95/PvP 16.
+  - The deterministic runtime model yields 540 distinct browser variants after composite-appearance deduplication.
+- Lua/FrameXML validation:
+  - `NativeTransmogFrame.lua` returned `0` from `luaL_loadbuffer` using the local x86_64 Lua 5.1 runtime.
+  - `NativeTransmogFrame.xml` parsed successfully with Python `xml.etree.ElementTree`.
+- Playerbot Release worldserver:
+  - All module sources compiled, `libmodules.a` linked, and `worldserver` linked at 100%.
+  - Build artifact SHA-256: `bcd67bd04ce042aebd0463e4ef80bfdf0ed27aa943fd2b315e4fb2aa8d5271cb`.
+- AzerothCore C++ codestyle and `git diff --check` passed.
+- Deterministic EPF verification:
+  - Four members; two consecutive builds were byte-for-byte identical and `python3 content/build_epf.py --check`
+    passed.
+  - SHA-256: `5e60cb0d60c976d86f16a4d5d8e92d18a06ca626ce31f9a0833bf6a7c9df1c87`.
+
+### Not run or not proven
+
+No live realm database startup/source-count audit, build-12340 client, Content Manager activation, Portalkeeper
+publication, or PTR deployment was performed. Native tooltip preservation/placement, every source string, UI-scale
+row geometry, asynchronous switching, race/gender previews, and the realm's actual 263-identity/540-variant startup
+count require the documented PTR validation. No deployment, database mutation, commit, or push was performed.
+
 ## Phase 5A stabilization
 
 Test date: 2026-11-05.

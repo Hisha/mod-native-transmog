@@ -15,10 +15,13 @@ This stabilization changes both the protected client FrameXML and the C++ world 
 ## Required PTR checks
 
 - Open and close the NPC wardrobe repeatedly; switch between Appearances and Sets and confirm existing application, authorization, tooltips, overrides, and pagination are unchanged.
-- Page forward/back through All, Incomplete, and Complete. Repeatedly select sets with different piece counts, including eight-piece Judgement Armor, and rapidly select another set before the first detail finishes.
+- Page forward/back through All, Incomplete, and Complete. Confirm expansion/family and PvE/PvP labels, persistent selected-set highlighting, and stable eight-row pagination. Repeatedly select sets with different piece counts, including eight-piece Judgement Armor, five-piece Turalyon's Garb, and rapidly select another set before the first detail finishes.
 - Close the wardrobe immediately after page and detail requests, reopen it, and confirm late replies neither raise Lua errors nor replace current rows.
-- Confirm Judgement remains 8/8 for the known collected character, previews all eight pieces, and displays authoritative piece names even after clearing the client item cache.
-- Confirm only the documented curated catalog appears for each class; verify a representative Tier 1/2, WotLK arena, Tier 9, and Tier 10 family, and confirm miscellaneous gameplay sets such as 881/882 are absent.
+- Confirm Judgement remains 8/8 for the known collected character and previews all eight pieces. Confirm Turalyon remains 5/5 and alternate templates sharing its appearances do not inflate the total. Previewing either set must not unlock or apply anything.
+- Hover every Judgement row plus representative Classic/TBC/Wrath items with direct loot, vendor/token exchange, quest, multiple, and unresolved sources. Confirm the native tooltip still shows quality, stats, requirements, and set bonuses; Source appears once; token exchanges are not described as finished-item boss drops; and the tooltip does not cover the Sets panel.
+- Check a deliberately long item name at supported UI scales. Confirm the row ellipsis, equipment slot, collected/missing mark, icon, and 40-pixel bounds do not overlap; the tooltip must show the full native name.
+- Confirm the documented catalog appears for every class/faction: Classic Tiers 1–3; TBC Tiers 4–6, level-70 honor, and arena families; Wrath Tiers 7–10 and arena families. Verify specialization/faction variants, including Turalyon/Liadrin visibility, and confirm unrelated gameplay sets such as 881/882 are absent.
+- Inspect the startup log and record the loaded identity/visual-variant/source counts. The audited base-data expectation is 263 ItemSet identities and 540 browser variants; a differing realm count must be explained by its loaded DBC/templates before approval.
 - Preserve client Lua logs, worldserver startup catalog count/source summary, screenshots, active build/hash, and the exact character/class used.
 
 Rollback requires reactivating the recorded prior Content Manager build, restoring the prior compatible worldserver/module artifact, and restarting PTR. No database rollback is needed.
