@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOG = (ROOT / "src/NativeTransmogSetCatalog.cpp").read_text()
 HEADER = (ROOT / "src/NativeTransmogSetCatalog.h").read_text()
 WARDROBE = (ROOT / "src/NativeTransmogWardrobe.cpp").read_text()
+PROTOCOL = (ROOT / "src/NativeTransmogProtocol.h").read_text()
 LUA = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.lua").read_text()
 XML = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.xml").read_text()
 DESIGN = (ROOT / "docs/PHASE5A_DATA_DESIGN.md").read_text()
@@ -110,7 +111,8 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
         self.assertIn("ValidateSession", WARDROBE[WARDROBE.index("void WardrobeService::HandleCatalog"):])
 
     def test_protocol_validation_and_pagination_are_bounded(self):
-        self.assertIn("constexpr std::uint32_t ProtocolVersion = 3", WARDROBE)
+        self.assertIn("constexpr std::uint32_t Version = 3", PROTOCOL)
+        self.assertIn("version != protocol::Version", WARDROBE)
         self.assertIn("constexpr std::uint32_t SetPageSize = 8", WARDROBE)
         self.assertIn("constexpr std::size_t MaximumSetPieces = 32", CATALOG)
         self.assertIn("filter > 2 || cursor > MaximumCursor", WARDROBE)

@@ -82,7 +82,7 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertIn("ApplicationService::Instance().CanHide(equipmentSlot)", sync)
         self.assertIn('Send(player, "STATE\\t"', sync)
         self.assertIn("WardrobeService::Instance().SendEquipmentState(player, token)", SERVICE)
-        self.assertIn('message.rfind("NTRANSMOG\\t2\\tSTATE\\t"', MODULE)
+        self.assertIn('command == "STATE"', MODULE)
         self.assertIn('command=="STATE"', LUA)
 
     def test_original_applied_and_hidden_indicators_do_not_cover_icon(self):

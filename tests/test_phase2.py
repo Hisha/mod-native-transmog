@@ -11,6 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = (ROOT / "src/NativeTransmogModule.cpp").read_text(encoding="utf-8")
 SERVICE = (ROOT / "src/NativeTransmogService.cpp").read_text(encoding="utf-8")
+PROTOCOL = (ROOT / "src/NativeTransmogProtocol.h").read_text(encoding="utf-8")
 HEADER = (ROOT / "src/NativeTransmogService.h").read_text(encoding="utf-8")
 LUA = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.lua").read_text(
     encoding="utf-8"
@@ -103,7 +104,9 @@ class PhaseTwoTests(unittest.TestCase):
         self.assertNotRegex(MODULE, r"SetNpcFlag|SetFlag.*NPC|ScriptName")
 
     def test_authorized_transport_and_debug_separation(self) -> None:
-        self.assertIn('player->Whisper(std::string(AddonPrefix)', SERVICE)
+        self.assertIn('player->Whisper(std::string(protocol::AddonPrefix)', SERVICE)
+        self.assertIn("std::to_string(protocol::Version)", SERVICE)
+        self.assertIn('constexpr std::uint32_t Version = 3', PROTOCOL)
         self.assertIn("LANG_ADDON", SERVICE)
         self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "3"', LUA)
         self.assertIn('frame:RegisterEvent("CHAT_MSG_ADDON")', LUA)

@@ -1,6 +1,7 @@
 #include "NativeTransmogApplication.h"
 #include "NativeTransmogCollection.h"
 #include "NativeTransmogQuestCollection.h"
+#include "NativeTransmogProtocol.h"
 #include "NativeTransmogService.h"
 #include "NativeTransmogSetCatalog.h"
 #include "NativeTransmogWardrobe.h"
@@ -22,6 +23,8 @@
 
 #include <cstdint>
 #include <shared_mutex>
+#include <string>
+#include <string_view>
 
 using namespace Acore::ChatCommands;
 
@@ -31,6 +34,22 @@ native_transmog::ServiceConfig serviceConfig;
 native_transmog::CollectionConfig collectionConfig;
 native_transmog::ApplicationConfig applicationConfig;
 native_transmog::WardrobeConfig wardrobeConfig;
+
+bool IsNativeTransmogResponse(std::string const& message)
+{
+    std::string const prefix = std::string(native_transmog::protocol::AddonPrefix) + '\t' +
+        std::to_string(native_transmog::protocol::Version) + '\t';
+    if (message.compare(0, prefix.size(), prefix) != 0)
+        return false;
+
+    std::size_t const separator = message.find('\t', prefix.size());
+    std::string_view const command(message.data() + prefix.size(),
+        (separator == std::string::npos ? message.size() : separator) - prefix.size());
+    return command == "OPEN" || command == "CLOSE" || command == "STATE" || command == "PAGE" ||
+        command == "ITEM" || command == "END" || command == "RESULT" || command == "SETPAGE" ||
+        command == "SET" || command == "SETEND" || command == "SETINFO" || command == "SETPIECE" ||
+        command == "SETDETAILEND";
+}
 
 void RefreshOnlineVisibleEquipment()
 {
@@ -345,19 +364,12 @@ public:
     {
         if (type != CHAT_MSG_WHISPER || language != LANG_ADDON || !player || receiver != player)
             return true;
-        if (message.rfind("NTRANSMOG\t", 0) != 0)
+        if (message.rfind(std::string(native_transmog::protocol::AddonPrefix) + '\t', 0) != 0)
             return true;
         // Outbound server messages pass through Player::Whisper and therefore
         // this hook too. Let only the response vocabulary reach FrameXML;
         // consume every client-originated request/unknown version for our prefix.
-        bool const response = message.rfind("NTRANSMOG\t2\tOPEN\t", 0) == 0 ||
-            message.rfind("NTRANSMOG\t2\tCLOSE\t", 0) == 0 ||
-            message.rfind("NTRANSMOG\t2\tSTATE\t", 0) == 0 ||
-            message.rfind("NTRANSMOG\t2\tPAGE\t", 0) == 0 ||
-            message.rfind("NTRANSMOG\t2\tITEM\t", 0) == 0 ||
-            message.rfind("NTRANSMOG\t2\tEND\t", 0) == 0 ||
-            message.rfind("NTRANSMOG\t2\tRESULT\t", 0) == 0;
-        if (response)
+        if (IsNativeTransmogResponse(message))
             return true;
         native_transmog::WardrobeService::Instance().HandleAddonWhisper(player, message);
         return false;

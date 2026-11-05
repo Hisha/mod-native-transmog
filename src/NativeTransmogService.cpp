@@ -1,5 +1,6 @@
 #include "NativeTransmogService.h"
 
+#include "NativeTransmogProtocol.h"
 #include "NativeTransmogWardrobe.h"
 
 #include "Creature.h"
@@ -19,7 +20,6 @@ namespace native_transmog
 {
 namespace
 {
-constexpr char AddonPrefix[] = "NTRANSMOG";
 constexpr char ContentPackage[] = "mod-native-transmog";
 constexpr char DedicatedCreatureSymbol[] = "dedicated-transmogrifier";
 constexpr std::uint32_t SessionValidationIntervalMs = 500;
@@ -292,12 +292,14 @@ bool Service::ValidateInteraction(Player* player, Creature* creature) const
 
 void Service::SendOpen(Player* player, std::uint32_t token) const
 {
-    player->Whisper(std::string(AddonPrefix) + "\t2\tOPEN\t" + std::to_string(token), LANG_ADDON, player);
+    player->Whisper(std::string(protocol::AddonPrefix) + '\t' + std::to_string(protocol::Version) +
+        "\tOPEN\t" + std::to_string(token), LANG_ADDON, player);
 }
 
 void Service::SendClose(Player* player, std::uint32_t token) const
 {
-    player->Whisper(std::string(AddonPrefix) + "\t2\tCLOSE\t" + std::to_string(token), LANG_ADDON, player);
+    player->Whisper(std::string(protocol::AddonPrefix) + '\t' + std::to_string(protocol::Version) +
+        "\tCLOSE\t" + std::to_string(token), LANG_ADDON, player);
 }
 
 bool Service::AuthorizeInteraction(Player* player, Creature* creature)

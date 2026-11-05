@@ -32,7 +32,7 @@ class PhaseThreeDContracts(unittest.TestCase):
         self.assertNotIn("ParseCommands", combined)
 
     def test_authenticated_self_whisper_and_token(self):
-        for marker in ("receiver != player", 'message.rfind("NTRANSMOG\\t"',
+        for marker in ("receiver != player", "protocol::AddonPrefix",
                        "ValidateSession(player, token)", "found->second.token != token"):
             self.assertIn(marker, MODULE + SERVICE + WARDROBE)
 

@@ -3,6 +3,7 @@
 #include "Item.h"
 #include "ItemTemplate.h"
 #include "NativeTransmogApplication.h"
+#include "NativeTransmogProtocol.h"
 #include "NativeTransmogService.h"
 #include "NativeTransmogSetCatalog.h"
 #include "ObjectMgr.h"
@@ -18,8 +19,6 @@ namespace native_transmog
 {
 namespace
 {
-constexpr char AddonPrefix[] = "NTRANSMOG";
-constexpr std::uint32_t ProtocolVersion = 3;
 constexpr std::size_t MaximumRequestLength = 160;
 constexpr std::uint32_t MaximumCursor = 1000000;
 constexpr std::uint32_t SetPageSize = 8;
@@ -107,7 +106,7 @@ void WardrobeService::Initialize()
 void WardrobeService::Send(Player* player, std::string const& payload) const
 {
     if (player && player->IsInWorld())
-        player->Whisper(std::string(AddonPrefix) + '\t' + std::to_string(ProtocolVersion) + '\t' + payload,
+        player->Whisper(std::string(protocol::AddonPrefix) + '\t' + std::to_string(protocol::Version) + '\t' + payload,
             LANG_ADDON, player);
 }
 
@@ -132,7 +131,7 @@ bool WardrobeService::RateLimited(Player* player)
 
 bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& message)
 {
-    std::string const prefix = std::string(AddonPrefix) + '\t';
+    std::string const prefix = std::string(protocol::AddonPrefix) + '\t';
     if (message.compare(0, prefix.size(), prefix) != 0)
         return false;
 
@@ -141,7 +140,7 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         return true;
 
     std::uint32_t version = 0;
-    if (parts[0] != AddonPrefix || !ParseUnsigned(parts[1], version) || version != ProtocolVersion)
+    if (parts[0] != protocol::AddonPrefix || !ParseUnsigned(parts[1], version) || version != protocol::Version)
         return true;
 
     bool enabled;
@@ -235,7 +234,7 @@ void WardrobeService::HandleSetDetail(Player* player, std::vector<std::uint32_t>
         return;
     }
     SetProgress progress = SetCatalog::Instance().Progress(player, *set);
-    Send(player, "SETDETAIL\t" + std::to_string(requestId) + '\t' + std::to_string(set->id) + '\t' + std::to_string(progress.collected) + '\t' +
+    Send(player, "SETINFO\t" + std::to_string(requestId) + '\t' + std::to_string(set->id) + '\t' + std::to_string(progress.collected) + '\t' +
         std::to_string(progress.total) + '\t' + set->name);
     std::uint32_t index = 0;
     for (SetPiece const& piece : set->pieces)

@@ -469,7 +469,7 @@ function NativeTransmog_OnEvent(_,event,...)
   table.insert(incomingSets,{id=tonumber(fields[4]),collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7] or "Unknown set"}); return
  elseif command=="SETEND" and tonumber(fields[3])==setRequestId then
   pending=nil; setCatalog=incomingSets; renderSets(); setStatus(#setCatalog>0 and "Select a set to preview its pieces." or "No sets match this filter.",false); return
- elseif command=="SETDETAIL" and tonumber(fields[3])==setRequestId then
+ elseif command=="SETINFO" and tonumber(fields[3])==setRequestId then
   selectedSet={id=tonumber(fields[4]),collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7]}; setPieces={}; return
  elseif command=="SETPIECE" and tonumber(fields[3])==setRequestId and selectedSet and tonumber(fields[4])==selectedSet.id then
   table.insert(setPieces,{entry=tonumber(fields[6]),slot=tonumber(fields[7]),collected=fields[8]=="1",source=fields[9] or "Source unknown"}); return
