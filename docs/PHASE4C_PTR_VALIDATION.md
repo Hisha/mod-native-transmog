@@ -6,18 +6,17 @@ client EPF hash, and Portalkeeper generation, and confirm that no production tar
 
 ## Exact deployment sequence
 
-1. Stop the PTR worldserver and back up its character/world databases and current runtime artifacts.
-2. Place this reviewed checkout at `<PLAYERBOT>/modules/mod-native-transmog`; exclude `mod-transmog` from the build.
-3. Install `conf/mod_native_transmog.conf.dist` through the existing module config flow without changing the realm's
-   reviewed settings. Confirm `AddonChannel = 1` in `worldserver.conf`.
-4. Configure the Playerbot branch with the PTR's normal Release options, build and install `worldserver`, and verify
-   that all module translation units and the executable link succeed and the generated loader contains
-   `Addmod_native_transmogScripts`.
-5. Run the normal AzerothCore SQL updater. Phase 4C has no migration; the latest module migration remains
-   `2026_11_04_00_native_transmog_hidden_state.sql`.
-6. From the module checkout, build twice and require identical hashes, then check the committed package:
+1. Confirm the isolated PTR target, then record its module revision, config, character/world database backups,
+   worldserver hash, active Content Manager build, client package hash, and Portalkeeper generation.
+2. Place this reviewed checkout at `<PLAYERBOT>/modules/mod-native-transmog` for source parity. Confirm the running PTR
+   already has the reviewed Phase 4C server module, excludes `mod-transmog`, and has `AddonChannel = 1`.
+3. Do not rebuild or reinstall `worldserver`, change module configuration, or run SQL for this tooltip-lifecycle fix:
+   it changes only protected client FrameXML, tests, documentation, and the generated EPF. If the PTR is not already
+   on the reviewed Phase 4C server baseline, stop and use the full baseline deployment procedure before this delta.
+4. From the module checkout, run the full suite and build twice with identical hashes, then check the package:
 
    ```bash
+   python3 -m unittest discover -s tests -p 'test_phase*.py'
    python3 content/build_epf.py
    sha256sum content/mod-native-transmog.epf
    python3 content/build_epf.py
@@ -25,7 +24,7 @@ client EPF hash, and Portalkeeper generation, and confirm that no production tar
    python3 content/build_epf.py --check
    ```
 
-7. Put `content/mod-native-transmog.epf` in the existing PTR Content Manager discovery directory. In the PTR
+5. Put `content/mod-native-transmog.epf` in the existing PTR Content Manager discovery directory. In the PTR
    worldserver console (or with the established authorized GM), run:
 
    ```text
@@ -41,9 +40,9 @@ client EPF hash, and Portalkeeper generation, and confirm that no production tar
    For an already-installed package, use the realm's established update operation rather than uninstalling it.
    Record the STAGED build, then confirm the selected build becomes ACTIVE/APPLIED with verified parity and the
    `protected-framexml` requirement.
-8. Restart only PTR so its server bundle and managed Transmogrifier template load. Resolve the allocated entry with
+6. Restart only PTR after activation so the managed protected FrameXML generation loads. Resolve the allocated entry with
    `.content allocations` or `.nativetransmog npc list`, and reuse or create the reviewed PTR spawn.
-9. Publish that activated isolated client generation through the existing Portalkeeper protected-FrameXML flow.
+7. Publish that activated isolated client generation through the existing Portalkeeper protected-FrameXML flow.
    Do not copy loose FrameXML, install an addon, edit the cumulative TOC manually, or modify Portalkeeper.
 
 ## Collection notification validation

@@ -73,7 +73,7 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertIn('GameTooltip:SetInventoryItem("player",button.inventorySlot)', LUA)
         self.assertIn('return "Appearance: Hidden"', LUA)
         self.assertIn('return "Transmogrified to: "..name', LUA)
-        self.assertNotIn("GameTooltip:HookScript", LUA)
+        self.assertIn('GameTooltip:HookScript("OnTooltipSetItem"', LUA)
 
     def test_open_state_sync_is_server_confirmed_and_additive(self):
         self.assertIn("void SendEquipmentState", WARDROBE_H)

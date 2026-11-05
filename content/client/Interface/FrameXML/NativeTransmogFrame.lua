@@ -16,7 +16,7 @@ local cursorHistory, catalog, incomingCatalog, buttons = {}, {}, {}, {}
 local slotButtons, overrideStates = {}, {}
 local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
-local modelRotation, scheduledRefresh = 0, nil
+local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
 local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 5, 52, 10
 
 local RESULT_TEXT = {
@@ -110,12 +110,6 @@ local function refreshEquipmentIndicator(wireSlot)
  elseif button.hasItem and state == 2 then button.hiddenMark:Show() end
 end
 
-local function wireSlotForInventory(inventorySlot)
- for wireSlot=1,#SLOT_ORDER do
-  local candidate=getInventorySlot(wireSlot)
-  if candidate==inventorySlot then return wireSlot end
- end
-end
 local function appearanceTooltipText(wireSlot)
  local info=overrideStates[wireSlot]
  if not info then return nil end
@@ -126,14 +120,24 @@ local function appearanceTooltipText(wireSlot)
   if name then return "Transmogrified to: "..name end
  end
 end
-local function appendAppearanceTooltip(wireSlot)
+local function appendAppearanceTooltip(tooltip,wireSlot)
  local text=appearanceTooltipText(wireSlot)
  if not text then return end
- for line=1,GameTooltip:NumLines() do
-  local fontString=_G["GameTooltipTextLeft"..line]
+ for line=1,tooltip:NumLines() do
+  local fontString=_G[tooltip:GetName().."TextLeft"..line]
   if fontString and fontString:GetText()==text then return end
  end
- GameTooltip:AddLine(text,.6,.8,1)
+ tooltip:AddLine(text,.6,.8,1)
+end
+local function paperDollTooltipWireSlot(tooltip)
+ if tooltip~=GameTooltip then return nil end
+ local owner=tooltip:GetOwner()
+ if not owner then return nil end
+ for wireSlot=1,#SLOT_INVENTORY_NAMES do
+  local inventorySlot=getInventorySlot(wireSlot)
+  if owner==_G["Character"..SLOT_INVENTORY_NAMES[wireSlot]] and owner:GetID()==inventorySlot and
+      GetInventoryItemTexture("player",inventorySlot) then return wireSlot end
+ end
 end
 local function updateEquipmentSlot(wireSlot)
  local button = slotButtons[wireSlot]
@@ -301,7 +305,7 @@ function NativeTransmog_EquipmentSlot_OnEnter(button)
   GameTooltip:AddLine(unavailableSlotMessage(button:GetID()),.8,.8,.8,true)
  elseif button.hasItem and button.inventorySlot then
   GameTooltip:SetInventoryItem("player",button.inventorySlot)
-  appendAppearanceTooltip(button:GetID())
+  appendAppearanceTooltip(GameTooltip,button:GetID())
  else
   GameTooltip:SetText(SLOT_LABELS[SLOT_ORDER[button:GetID()]],1,1,1)
   GameTooltip:AddLine("Equip an item to customize this slot.",.8,.8,.8,true)
@@ -309,10 +313,14 @@ function NativeTransmog_EquipmentSlot_OnEnter(button)
  GameTooltip:Show()
 end
 function NativeTransmog_EquipmentSlot_OnLeave() GameTooltip:Hide() end
-function NativeTransmog_PaperDollTooltip(button)
- if not button or not button.GetID then return end
- local wireSlot=wireSlotForInventory(button:GetID())
- if wireSlot and slotHasItem(wireSlot) then appendAppearanceTooltip(wireSlot); GameTooltip:Show() end
+function NativeTransmog_GameTooltip_OnTooltipSetItem(tooltip)
+ if augmentingTooltip then return end
+ local wireSlot=paperDollTooltipWireSlot(tooltip)
+ if not wireSlot then return end
+ augmentingTooltip=true
+ appendAppearanceTooltip(tooltip,wireSlot)
+ tooltip:Show()
+ augmentingTooltip=false
 end
 
 function NativeTransmog_FrameUpdate()
@@ -323,9 +331,7 @@ function NativeTransmog_OnLoad(frame)
  frame:RegisterForDrag("LeftButton"); frame:RegisterEvent("CHAT_MSG_ADDON")
  frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED"); frame:RegisterEvent("PLAYER_ENTERING_WORLD")
  if RegisterAddonMessagePrefix then RegisterAddonMessagePrefix(PREFIX) end
- if hooksecurefunc and PaperDollItemSlotButton_OnEnter then
-  hooksecurefunc("PaperDollItemSlotButton_OnEnter",NativeTransmog_PaperDollTooltip)
- end
+ GameTooltip:HookScript("OnTooltipSetItem",NativeTransmog_GameTooltip_OnTooltipSetItem)
  UISpecialFrames[#UISpecialFrames+1]=frame:GetName(); NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
 end
 function NativeTransmog_OnShow()

@@ -2,7 +2,7 @@
 
 ## Phase 4C
 
-Test date: 2026-11-04.
+Test date: 2026-11-05.
 
 ### Passed
 
@@ -11,36 +11,32 @@ Test date: 2026-11-04.
     historical backfill suppression, account/character namespaces, centralized notification placement, and batch
     quest collection.
 - Focused tooltip/synchronization suite: `python3 -m unittest tests.test_phase4c.PhaseFourCTooltipTests`
-  - 8 tests passed for canonical source-name resolution, original/applied/hidden text, idempotent append behavior,
-    narrow CharacterFrame hook scope, read-only world-entry synchronization, changed-slot pushes, relic wording, and
-    absence of protocol-version/opcode/database changes.
+  plus `tests.test_phase4c.PhaseFourCTooltipLifecycleRegressionTests`
+  - 16 tests passed for canonical source-name resolution, original/applied/hidden text, initial construction, native
+    tooltip rebuilds, idempotent append behavior, recursion protection, exact CharacterFrame-owner filtering,
+    equipment swaps, relog/`/reload` synchronization, unrelated tooltips, changed-slot pushes, and relic wording.
 - Full module suite: `python3 -m unittest discover -s tests -p 'test_phase*.py'`
-  - 141 tests passed, including all Phase 1–4B regressions.
+  - 149 tests passed, including all Phase 1–4B regressions.
 - Existing catalog fixtures passed against Playerbot `item_template.sql` for all head, shoulder, chest, main-hand,
   and off-hand cases.
 - Lua/FrameXML validation:
   - `NativeTransmogFrame.lua` parsed successfully through the local x86_64 Lua 5.1 shared runtime using
     `luaL_loadbuffer`.
   - `NativeTransmogFrame.xml` parsed successfully with Python `xml.etree.ElementTree`.
-- Playerbot AzerothCore Release compile/link:
-  - Playerbot revision `8a4e76eac8c4`, GCC 15.2, C++20, `MODULES=static`, `SCRIPTS=none`, core/script PCH disabled
-    after the constrained `/tmp` filesystem could not assemble the core PCH/archive.
-  - All seven module translation units compiled, `libmodules.a` linked, `libgame.a` linked, and `worldserver` linked
-    at 100%. The generated loader and binary contain `Addmod_native_transmogScripts`; the binary contains
-    `WardrobeService::SendEquipmentState` and `SendEquipmentSlotState`.
-  - Worldserver SHA-256: `203656115de164c594a9c7d25df325cd1651c550540ae4d1292901839d0746e6`.
+- Worldserver was not rebuilt for the 2026-11-05 fix because no C++ or server transport changed. The earlier Phase 4C
+  Playerbot Release compile/link result remains historical evidence, not a new validation result for this fix.
 - Deterministic EPF verification:
   - Four members; two builds were byte-for-byte identical and `python3 content/build_epf.py --check` passed.
-  - SHA-256: `aabf03491657d2a9889eddb314c60dc0121a9edfdf53d7008df977071b1e65f2`.
+  - SHA-256: `14cf2ca1044ac434134dbe9fad0fb5699db1af13ba66e1ca1d0551ca749a06fe`.
 - `git diff --check` passed.
 
 ### Not run or not proven
 
 No build-12340 client, live MySQL persistence failure, live account-wide concurrent characters, Content Manager
 activation, Portalkeeper publication, PTR deployment, NPC interaction, chat delivery, or actual GameTooltip refresh
-was exercised. In particular, the narrow `PaperDollItemSlotButton_OnEnter` post-hook, read-only `SYNC` timing,
-comparison tooltips, no-duplicate lines, relic wording, relog/restart restoration, and preserved item-tooltip content
-require the manual evidence in `PHASE4C_PTR_VALIDATION.md`.
+was exercised. In particular, the filtered `OnTooltipSetItem` post-script, read-only `SYNC` timing, comparison
+tooltips, no-duplicate lines, relic wording, relog/restart restoration, and preserved item-tooltip content require
+the manual evidence in `PHASE4C_PTR_VALIDATION.md`.
 
 No deployment, database mutation, client publication, commit, or push was performed.
 
