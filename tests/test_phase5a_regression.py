@@ -12,6 +12,46 @@ MODULE = (ROOT / "src/NativeTransmogModule.cpp").read_text()
 SERVICE = (ROOT / "src/NativeTransmogService.cpp").read_text()
 WARDROBE = (ROOT / "src/NativeTransmogWardrobe.cpp").read_text()
 LUA = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.lua").read_text()
+XML = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.xml").read_text()
+
+
+class SetResponseModel:
+    """Small executable model of the Lua request ownership/state rules."""
+
+    def __init__(self):
+        self.request_id = 0
+        self.active = None
+        self.rows = {}
+        self.visible = []
+        self.shown = True
+
+    def begin(self, kind, set_id=None, expected=0):
+        self.request_id += 1
+        self.active = dict(id=self.request_id, kind=kind, set_id=set_id, expected=expected)
+        self.rows = {}
+        return self.request_id
+
+    def row(self, request_id, index, value):
+        if not self.shown or not self.active or request_id != self.active["id"]:
+            return
+        if 1 <= index <= 32:
+            self.rows[index] = value
+
+    def finish(self, request_id):
+        if not self.shown or not self.active or request_id != self.active["id"]:
+            return False
+        expected = self.active["expected"]
+        result = [self.rows[index] for index in range(1, expected + 1) if index in self.rows]
+        self.active = None
+        if len(result) != expected:
+            return False
+        self.visible = result
+        return True
+
+    def close(self):
+        self.shown = False
+        self.request_id += 1
+        self.active = None
 
 
 def protocol_version() -> str:
@@ -34,6 +74,61 @@ def response_commands() -> set[str]:
 
 
 class PhaseFiveAProtocolRegressionTests(unittest.TestCase):
+    def test_xml_generated_pagination_names_match_lua_globals(self):
+        self.assertIn('<Button name="$parentPrevious"', XML)
+        self.assertIn("NativeTransmogFrameSetsPanelPrevious", LUA)
+        self.assertIn("NativeTransmogFrameSetsPanelNext", LUA)
+        self.assertNotIn("NativeTransmogFrameSetsPrevious", LUA)
+
+    def test_set_response_lifecycle_is_bounded_and_request_owned(self):
+        for marker in ("activeSetRequest", "matchingSetRequest", "cancelSetRequest", "SET_PAGE_SIZE", "MAXIMUM_SET_PIECES"):
+            self.assertIn(marker, LUA)
+        self.assertIn('request.phase~="PAGE"', LUA)
+        self.assertIn('request.phase~="ROWS"', LUA)
+        self.assertIn('request.phase~="INFO"', LUA)
+        self.assertIn('request.phase~="PIECES"', LUA)
+        self.assertIn("incomingPieces[pieceIndex]=", LUA)
+        self.assertIn("#completedPieces~=selectedSet.total", LUA)
+        self.assertIn("setPieces={}; setStatus", LUA)
+
+    def test_repeated_responses_and_maximum_size_are_idempotent(self):
+        state = SetResponseModel()
+        request = state.begin("SETDETAIL", 217, 32)
+        for index in range(1, 33):
+            state.row(request, index, index)
+            state.row(request, index, index)  # repeated SETPIECE replaces, never appends
+        self.assertTrue(state.finish(request))
+        self.assertEqual(state.visible, list(range(1, 33)))
+        self.assertFalse(state.finish(request))  # repeated terminator is stale
+
+    def test_rapid_selection_close_and_late_messages_cannot_replace_current_rows(self):
+        state = SetResponseModel()
+        first = state.begin("SETDETAIL", 217, 8)
+        state.row(first, 1, "judgement")
+        second = state.begin("SETDETAIL", 875, 5)
+        state.row(first, 2, "stale")
+        for index in range(1, 6):
+            state.row(second, index, f"t9-{index}")
+        self.assertTrue(state.finish(second))
+        self.assertEqual(state.visible, [f"t9-{index}" for index in range(1, 6)])
+        late = state.begin("SETS", expected=8)
+        state.close()
+        state.row(late, 1, "late")
+        self.assertFalse(state.finish(late))
+
+    def test_pagination_replaces_only_the_requested_page(self):
+        state = SetResponseModel()
+        first = state.begin("SETS", expected=8)
+        for index in range(1, 9):
+            state.row(first, index, index)
+        self.assertTrue(state.finish(first))
+        second = state.begin("SETS", expected=2)
+        state.row(first, 1, "old page")
+        state.row(second, 1, 9)
+        state.row(second, 2, 10)
+        self.assertTrue(state.finish(second))
+        self.assertEqual(state.visible, [9, 10])
+
     def test_protocol_version_compatibility(self):
         self.assertEqual(protocol_version(), "3")
         self.assertEqual(client_version(), protocol_version())

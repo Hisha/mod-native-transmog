@@ -1,5 +1,34 @@
 # Test results
 
+## Phase 5A stabilization
+
+Test date: 2026-11-05.
+
+### Passed
+
+- Full module suite: `python3 -m unittest discover -s tests -p 'test_*.py'`
+  - 179 tests passed, including response-lifecycle regressions for repeated page/detail messages, 32-piece details,
+    rapid selection changes, page replacement, closure, and late messages; curated-catalog and server-name contracts;
+    and all Phase 1–4C behavior.
+- Lua/FrameXML validation:
+  - `NativeTransmogFrame.lua` returned `0` from `luaL_loadbuffer` using the local x86_64 Lua 5.1 runtime.
+  - `NativeTransmogFrame.xml` parsed successfully with Python `xml.etree.ElementTree`.
+- Playerbot AzerothCore revision `8a4e76eac8c4` Release worldserver compiled and linked successfully with the
+  stabilization module sources.
+- AzerothCore C++ codestyle and `git diff --check` passed.
+- Existing appearance catalog fixtures passed against the installed AzerothCore base `item_template.sql`.
+- Deterministic EPF verification:
+  - Four members; two builds were byte-for-byte identical and `python3 content/build_epf.py --check` passed.
+  - SHA-256: `6e4c7daa8899b839a7e3da754ec3d25953f7b9b06203ca1373fa2baaae203536`.
+
+### Not run or not proven
+
+No build-12340 client, live realm database, Content Manager activation, Portalkeeper publication, or PTR deployment
+was exercised. Actual asynchronous delivery timing, cleared item-cache behavior, class/faction catalog contents,
+and protected FrameXML globals require the checks in `PHASE5A_PTR_VALIDATION.md`.
+
+No deployment, database mutation, commit, or push was performed.
+
 ## Phase 5A
 
 Test date: 2026-11-05.

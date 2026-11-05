@@ -25,6 +25,7 @@ struct EquipmentSet
     std::uint32_t id = 0;
     std::string name;
     std::uint32_t classMask = 0;
+    bool hasExplicitClassMask = false;
     std::vector<SetPiece> pieces;
 };
 

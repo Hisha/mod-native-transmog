@@ -10,6 +10,7 @@
 #include "SharedDefines.h"
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <set>
 #include <unordered_set>
@@ -19,6 +20,32 @@ namespace native_transmog
 namespace
 {
 constexpr std::size_t MaximumSetPieces = 32;
+
+// ItemSet.dbc identifies gameplay sets, but does not classify them as tier, PvP, or miscellaneous.
+// Keep this reviewed catalog explicit: membership, names, and restrictions still come from live DBC/template data.
+constexpr std::array<std::uint32_t, 93> CuratedSetIds = {
+    // Classic Tier 1 and Tier 2 class armor.
+    201, 202, 203, 204, 205, 206, 207, 208, 209,
+    210, 211, 212, 213, 214, 215, 216, 217, 218,
+    // WotLK arena armor families (all arena seasons remain alternatives in their authentic ItemSet identity).
+    765, 766, 767, 768, 769, 770, 771, 772,
+    773, 774, 775, 776, 777, 778, 779, 780,
+    // Death knight Tier 7 damage and tank armor.
+    792, 793,
+    // WotLK Tier 9 class/spec/faction armor.
+    843, 844, 845, 846, 847, 848, 849, 850, 851, 852,
+    853, 854, 855, 856, 857, 858, 859, 860, 861, 862,
+    863, 864, 865, 866, 867, 868, 869, 870, 871, 872,
+    873, 874, 875, 876, 877, 878, 879, 880,
+    // WotLK Tier 10 class/spec armor.
+    883, 884, 885, 886, 887, 888, 889, 890, 891, 892,
+    893, 894, 895, 896, 897, 898, 899, 900, 901
+};
+
+bool IsCuratedSet(std::uint32_t id)
+{
+    return std::find(CuratedSetIds.begin(), CuratedSetIds.end(), id) != CuratedSetIds.end();
+}
 
 std::string Clean(std::string value, std::size_t maximum = 120)
 {
@@ -97,7 +124,8 @@ void SetCatalog::Initialize()
     std::unordered_set<std::uint32_t> catalogItems;
     for (auto const& [entry, itemTemplate] : *sObjectMgr->GetItemTemplateStore())
     {
-        if (!itemTemplate.ItemSet || !sItemSetStore.LookupEntry(itemTemplate.ItemSet))
+        if (!itemTemplate.ItemSet || !IsCuratedSet(itemTemplate.ItemSet) ||
+            !sItemSetStore.LookupEntry(itemTemplate.ItemSet))
             continue;
         AppearanceKey appearance;
         std::uint8_t equipmentSlot = EquipmentSlotFor(itemTemplate.InventoryType);
@@ -109,7 +137,14 @@ void SetCatalog::Initialize()
         ItemSetEntry const* dbcSet = sItemSetStore.LookupEntry(itemTemplate.ItemSet);
         set.name = Clean(dbcSet && dbcSet->name[0] ? dbcSet->name[0] : ("Item Set " + std::to_string(set.id)));
         if (itemTemplate.AllowableClass && itemTemplate.AllowableClass != static_cast<std::uint32_t>(-1))
-            set.classMask |= itemTemplate.AllowableClass & CLASSMASK_ALL_PLAYABLE;
+        {
+            std::uint32_t mask = itemTemplate.AllowableClass & CLASSMASK_ALL_PLAYABLE;
+            if (mask)
+            {
+                set.classMask = set.hasExplicitClassMask ? set.classMask & mask : mask;
+                set.hasExplicitClassMask = true;
+            }
+        }
 
         auto found = std::find_if(set.pieces.begin(), set.pieces.end(), [&](SetPiece const& piece)
         {
@@ -254,7 +289,7 @@ void SetCatalog::Initialize()
                 set.id, set.pieces.size(), MaximumSetPieces);
             set.pieces.resize(MaximumSetPieces);
         }
-        if (!set.pieces.empty() && set.classMask)
+        if (!set.pieces.empty() && set.hasExplicitClassMask && set.classMask)
             _sets.push_back(std::move(set));
     }
     std::sort(_sets.begin(), _sets.end(), [](EquipmentSet const& left, EquipmentSet const& right)
@@ -274,7 +309,7 @@ void SetCatalog::Initialize()
             ++_partialSourceSets;
     }
     LOG_INFO("server.loading",
-        "Native Transmog Phase 5A indexed {} gameplay equipment sets (sources: {} complete, {} partial).",
+        "Native Transmog Phase 5A indexed {} curated Blizzard armor sets (sources: {} complete, {} partial).",
         _sets.size(), _completeSourceSets, _partialSourceSets);
 }
 

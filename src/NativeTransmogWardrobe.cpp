@@ -23,6 +23,16 @@ constexpr std::size_t MaximumRequestLength = 160;
 constexpr std::uint32_t MaximumCursor = 1000000;
 constexpr std::uint32_t SetPageSize = 8;
 
+std::string CleanProtocolText(std::string value, std::size_t maximum = 120)
+{
+    for (char& character : value)
+        if (character == '\t' || character == '\n' || character == '\r')
+            character = ' ';
+    if (value.size() > maximum)
+        value.resize(maximum);
+    return value;
+}
+
 bool ParseUnsigned(std::string_view value, std::uint32_t& result)
 {
     if (value.empty() || value.size() > 10)
@@ -245,9 +255,11 @@ void WardrobeService::HandleSetDetail(Player* player, std::vector<std::uint32_t>
         if (!item)
             continue;
         bool collected = SetCatalog::Instance().IsPieceCollected(player, piece);
+        ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(item);
+        std::string itemName = itemTemplate ? CleanProtocolText(itemTemplate->Name1, 60) : std::string();
         Send(player, "SETPIECE\t" + std::to_string(requestId) + '\t' + std::to_string(set->id) + '\t' + std::to_string(++index) + '\t' +
             std::to_string(item) + '\t' + std::to_string(piece.equipmentSlot) + '\t' +
-            std::to_string(collected ? 1 : 0) + '\t' + piece.source);
+            std::to_string(collected ? 1 : 0) + '\t' + piece.source + '\t' + itemName);
     }
     Send(player, "SETDETAILEND\t" + std::to_string(requestId) + '\t' + std::to_string(set->id));
 }

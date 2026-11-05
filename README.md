@@ -6,7 +6,7 @@ Phases 1–3C provide the preview UI, NPC authorization, persistent collection, 
 
 ## Phase 5A equipment sets
 
-The wardrobe has `Appearances` and `Sets` modes. Sets are discovered from valid `ItemSet.dbc` identities and `item_template.ItemSet`, filtered by explicit class/race restrictions, and matched against the existing composite appearance collection. The server builds acquisition metadata from world loot, reference loot, vendors, and quest rewards at startup. Unknown paths remain explicitly unknown. Browsing and preview require no NPC session; every mutation retains the existing Transmogrifier authorization. See [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
+The wardrobe has `Appearances` and `Sets` modes. Sets come from an explicit reviewed catalog of Blizzard class tier and PvP ItemSet identities; loaded `ItemSet.dbc` and `item_template.ItemSet` data remain authoritative for names, membership, and class/race restrictions. The server builds acquisition metadata from world loot, reference loot, vendors, and quest rewards at startup. Unknown paths remain explicitly unknown. Browsing and preview require no NPC session; every mutation retains the existing Transmogrifier authorization. See [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
 
 ## Phase 4C notifications and tooltips
 

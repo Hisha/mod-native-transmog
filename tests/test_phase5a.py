@@ -31,6 +31,17 @@ class CatalogModel:
 
 
 class PhaseFiveADataTests(unittest.TestCase):
+    def test_curated_catalog_is_explicit_and_keeps_verified_sets(self):
+        self.assertIn("CuratedSetIds", CATALOG)
+        self.assertIn("IsCuratedSet(itemTemplate.ItemSet)", CATALOG)
+        curated_block = CATALOG[CATALOG.index("CuratedSetIds = {"):CATALOG.index("};", CATALOG.index("CuratedSetIds = {"))]
+        re_module = __import__("re")
+        curated_block = re_module.sub(r"//.*", "", curated_block)
+        curated_ids = {int(value) for value in re_module.findall(r"\b\d+\b", curated_block)}
+        self.assertEqual(len(curated_ids), 93)
+        self.assertTrue({201, 217, 765, 792, 843, 875, 883, 901} <= curated_ids)
+        self.assertNotIn(881, curated_ids)  # Shard/ring gameplay set, not an armor ensemble.
+
     def test_discovery_requires_itemset_and_loaded_dbc_identity(self):
         self.assertIn("itemTemplate.ItemSet", CATALOG)
         self.assertIn("sItemSetStore.LookupEntry(itemTemplate.ItemSet)", CATALOG)
@@ -50,6 +61,8 @@ class PhaseFiveADataTests(unittest.TestCase):
 
     def test_class_filter_uses_explicit_item_masks_not_armor_subclass(self):
         self.assertIn("itemTemplate.AllowableClass", CATALOG)
+        self.assertIn("set.classMask & mask", CATALOG)
+        self.assertNotIn("set.classMask |=", CATALOG)
         self.assertIn("player->getClass()", CATALOG)
         class_filter = CATALOG[CATALOG.index("bool SetCatalog::IsClassAppropriate"):]
         self.assertNotIn("SubClass", class_filter[: class_filter.index("SetCatalog::ListFor")])
@@ -119,7 +132,8 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
         self.assertIn('parts[2] == "SETDETAIL" && fields.size() == 2', WARDROBE)
         self.assertIn("FindFor(player, fields[1])", WARDROBE)
         self.assertIn("readOnlySetRequest", WARDROBE)
-        self.assertIn('fields[3]=="0" and tonumber(fields[4])==setRequestId', LUA)
+        self.assertIn('command=="RESULT" and fields[3]=="0"', LUA)
+        self.assertIn('tonumber(fields[4])~=request.id', LUA)
 
 
 class PhaseFiveAUiTests(unittest.TestCase):
@@ -139,6 +153,12 @@ class PhaseFiveAUiTests(unittest.TestCase):
         self.assertIn("model:Undress()", preview)
         self.assertIn("model:TryOn(piece.entry)", preview)
         self.assertNotIn("SendAddonMessage", preview)
+
+    def test_server_item_names_precede_cache_fallback(self):
+        self.assertIn("itemTemplate->Name1", WARDROBE)
+        self.assertIn("piece.source + '\\t' + itemName", WARDROBE)
+        self.assertIn('GetItemInfo(entry) or authoritativeName or ("Item " .. entry)', LUA)
+        self.assertIn('name=fields[10]~="" and fields[10] or nil', LUA)
 
     def test_reset_and_existing_application_paths_remain_separate(self):
         reset = LUA[LUA.index("function NativeTransmog_ResetPreview"):LUA.index("function NativeTransmog_SelectSlot")]

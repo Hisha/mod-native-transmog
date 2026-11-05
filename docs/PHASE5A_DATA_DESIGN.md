@@ -2,22 +2,23 @@
 
 ## Scope and evidence boundary
 
-Phase 5A indexes gameplay equipment sets. It does not attempt to infer cosmetic ensembles.
+Phase 5A presents a reviewed catalog of Blizzard class armor. It does not attempt to infer cosmetic ensembles.
 
 `ItemSet.dbc` is the client data definition for a gameplay item set: localized name, up to 17 item IDs in the 3.3.5a file layout, eight set-bonus spells and thresholds, and optional skill requirements. AzerothCore's `ItemSetEntry` exposes the localized name, the first ten item IDs, the bonus arrays, and skill requirements. The core loads it into `sItemSetStore` and validates nonzero `item_template.ItemSet` values against that store.
 
-The catalog therefore groups eligible `item_template` rows by `ItemSet`, but admits a group only when its ID resolves in `sItemSetStore`. This uses the database column to retain server variants beyond the ten item IDs exposed by the runtime structure while keeping the DBC as the authority for the set identity and name. A visually coordinated collection with `ItemSet = 0` is not discovered. No relationship is derived from item names, display IDs, armor subclass, or web data.
+`ItemSet.dbc` has no field that distinguishes tier armor, class PvP armor, crafted sets, dungeon sets, trinket/ring sets, and other gameplay groupings. Automatic admission based on `ItemSet`, a class mask, a name, or an ID interval therefore cannot implement the intended browser without false positives. The catalog uses an explicit reviewed ItemSet-ID allowlist. For an admitted identity, the loaded DBC and `item_template.ItemSet` remain authoritative for its name and membership. The database column retains server variants beyond the ten item IDs exposed by the runtime structure. A visually coordinated collection with `ItemSet = 0` is not discovered. No membership is derived from item names, display IDs, armor subclass, or web data.
 
 This produces two deliberately different categories:
 
-- A gameplay item set has a nonzero, valid ItemSet identity and defined DBC metadata/set-bonus semantics. Phase 5A supports this category.
+- A curated appearance set has a reviewed ItemSet identity in the allowlist and valid loaded DBC/template data. Phase 5A supports this category.
+- A gameplay item set can have a valid ItemSet identity without being suitable for the appearance browser. It is excluded unless explicitly reviewed.
 - A cosmetic ensemble may merely share art. It may have no ItemSet identity and may include offset pieces. Phase 5A does not support it. The `SetCatalog` boundary permits a future explicit, independently validated ensemble provider without changing the browser or progress protocol.
 
 ## Discovery and class filtering
 
 The catalog is built once during world startup and configuration reload, after item templates and DBC stores are available. Every eligible armor or weapon appearance is resolved through `CollectionService::ResolveAppearance`. Nonvisual inventory types are omitted.
 
-For each valid set, the index records the union of explicit playable `AllowableClass` masks. Sets with no explicit class evidence are excluded conservatively. A player sees a set only when that union includes the player's class. Individual faction/race variants are filtered by `AllowableRace` when totals and details are produced. This means:
+For each admitted set, the index records the intersection of nonempty explicit playable `AllowableClass` masks. This prevents broad test/template alternatives from widening a class-specific family. Sets with no explicit class evidence, or contradictory masks with an empty intersection, are excluded conservatively. A player sees a set only when that mask includes the player's class. Individual faction/race variants are filtered by `AllowableRace` when totals and details are produced. This means:
 
 - sets explicitly restricted to another class are excluded;
 - damage, healing, and tank sets remain separate when their ItemSet IDs are separate;
@@ -32,9 +33,22 @@ Representative verified fixtures from AzerothCore's WotLK `item_template` data a
 
 The IDs above were read from the installed AzerothCore base world SQL, not inferred from names or external sources. The live catalog still requires the set ID to resolve in the loaded DBC.
 
-### Installed-data audit
+### Curated catalog and installed-data audit
 
-A deterministic audit of the installed AzerothCore base world SQL found 390 explicitly class-restricted gameplay-set candidates, including 102 visible to paladins. At the visual-slot grouping used by the implementation, 312 candidates have source information for every piece, 5 have partial source information, and 73 have no resolved source. These are build-input counts; the startup log is authoritative for a deployed realm because it additionally rejects IDs absent from that realm's loaded `ItemSet.dbc` and invalid display records.
+A deterministic audit of AzerothCore WotLK base `item_template` at core revision `8a4e76eac8c4ccebf547113afe7b51d6c3e91641` found 390 class-restricted gameplay-set candidates. That result is evidence that automatic classification is too broad, not an inclusion list.
+
+The initial reviewed catalog contains these 93 ItemSet identities:
+
+- Classic Tier 1: 201, 202, 203, 204, 205, 206, 207, 208, 209.
+- Classic Tier 2: 210, 211, 212, 213, 214, 215, 216, 217, 218.
+- WotLK arena class/spec armor families: 765, 766, 767, 768, 769, 770, 771, 772, 773, 774, 775, 776, 777, 778, 779, 780. The authentic data groups season variants as alternatives under each identity.
+- Death knight Tier 7: 792 and 793.
+- WotLK Tier 9: 843 through 880, with every ID written individually in `CuratedSetIds`; this is a documented grouping, not a runtime numeric-range rule.
+- WotLK Tier 10: 883 through 901, likewise represented by explicit IDs.
+
+Every other valid gameplay ItemSet is excluded from the main browser because it has not been explicitly classified as one of those reviewed armor categories. In particular, 881 and 882 are shard/ring gameplay sets, not armor ensembles. Dungeon, crafted, resistance, weapon, trinket, and miscellaneous sets are not admitted merely because they have a class mask, bonus, suggestive name, or nearby numeric ID. Additional Blizzard visual ensembles can be added only by reviewing a concrete ItemSet ID and its actual template membership. The startup log is authoritative for a realm because a curated ID is still rejected when its DBC identity, visual template, or class evidence is unavailable.
+
+All 93 curated IDs resolve in that audited base template data with nonempty class-mask intersections: 18 identities have eight visual armor slots and 75 have five. This audit checks the build input; the runtime still performs every DBC, appearance, class, and race check rather than trusting the audit count.
 
 ## Piece grouping and collection progress
 
@@ -67,9 +81,11 @@ Not presently indexed: gameobject/container loot, crafting, mail/event/script re
 `NTRANSMOG` protocol version 3 adds read-only operations while retaining all version-2 mutation semantics:
 
 - `SETS <requestId> <filter> <cursor>`: filter 0 all, 1 incomplete, 2 complete. Cursor is bounded and pages contain at most eight summaries. Replies echo the request ID in `SETPAGE`, zero or more `SET`, and `SETEND`.
-- `SETDETAIL <requestId> <setId>`: the supplied ID is accepted only if it is in the startup catalog and appropriate to the authenticated player's class. Replies echo the request ID in one bounded header, eligible `SETPIECE` rows, and `SETDETAILEND`.
+- `SETDETAIL <requestId> <setId>`: the supplied ID is accepted only if it is in the startup catalog and appropriate to the authenticated player's class. Replies echo the request ID in one bounded header, eligible `SETPIECE` rows carrying entry, slot, progress, source, and authoritative server item name, and `SETDETAILEND`.
 
 Inputs use strict unsigned parsing, exact field counts, the existing request-length bound, cooldown, stable name/ID ordering, and no custom opcode. Set browsing does not require an NPC session. `CAT`, `APPLY`, `HIDE`, and `REMOVE` retain their existing server-issued NPC token and mutation snapshot checks. No client-supplied appearance or item identity is trusted.
+
+Set response ownership is a client-side state machine keyed by request ID, operation kind, expected set ID, and response phase. A page accepts at most eight unique rows; a detail accepts at most 32 ordinal pieces. Repeated rows are idempotent, a repeated header cannot erase accumulated pieces, and incomplete terminators do not publish partial data. Selection changes, mode changes, timeouts, and frame closure invalidate the active request, so late replies cannot mutate hidden or newer UI state.
 
 ## UI and preview
 
@@ -78,6 +94,10 @@ The native wardrobe now has `Appearances` and `Sets` modes. Appearances retains 
 Selecting a set rebuilds the existing `DressUpModel` locally with `SetUnit("player")`, `Undress()`, and ordered `TryOn(item)` calls. Rotation remains unchanged. Reset Preview calls `SetUnit("player")`, restoring the unit's current server-confirmed visible equipment/overrides. No item is equipped, overridden, purchased, or applied.
 
 WotLK's DressUpModel is last-write-wins for a slot and has no modern transmog-set API. It cannot reliably display non-dressable relics, hidden modern geometry rules, or every weapon/off-hand combination; Phase 5A sends one deterministic representative per grouped visual and uses only supported 3.3.5a calls.
+
+### Item-name resolution
+
+The generic `Item <entry>` label was not caused by a bad set member or a missing server template. The client UI called `GetItemInfo(entry)`, which returns `nil` until that build's local item cache has resolved the entry, while the protocol carried only the numeric entry and source text. The server already resolves the same representative through `ObjectMgr` and therefore now appends its authoritative `ItemTemplate::Name1` to `SETPIECE`. The row uses a cached localized client name first, the authoritative server name second, and `Item <entry>` only when neither side can resolve a name. The item ID and native hyperlink are never substituted.
 
 ## Performance and failure behavior
 
