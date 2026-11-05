@@ -168,7 +168,9 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         return true;
     }
 
-    if (parts[2] == "CAT" && fields.size() == 4)
+    if (parts[2] == "SYNC" && fields.empty())
+        SendEquipmentState(player, 0);
+    else if (parts[2] == "CAT" && fields.size() == 4)
         HandleCatalog(player, fields);
     else if (parts[2] == "APPLY" && fields.size() == 4)
         HandleApply(player, fields);
@@ -190,23 +192,34 @@ void WardrobeService::SendEquipmentState(Player* player, std::uint32_t token) co
     for (std::uint32_t wireSlot = 1; wireSlot <= 14; ++wireSlot)
     {
         std::uint8_t equipmentSlot = ResolveSlot(wireSlot);
-        Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, equipmentSlot);
-        AppearanceOverride appearanceOverride;
-        std::uint32_t state = 0;
-        std::uint32_t appearanceItem = 0;
-        if (item && ApplicationService::Instance().GetOverride(item, appearanceOverride))
-        {
-            if (appearanceOverride.state == OverrideState::Hidden)
-                state = ApplicationService::Instance().CanHide(equipmentSlot) ? 2 : 0;
-            else
-            {
-                state = 1;
-                appearanceItem = appearanceOverride.appearanceItem;
-            }
-        }
-        Send(player, "STATE\t" + std::to_string(token) + '\t' + std::to_string(wireSlot) + '\t' +
-            std::to_string(state) + '\t' + std::to_string(appearanceItem));
+        SendEquipmentSlotState(player, token, wireSlot, equipmentSlot);
     }
+}
+
+void WardrobeService::SendEquipmentSlotState(Player* player, std::uint32_t token,
+    std::uint32_t wireSlot, std::uint8_t equipmentSlot) const
+{
+    Item* item = player ? player->GetItemByPos(INVENTORY_SLOT_BAG_0, equipmentSlot) : nullptr;
+    AppearanceOverride appearanceOverride;
+    std::uint32_t state = 0;
+    std::uint32_t appearanceItem = 0;
+    std::string appearanceName;
+    if (item && ApplicationService::Instance().GetOverride(item, appearanceOverride))
+    {
+        if (appearanceOverride.state == OverrideState::Hidden)
+            state = ApplicationService::Instance().CanHide(equipmentSlot) ? 2 : 0;
+        else if (ItemTemplate const* source = sObjectMgr->GetItemTemplate(appearanceOverride.appearanceItem))
+        {
+            state = 1;
+            appearanceItem = appearanceOverride.appearanceItem;
+            appearanceName = source->Name1;
+            std::replace(appearanceName.begin(), appearanceName.end(), '\t', ' ');
+            std::replace(appearanceName.begin(), appearanceName.end(), '\n', ' ');
+            std::replace(appearanceName.begin(), appearanceName.end(), '\r', ' ');
+        }
+    }
+    Send(player, "STATE\t" + std::to_string(token) + '\t' + std::to_string(wireSlot) + '\t' +
+        std::to_string(state) + '\t' + std::to_string(appearanceItem) + '\t' + appearanceName);
 }
 
 std::uint8_t WardrobeService::ResolveSlot(std::uint32_t wireSlot) const
@@ -229,6 +242,14 @@ std::uint8_t WardrobeService::ResolveSlot(std::uint32_t wireSlot) const
         case 14: return EQUIPMENT_SLOT_TABARD;
         default: return NULL_SLOT;
     }
+}
+
+std::uint32_t WardrobeService::ResolveWireSlot(std::uint8_t equipmentSlot) const
+{
+    for (std::uint32_t wireSlot = 1; wireSlot <= 14; ++wireSlot)
+        if (ResolveSlot(wireSlot) == equipmentSlot)
+            return wireSlot;
+    return 0;
 }
 
 CollectionFilter WardrobeService::FilterFor(Item const* target) const
@@ -498,6 +519,8 @@ void WardrobeService::EquipmentChanged(Player* player, std::uint8_t equipmentSlo
     }
     if (changed)
         SendError(player, stale.sessionToken, stale.requestId, "CAT", "EQUIPMENT_CHANGED");
+    if (std::uint32_t wireSlot = ResolveWireSlot(equipmentSlot))
+        SendEquipmentSlotState(player, 0, wireSlot, equipmentSlot);
 }
 
 void WardrobeService::ReleasePlayer(Player const* player)

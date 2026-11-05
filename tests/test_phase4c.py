@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Phase 4C notification, tooltip, and authoritative-state contracts."""
+
+from pathlib import Path
+import sqlite3
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+COLLECTION = (ROOT / "src/NativeTransmogCollection.cpp").read_text()
+MODULE = (ROOT / "src/NativeTransmogModule.cpp").read_text()
+WARDROBE = (ROOT / "src/NativeTransmogWardrobe.cpp").read_text()
+LUA = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.lua").read_text()
+
+
+class CollectionNotificationModel:
+    """Executable model of the unique appearance identity and notification rule."""
+
+    def __init__(self):
+        self.db = sqlite3.connect(":memory:")
+        self.db.execute(
+            "CREATE TABLE collection(owner_type INTEGER, owner_id INTEGER, display_id INTEGER, "
+            "item_class INTEGER, item_subclass INTEGER, inventory_type INTEGER, "
+            "UNIQUE(owner_type, owner_id, display_id, item_class, item_subclass, inventory_type))"
+        )
+        self.notifications = []
+
+    def unlock(self, owner, appearance, name, enabled=True, backfill=False, persist=True):
+        if not enabled:
+            return False
+        before = self.db.total_changes
+        if persist:
+            self.db.execute("INSERT OR IGNORE INTO collection VALUES(?,?,?,?,?,?)", owner + appearance)
+        inserted = self.db.total_changes > before
+        if inserted and not backfill:
+            self.notifications.append(f"Appearance saved: {name}")
+        return inserted
+
+
+class PhaseFourCNotificationTests(unittest.TestCase):
+    def test_new_duplicate_and_reequip_notifications(self):
+        model = CollectionNotificationModel()
+        owner = (1, 42)
+        appearance = (123, 4, 4, 3)
+        self.assertTrue(model.unlock(owner, appearance, "Judgement Spaulders"))
+        self.assertFalse(model.unlock(owner, appearance, "Judgement Spaulders"))
+        self.assertFalse(model.unlock(owner, appearance, "Judgement Spaulders"))
+        self.assertEqual(model.notifications, ["Appearance saved: Judgement Spaulders"])
+
+    def test_disabled_backfill_failed_and_account_scope(self):
+        model = CollectionNotificationModel()
+        appearance = (123, 4, 4, 3)
+        self.assertFalse(model.unlock((1, 7), appearance, "A", enabled=False))
+        self.assertFalse(model.unlock((1, 7), appearance, "A", persist=False))
+        self.assertTrue(model.unlock((1, 7), appearance, "A", backfill=True))
+        self.assertFalse(model.unlock((1, 7), appearance, "A"))
+        self.assertTrue(model.unlock((2, 99), appearance, "A"))
+        self.assertEqual(model.notifications, ["Appearance saved: A"])
+
+    def test_collection_service_is_the_only_notification_point(self):
+        self.assertIn('PSendSysMessage("Appearance saved: {}", itemTemplate->Name1)', COLLECTION)
+        self.assertEqual((COLLECTION + MODULE + WARDROBE).count("Appearance saved:"), 1)
+        self.assertIn("source == AcquisitionSource::QuestBackfill", COLLECTION)
+
+    def test_notification_follows_durable_insert_verification(self):
+        unlock = COLLECTION[COLLECTION.index("bool CollectionService::Unlock(Player* player, ItemTemplate"):]
+        unlock = unlock[:unlock.index("std::uint32_t CollectionService::UnlockBatch")]
+        self.assertLess(unlock.index("CharacterDatabase.DirectExecute"), unlock.index("IsPersisted(owner, appearance)"))
+        self.assertLess(unlock.index("IsPersisted(owner, appearance)"), unlock.index("appearances.insert(appearance)"))
+        self.assertLess(unlock.index("appearances.insert(appearance)"), unlock.index("NotifyUnlock"))
+        self.assertIn("_collections.erase(owner)", unlock)
+
+    def test_batch_notifications_share_the_same_persistence_rule(self):
+        batch = COLLECTION[COLLECTION.index("std::uint32_t CollectionService::UnlockBatch"):]
+        self.assertIn("IsPersisted(owner, request.appearance)", batch)
+        self.assertIn("NotifyUnlock(player, request.itemTemplate, source)", batch)
+        self.assertNotIn("Appearance saved:", MODULE)
+
+
+class PhaseFourCTooltipTests(unittest.TestCase):
+    def test_state_uses_persisted_canonical_source_entry_and_name(self):
+        state = WARDROBE[WARDROBE.index("WardrobeService::SendEquipmentSlotState"):]
+        state = state[:state.index("WardrobeService::ResolveSlot")]
+        self.assertIn("appearanceOverride.appearanceItem", state)
+        self.assertIn("sObjectMgr->GetItemTemplate", state)
+        self.assertIn("source->Name1", state)
+        self.assertNotIn("displayId", state)
+
+    def test_exact_original_hidden_and_applied_tooltip_behavior(self):
+        tooltip = LUA[LUA.index("local function appearanceTooltipText"):LUA.index("local function updateEquipmentSlot")]
+        self.assertIn('if info.state==2 then return "Appearance: Hidden"', tooltip)
+        self.assertIn('return "Transmogrified to: "..name', tooltip)
+        self.assertIn("if not info then return nil", tooltip)
+        self.assertNotIn("Transmogrified appearance active", LUA)
+
+    def test_tooltip_append_is_idempotent_and_preserves_native_contents(self):
+        append = LUA[LUA.index("local function appendAppearanceTooltip"):LUA.index("local function updateEquipmentSlot")]
+        self.assertIn("GameTooltip:NumLines()", append)
+        self.assertIn("fontString:GetText()==text", append)
+        self.assertIn("GameTooltip:AddLine", append)
+        self.assertIn('GameTooltip:SetInventoryItem("player",button.inventorySlot)', LUA)
+
+    def test_character_frame_hook_is_narrowly_scoped(self):
+        self.assertIn('hooksecurefunc("PaperDollItemSlotButton_OnEnter",NativeTransmog_PaperDollTooltip)', LUA)
+        self.assertIn("wireSlotForInventory(button:GetID())", LUA)
+        self.assertNotIn('GameTooltip:HookScript("OnTooltipSetItem"', LUA)
+
+    def test_read_only_sync_needs_no_npc_session(self):
+        handler = WARDROBE[WARDROBE.index("WardrobeService::HandleAddonWhisper"):]
+        handler = handler[:handler.index("WardrobeService::SendEquipmentState")]
+        self.assertIn('parts[2] == "SYNC" && fields.empty()', handler)
+        self.assertIn("SendEquipmentState(player, 0)", handler)
+        self.assertIn('VERSION.."\\tSYNC"', LUA)
+        state_branch = LUA[LUA.index('if command=="STATE"'):LUA.index('elseif command=="PAGE"')]
+        self.assertIn('fields[3]~="0"', state_branch)
+
+    def test_equipment_changes_push_only_the_changed_authoritative_slot(self):
+        changed = WARDROBE[WARDROBE.index("WardrobeService::EquipmentChanged"):]
+        self.assertIn("ResolveWireSlot(equipmentSlot)", changed)
+        self.assertIn("SendEquipmentSlotState(player, 0, wireSlot, equipmentSlot)", changed)
+        self.assertIn("overrideStates[wireSlot]=nil", LUA)
+
+    def test_relic_wording_uses_wotlk_relic_slot_api(self):
+        message = LUA[LUA.index("local function unavailableSlotMessage"):LUA.index("local function getInventorySlot")]
+        self.assertIn('wireSlot==13 and UnitHasRelicSlot("player")', message)
+        self.assertIn("Relic appearances cannot be customized.", message)
+        for class_name in ("PALADIN", "DRUID", "SHAMAN", "DEATHKNIGHT"):
+            self.assertNotIn(class_name, message)
+
+    def test_no_transport_version_opcode_or_database_change(self):
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "2"', LUA)
+        self.assertFalse(list((ROOT / "data/sql").rglob("*phase4c*")))
+
+
+if __name__ == "__main__":
+    unittest.main()

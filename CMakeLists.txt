@@ -6,4 +6,4 @@ AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogApplication.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogWardrobe.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/mod_native_transmog_loader.cpp")
 
-message("-- MOD NATIVE TRANSMOG CONFIGURED (phase-4b-native-paper-doll) --")
+message("-- MOD NATIVE TRANSMOG CONFIGURED (phase-4c-notifications-tooltips) --")

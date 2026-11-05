@@ -1,5 +1,52 @@
 # Test results
 
+## Phase 4C
+
+Test date: 2026-11-04.
+
+### Passed
+
+- Focused collection-notification suite: `python3 -m unittest tests.test_phase4c.PhaseFourCNotificationTests`
+  - 5 tests passed for first unlock, duplicate/re-equip suppression, disabled collection, failed persistence,
+    historical backfill suppression, account/character namespaces, centralized notification placement, and batch
+    quest collection.
+- Focused tooltip/synchronization suite: `python3 -m unittest tests.test_phase4c.PhaseFourCTooltipTests`
+  - 8 tests passed for canonical source-name resolution, original/applied/hidden text, idempotent append behavior,
+    narrow CharacterFrame hook scope, read-only world-entry synchronization, changed-slot pushes, relic wording, and
+    absence of protocol-version/opcode/database changes.
+- Full module suite: `python3 -m unittest discover -s tests -p 'test_phase*.py'`
+  - 141 tests passed, including all Phase 1–4B regressions.
+- Existing catalog fixtures passed against Playerbot `item_template.sql` for all head, shoulder, chest, main-hand,
+  and off-hand cases.
+- Lua/FrameXML validation:
+  - `NativeTransmogFrame.lua` parsed successfully through the local x86_64 Lua 5.1 shared runtime using
+    `luaL_loadbuffer`.
+  - `NativeTransmogFrame.xml` parsed successfully with Python `xml.etree.ElementTree`.
+- Playerbot AzerothCore Release compile/link:
+  - Playerbot revision `8a4e76eac8c4`, GCC 15.2, C++20, `MODULES=static`, `SCRIPTS=none`, core/script PCH disabled
+    after the constrained `/tmp` filesystem could not assemble the core PCH/archive.
+  - All seven module translation units compiled, `libmodules.a` linked, `libgame.a` linked, and `worldserver` linked
+    at 100%. The generated loader and binary contain `Addmod_native_transmogScripts`; the binary contains
+    `WardrobeService::SendEquipmentState` and `SendEquipmentSlotState`.
+  - Worldserver SHA-256: `203656115de164c594a9c7d25df325cd1651c550540ae4d1292901839d0746e6`.
+- Deterministic EPF verification:
+  - Four members; two builds were byte-for-byte identical and `python3 content/build_epf.py --check` passed.
+  - SHA-256: `aabf03491657d2a9889eddb314c60dc0121a9edfdf53d7008df977071b1e65f2`.
+- `git diff --check` passed.
+
+### Not run or not proven
+
+No build-12340 client, live MySQL persistence failure, live account-wide concurrent characters, Content Manager
+activation, Portalkeeper publication, PTR deployment, NPC interaction, chat delivery, or actual GameTooltip refresh
+was exercised. In particular, the narrow `PaperDollItemSlotButton_OnEnter` post-hook, read-only `SYNC` timing,
+comparison tooltips, no-duplicate lines, relic wording, relog/restart restoration, and preserved item-tooltip content
+require the manual evidence in `PHASE4C_PTR_VALIDATION.md`.
+
+No deployment, database mutation, client publication, commit, or push was performed.
+
+Status: **Phase 4C implementation and local automated/build validation are complete; build-12340/PTR behavior
+remains separate and unverified.**
+
 ## Phase 4B
 
 Test date: 2026-11-04.

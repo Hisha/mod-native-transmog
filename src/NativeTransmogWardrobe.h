@@ -63,7 +63,10 @@ private:
     void HandleApply(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleHide(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleRemove(Player* player, std::vector<std::uint32_t> const& fields);
+    void SendEquipmentSlotState(Player* player, std::uint32_t token,
+        std::uint32_t wireSlot, std::uint8_t equipmentSlot) const;
     std::uint8_t ResolveSlot(std::uint32_t wireSlot) const;
+    std::uint32_t ResolveWireSlot(std::uint8_t equipmentSlot) const;
     CollectionFilter FilterFor(Item const* target) const;
     std::uint32_t ResolveCanonical(Player const* player, Item const* target,
         AppearanceRecord const& record, std::uint8_t equipmentSlot) const;

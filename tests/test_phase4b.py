@@ -69,10 +69,10 @@ class PhaseFourBContracts(unittest.TestCase):
         resolver = WARDROBE[WARDROBE.index("WardrobeService::ResolveSlot"):WARDROBE.index("CollectionFilter")]
         self.assertEqual(resolver.count("case "), 14)
 
-    def test_equipment_tooltips_are_local_and_native(self):
+    def test_equipment_tooltips_are_native(self):
         self.assertIn('GameTooltip:SetInventoryItem("player",button.inventorySlot)', LUA)
-        self.assertIn('GameTooltip:AddLine("Appearance: Hidden"', LUA)
-        self.assertIn('GameTooltip:AddLine("Transmogrified appearance active"', LUA)
+        self.assertIn('return "Appearance: Hidden"', LUA)
+        self.assertIn('return "Transmogrified to: "..name', LUA)
         self.assertNotIn("GameTooltip:HookScript", LUA)
 
     def test_open_state_sync_is_server_confirmed_and_additive(self):

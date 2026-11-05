@@ -2,15 +2,23 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A expands the wardrobe to every visually relevant 3.3.5a equipment slot and adds a free, explicit Hide Appearance state. Phase 4B presents those slots as a native paper doll around the character model. It does **not** grant items, add equipment sets or saved outfits, price ordinary applications, migrate legacy `mod-transmog` records, or introduce a second transmog engine.
+Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A adds every visually relevant slot and Hide Appearance; Phase 4B presents them as a native paper doll. Phase 4C adds persisted-unlock chat notifications and authoritative appearance details to wardrobe and CharacterFrame tooltips. It does **not** grant items, add equipment sets or saved outfits, price ordinary applications, migrate legacy `mod-transmog` records, or introduce a second transmog engine.
+
+## Phase 4C notifications and tooltips
+
+`CollectionService` emits `Appearance saved: <item name>` through AzerothCore's normal system-message chat path only after a previously absent appearance identity is synchronously inserted and read back from `native_transmog_collection`. The same centralized rule covers item storage, inventory transfer, successful first equip, and live quest reward collection. Cache/unique-key checks suppress duplicates and repeated equips in either account-wide or character-specific scope. Collection-disabled paths, failed persistence, application/removal/hiding, and explicit historical quest backfills emit nothing. There is no notification configuration or acquisition-specific notification hook.
+
+Equipped-item tooltips show no extra line for original state, `Appearance: Hidden` for effective hidden state, or `Transmogrified to: <name>` for an applied override. The name comes from the persisted override's canonical `appearance_item`, not the physical item or display ID. The server adds that entry and its item-template name to the existing version-2 `STATE` response; no appearance table or database migration is added.
+
+The protected FrameXML installs a narrow post-hook on `PaperDollItemSlotButton_OnEnter`, leaving Blizzard's normal item tooltip construction and comparison tooltips intact. It also uses the same helper for wardrobe slots and checks existing tooltip lines before appending. On `PLAYER_ENTERING_WORLD` (including `/reload`) the client sends the authenticated-self, read-only `SYNC` request, which requires no Transmogrifier session and returns token-zero state for all supported equipped slots. Equipment changes push a token-zero update for the affected slot. Apply, Hide, Remove, and catalogs retain their NPC-session and snapshot authorization. This makes persisted state available to CharacterFrame before the wardrobe is opened.
 
 ## Phase 4B native paper doll
 
 The wardrobe uses a local equipment-slot template built on Blizzard's `ItemButtonTemplate`, stock inventory-slot textures returned by `GetInventorySlotInfo`, live equipped icons from `GetInventoryItemTexture`, `GameTooltip:SetInventoryItem`, dialog/tooltip borders, rotation button art, and `DressUpModel`. It does not inherit `PaperDollItemSlotButtonTemplate`: that template's handlers own CharacterFrame equip, drag, event, and gear-flyout state. The local template retains the native icon treatment while making every click wardrobe-only. See [Phase 4B architecture](docs/PHASE4B_ARCHITECTURE.md).
 
-The fourteen visual slots form left and right columns around the model; main hand, off hand, and ranged form the familiar bottom row. Empty usable slots show Blizzard's native empty-slot texture and explain that an item must be equipped. They never request a catalog or enable Apply/Remove. The client uses WotLK's `UnitHasRelicSlot("player")` convention to render the non-dressable ranged/relic position inactive for death knights, paladins, druids, and shamans instead of maintaining a class-name exception list. Server compatibility remains authoritative for every item and appearance.
+The fourteen visual slots form left and right columns around the model; main hand, off hand, and ranged form the familiar bottom row. Empty usable slots show Blizzard's native empty-slot texture and explain that an item must be equipped. They never request a catalog or enable Apply/Remove. The client uses WotLK's `UnitHasRelicSlot("player")` convention to render the non-dressable ranged/relic position inactive without a class-name exception list and explains that relic appearances cannot be customized. Server compatibility remains authoritative for every item and appearance.
 
-When an authorized session opens, the server sends additive version-2 `STATE` replies for the equipped item instances. The paper doll shows a small stock ready-check marker for an applied appearance and stock pass marker for hidden state; original items have no marker. Catalog `PAGE` replies refresh the selected marker after Apply, Hide, or Remove. These indicators never follow a local preview selection.
+The server sends additive version-2 `STATE` replies for equipped item instances at read-only world-entry synchronization, equipment changes, and authorized wardrobe open. The paper doll shows a small stock ready-check marker for an applied appearance and stock pass marker for hidden state; original items have no marker. Catalog `PAGE` replies refresh the selected marker after Apply, Hide, or Remove. These indicators never follow a local preview selection.
 
 ## Phase 4A full slots and Hide Appearance
 
@@ -80,7 +88,7 @@ The inspected hook order cannot safely append a new gossip option to every scrip
 
 ## Wardrobe transport and authorization
 
-The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 2, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Additive `STATE` replies carry server-confirmed per-slot original/applied/hidden presentation for paper-doll markers. Client catalog/apply/hide/remove messages use the same prefix and are accepted only as authenticated self-whispers.
+The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 2, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Additive `STATE` replies carry server-confirmed per-slot original/applied/hidden state plus the canonical source entry/name. Read-only `SYNC` uses token zero and needs no NPC session. Client catalog/apply/hide/remove messages use the same prefix and still require the live server-authorized session.
 
 This uses the stock addon-message wire protocol without installing an addon, inventing an opcode, or exposing normal chat text. It is also a pattern already supported by the inspected Playerbot branch and other native FrameXML modules in this environment.
 
@@ -138,7 +146,7 @@ Add, appearance apply, and quest-backfill execution use AzerothCore's existing N
 ## Installation and PTR deployment
 
 1. Install this repository as `modules/mod-native-transmog` in the isolated Playerbot PTR build. Confirm `mod-transmog` is excluded from that build/load; production remains unchanged.
-2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`; Phase 4A adds `2026_11_04_00_native_transmog_hidden_state.sql`. Existing override rows become collected-appearance state `0`; ownership/provenance and all legacy tables remain untouched.
+2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`; Phase 4A adds `2026_11_04_00_native_transmog_hidden_state.sql`. Phase 4C adds no migration. Existing override rows become collected-appearance state `0`; ownership/provenance and all legacy tables remain untouched.
 3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow. Ensure AzerothCore's `worldserver.conf` contains:
 
    ```ini
@@ -169,11 +177,12 @@ python3 content/build_epf.py --check
 python3 -m unittest discover -s tests -p 'test_phase*.py'
 ```
 
-The checks cover all earlier regressions plus the 14-slot allowlist and mapping, paper-doll positioning, equipped and empty icons, class-inapplicable presentation, tooltips, confirmed state markers, filtering, hidden state, migration, authorization, weapon policy, pagination, UI state, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 4B PTR plan](docs/PHASE4B_PTR_VALIDATION.md).
+The checks cover all earlier regressions plus centralized persisted-unlock notifications, duplicate/backfill suppression, detailed wardrobe and CharacterFrame tooltips, read-only state synchronization, relic wording, the 14-slot paper doll, hidden state, authorization, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 4C PTR plan](docs/PHASE4C_PTR_VALIDATION.md).
 
 ## Known limitations and future mobile NPCs
 
-- Phase 4B build-12340 client rendering has not been performed. Automated geometry checks and a Playerbot compile/link do not prove pixel layout at every UI scale, local/observer models, every race/gender geometry, enchant visuals, relog/restart, or mirror-image behavior.
+- Phase 4C build-12340 client behavior requires PTR validation. Automated contracts and a Playerbot compile/link do not prove live chat delivery, GameTooltip refresh behavior, comparison-tooltip interaction, pixel layout, local/observer models, every race/gender geometry, enchant visuals, relog/restart, or mirror-image behavior.
+- Read-only state covers the player's equipped items in the wardrobe and CharacterFrame only. Bag items, item/chat links, inspection, other players, and arbitrary tooltip sources are intentionally unsupported. If addon channels are disabled, neither wardrobe transport nor CharacterFrame appearance lines can synchronize.
 - Hidden preview uses `DressUpModel:UndressSlot` when the build exposes it. A guarded fallback reconstructs the model from physical item links; on clients without the slot API, that fallback can temporarily show other overridden slots' original appearances until Reset Preview.
 - Phase 2 opens immediately on supported gossip/quest, vendor, and trainer interactions; it cannot safely inject an option into arbitrary scripted gossip on this branch.
 - Client service types that bypass all inspected hooks are not covered. Registration never changes their flags to manufacture an interaction path.

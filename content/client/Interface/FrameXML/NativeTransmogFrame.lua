@@ -1,4 +1,4 @@
--- Native Transmog Phase 4B protected FrameXML for WoW 3.3.5a build 12340.
+-- Native Transmog Phase 4C protected FrameXML for WoW 3.3.5a build 12340.
 local PREFIX, VERSION = "NTRANSMOG", "2"
 local SLOT_ORDER = { "HEAD", "SHOULDERS", "SHIRT", "CHEST", "WAIST", "LEGS", "FEET", "WRISTS",
     "HANDS", "BACK", "MAIN_HAND", "OFF_HAND", "RANGED", "TABARD" }
@@ -68,6 +68,10 @@ local function slotIsUsable(wireSlot)
  -- WotLK uses the ranged slot for non-dressable relics on four class families.
  return wireSlot ~= 13 or not UnitHasRelicSlot("player")
 end
+local function unavailableSlotMessage(wireSlot)
+ if wireSlot==13 and UnitHasRelicSlot("player") then return "Relic appearances cannot be customized." end
+ return "This slot has no customizable appearance for your class."
+end
 local function getInventorySlot(wireSlot)
  local inventorySlot, emptyTexture = GetInventorySlotInfo(SLOT_INVENTORY_NAMES[wireSlot])
  return inventorySlot, emptyTexture
@@ -99,10 +103,37 @@ end
 local function refreshEquipmentIndicator(wireSlot)
  local button = slotButtons[wireSlot]
  if not button then return end
- local state = overrideStates[wireSlot]
+ local info = overrideStates[wireSlot]
+ local state = info and info.state
  button.transmogMark:Hide(); button.hiddenMark:Hide()
  if button.hasItem and state == 1 then button.transmogMark:Show()
  elseif button.hasItem and state == 2 then button.hiddenMark:Show() end
+end
+
+local function wireSlotForInventory(inventorySlot)
+ for wireSlot=1,#SLOT_ORDER do
+  local candidate=getInventorySlot(wireSlot)
+  if candidate==inventorySlot then return wireSlot end
+ end
+end
+local function appearanceTooltipText(wireSlot)
+ local info=overrideStates[wireSlot]
+ if not info then return nil end
+ if info.state==2 then return "Appearance: Hidden" end
+ if info.state==1 then
+  local name=info.name
+  if not name or name=="" then name=itemLabel(info.entry,nil) end
+  if name then return "Transmogrified to: "..name end
+ end
+end
+local function appendAppearanceTooltip(wireSlot)
+ local text=appearanceTooltipText(wireSlot)
+ if not text then return end
+ for line=1,GameTooltip:NumLines() do
+  local fontString=_G["GameTooltipTextLeft"..line]
+  if fontString and fontString:GetText()==text then return end
+ end
+ GameTooltip:AddLine(text,.6,.8,1)
 end
 local function updateEquipmentSlot(wireSlot)
  local button = slotButtons[wireSlot]
@@ -214,7 +245,7 @@ local function sendRequest(operation,tail)
  pending={operation=operation,started=GetTime()}; setStatus("Waiting for server...",false); refreshSelection(); return true
 end
 local function requestCatalog(newCursor)
- if not slotIsUsable(selectedSlotId) then clearCatalogForUnavailableSlot("This slot has no customizable appearance for your class."); return end
+ if not slotIsUsable(selectedSlotId) then clearCatalogForUnavailableSlot(unavailableSlotMessage(selectedSlotId)); return end
  if not slotHasItem(selectedSlotId) then clearCatalogForUnavailableSlot("Equip an item to customize this slot."); return end
  hasPhysicalItem=true; requestId=requestId+1; snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}
  cursor=newCursor or 0; hasNext=false; canHide=false; hiddenApplied=false; overridePresent=false; renderCatalog()
@@ -237,7 +268,7 @@ function NativeTransmog_SelectSlot(slotId)
  if not SLOT_ORDER[slotId] then return end
  selectedSlotId=slotId; selectedSlot=SLOT_ORDER[slotId]; cursorHistory={}
  NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot]); updateEquipmentSlot(slotId); refreshEquipmentSelection()
- if not slotIsUsable(slotId) then clearCatalogForUnavailableSlot("This slot has no customizable appearance for your class.")
+ if not slotIsUsable(slotId) then clearCatalogForUnavailableSlot(unavailableSlotMessage(slotId))
  elseif not slotHasItem(slotId) then clearCatalogForUnavailableSlot("Equip an item to customize this slot.")
  elseif authorizedToken and NativeTransmogFrame:IsShown() then requestCatalog(0)
  else hasPhysicalItem=true; catalog={}; renderCatalog() end
@@ -260,19 +291,17 @@ function NativeTransmog_EquipmentSlot_OnLoad(button)
 end
 function NativeTransmog_EquipmentSlot_OnClick(button)
  local wireSlot=button:GetID()
- if not button.usable then setStatus("This slot has no customizable appearance for your class.",false); return end
+ if not button.usable then setStatus(unavailableSlotMessage(wireSlot),false); return end
  NativeTransmog_SelectSlot(wireSlot)
 end
 function NativeTransmog_EquipmentSlot_OnEnter(button)
  GameTooltip:SetOwner(button,"ANCHOR_RIGHT")
  if not button.usable then
   GameTooltip:SetText(SLOT_LABELS[SLOT_ORDER[button:GetID()]],1,1,1)
-  GameTooltip:AddLine("This slot has no customizable appearance for your class.",.8,.8,.8,true)
+  GameTooltip:AddLine(unavailableSlotMessage(button:GetID()),.8,.8,.8,true)
  elseif button.hasItem and button.inventorySlot then
   GameTooltip:SetInventoryItem("player",button.inventorySlot)
-  local state=overrideStates[button:GetID()]
-  if state==2 then GameTooltip:AddLine("Appearance: Hidden",.6,.8,1)
-  elseif state==1 then GameTooltip:AddLine("Transmogrified appearance active",.6,.8,1) end
+  appendAppearanceTooltip(button:GetID())
  else
   GameTooltip:SetText(SLOT_LABELS[SLOT_ORDER[button:GetID()]],1,1,1)
   GameTooltip:AddLine("Equip an item to customize this slot.",.8,.8,.8,true)
@@ -280,6 +309,11 @@ function NativeTransmog_EquipmentSlot_OnEnter(button)
  GameTooltip:Show()
 end
 function NativeTransmog_EquipmentSlot_OnLeave() GameTooltip:Hide() end
+function NativeTransmog_PaperDollTooltip(button)
+ if not button or not button.GetID then return end
+ local wireSlot=wireSlotForInventory(button:GetID())
+ if wireSlot and slotHasItem(wireSlot) then appendAppearanceTooltip(wireSlot); GameTooltip:Show() end
+end
 
 function NativeTransmog_FrameUpdate()
  if pending and GetTime()-pending.started>5 then pending=nil; setStatus("Server unavailable or request timed out.",true); refreshSelection() end
@@ -289,6 +323,9 @@ function NativeTransmog_OnLoad(frame)
  frame:RegisterForDrag("LeftButton"); frame:RegisterEvent("CHAT_MSG_ADDON")
  frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED"); frame:RegisterEvent("PLAYER_ENTERING_WORLD")
  if RegisterAddonMessagePrefix then RegisterAddonMessagePrefix(PREFIX) end
+ if hooksecurefunc and PaperDollItemSlotButton_OnEnter then
+  hooksecurefunc("PaperDollItemSlotButton_OnEnter",NativeTransmog_PaperDollTooltip)
+ end
  UISpecialFrames[#UISpecialFrames+1]=frame:GetName(); NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
 end
 function NativeTransmog_OnShow()
@@ -321,7 +358,11 @@ function NativeTransmog_OnEvent(_,event,...)
    end
   end
   return
- elseif event=="PLAYER_ENTERING_WORLD" then updateEquipmentSlots(); return end
+ elseif event=="PLAYER_ENTERING_WORLD" then
+  updateEquipmentSlots()
+  if SendAddonMessage then SendAddonMessage(PREFIX,VERSION.."\tSYNC","WHISPER",UnitName("player")) end
+  return
+ end
 
  local prefix,message,channel,sender=...
  if event~="CHAT_MSG_ADDON" or prefix~=PREFIX or channel~="WHISPER" or sender~=UnitName("player") then return end
@@ -329,20 +370,27 @@ function NativeTransmog_OnEvent(_,event,...)
  local command=fields[2]
  if command=="OPEN" and fields[3] then NativeTransmog_OpenAuthorized(fields[3]); return end
  if command=="CLOSE" and authorizedToken==fields[3] then NativeTransmogFrame:Hide(); return end
- if not authorizedToken or fields[3]~=authorizedToken then return end
  if command=="STATE" then
+  if fields[3]~="0" and (not authorizedToken or fields[3]~=authorizedToken) then return end
   local wireSlot,state=tonumber(fields[4]),tonumber(fields[5])
   if wireSlot and SLOT_ORDER[wireSlot] and state and state>=0 and state<=2 then
-   overrideStates[wireSlot]=state; refreshEquipmentIndicator(wireSlot)
+   overrideStates[wireSlot]={state=state,entry=tonumber(fields[6]),name=fields[7]}
+   refreshEquipmentIndicator(wireSlot)
   end
+  return
  elseif command=="PAGE" and tonumber(fields[4])==requestId then
+  if not authorizedToken or fields[3]~=authorizedToken then return end
   snapshotNonce=fields[5]; nextCursor=tonumber(fields[8]) or 0; hasNext=fields[9]=="1"
   actualItem=tonumber(fields[10]); appliedItem=tonumber(fields[11]); canHide=fields[12]=="1"; hiddenApplied=fields[13]=="1"; overridePresent=fields[14]=="1"; incomingCatalog={}; hasPhysicalItem=true
-  if hiddenApplied then overrideStates[selectedSlotId]=2
-  elseif overridePresent and appliedItem and appliedItem>0 then overrideStates[selectedSlotId]=1
-  else overrideStates[selectedSlotId]=0 end
+  local previous=overrideStates[selectedSlotId]
+  if hiddenApplied then overrideStates[selectedSlotId]={state=2,entry=0,name=""}
+  elseif overridePresent and appliedItem and appliedItem>0 then
+   overrideStates[selectedSlotId]={state=1,entry=appliedItem,
+       name=previous and previous.entry==appliedItem and previous.name or ""}
+  else overrideStates[selectedSlotId]={state=0,entry=0,name=""} end
   refreshEquipmentIndicator(selectedSlotId)
   if canHide then table.insert(incomingCatalog,{selection=0,isHide=true,applied=hiddenApplied}) end
+ elseif not authorizedToken or fields[3]~=authorizedToken then return
  elseif command=="ITEM" and tonumber(fields[4])==requestId and fields[5]==snapshotNonce then
   table.insert(incomingCatalog,{selection=tonumber(fields[6]),entry=tonumber(fields[7]),applied=fields[8]=="1"})
  elseif command=="END" and tonumber(fields[4])==requestId and fields[5]==snapshotNonce then
