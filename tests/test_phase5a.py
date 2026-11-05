@@ -3,8 +3,10 @@
 
 from pathlib import Path
 from collections import Counter
+import ast
 import json
 import re
+import sqlite3
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +19,15 @@ LUA = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.lua").read_
 XML = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.xml").read_text()
 DESIGN = (ROOT / "docs/PHASE5A_DATA_DESIGN.md").read_text()
 FIXTURES = json.loads((ROOT / "tests/phase5a_sets.json").read_text())
+
+
+def acquisition_queries():
+    queries = []
+    pattern = r"WorldDatabase\.Query\(\s*((?:\"(?:[^\"\\]|\\.)*\"\s*)+)\)"
+    for match in re.finditer(pattern, CATALOG):
+        literals = re.findall(r'\"(?:[^\"\\]|\\.)*\"', match.group(1))
+        queries.append("".join(ast.literal_eval(value) for value in literals))
+    return queries
 
 
 def verified_rows():
@@ -137,6 +148,36 @@ class PhaseFiveADataTests(unittest.TestCase):
 
 
 class PhaseFiveASourceAndTransportTests(unittest.TestCase):
+    def test_acquisition_queries_execute_against_ptr_world_schema(self):
+        db = sqlite3.connect(":memory:")
+        db.executescript(
+            """
+            CREATE TABLE npc_vendor (entry INTEGER, item INTEGER, ExtendedCost INTEGER);
+            CREATE TABLE creature_template (entry INTEGER, name TEXT, lootid INTEGER);
+            CREATE TABLE creature (guid INTEGER, id INTEGER, map INTEGER);
+            CREATE TABLE reference_loot_template (Entry INTEGER, Item INTEGER, Reference INTEGER);
+            CREATE TABLE creature_loot_template (Entry INTEGER, Item INTEGER, Reference INTEGER);
+            """
+        )
+        queries = acquisition_queries()
+        self.assertEqual(len(queries), 4)
+        for query in queries:
+            with self.subTest(query=query):
+                db.execute(query).fetchall()
+
+    def test_spawn_location_query_uses_installed_creature_entry_column(self):
+        spawn_query = next(query for query in acquisition_queries() if "FROM `creature`" in query)
+        self.assertEqual(
+            spawn_query,
+            "SELECT DISTINCT `id`, `map` FROM `creature` ORDER BY `id`, `map`",
+        )
+        self.assertNotIn("`id1`", spawn_query)
+
+    def test_loot_reference_columns_are_treated_as_signed(self):
+        self.assertGreaterEqual(CATALOG.count("fields[2].Get<std::int32_t>()"), 1)
+        self.assertIn("fields[1].Get<std::int32_t>()", CATALOG)
+        self.assertIn("if (reference > 0)", CATALOG)
+
     def test_sources_cover_vendor_quest_direct_and_reference_loot(self):
         for value in ("npc_vendor", "creature_loot_template", "reference_loot_template", "RewardChoiceItemId"):
             self.assertIn(value, CATALOG)

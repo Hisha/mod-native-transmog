@@ -223,7 +223,7 @@ void SetCatalog::Initialize()
     // Resolve authoritative spawn map names once so boss sources can include their raid/dungeon when known.
     std::unordered_map<std::uint32_t, std::vector<std::string>> creatureMaps;
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT DISTINCT `id1`, `map` FROM `creature` ORDER BY `id1`, `map`"))
+        "SELECT DISTINCT `id`, `map` FROM `creature` ORDER BY `id`, `map`"))
     {
         do
         {
@@ -285,7 +285,7 @@ void SetCatalog::Initialize()
         {
             Field* fields = result->Fetch();
             std::uint32_t item = fields[0].Get<std::uint32_t>();
-            std::uint32_t reference = fields[1].Get<std::uint32_t>();
+            std::int32_t reference = fields[1].Get<std::int32_t>();
             std::uint32_t creatureEntry = fields[2].Get<std::uint32_t>();
             std::string creature = fields[3].Get<std::string>();
             std::string source = "Drops from: " + creature;
@@ -294,10 +294,10 @@ void SetCatalog::Initialize()
                 source += " - " + locations->second.front();
             if (catalogItems.count(item))
                 AddSource(sources, item, source);
-            if (reference)
+            if (reference > 0)
             {
                 std::unordered_set<std::uint32_t> visiting;
-                for (std::uint32_t referencedItem : resolve(reference, visiting, 0))
+                for (std::uint32_t referencedItem : resolve(static_cast<std::uint32_t>(reference), visiting, 0))
                     AddSource(sources, referencedItem, source);
             }
         } while (result->NextRow());
