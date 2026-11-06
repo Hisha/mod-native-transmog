@@ -8,6 +8,8 @@
 #include "Player.h"
 #include "QuestDef.h"
 #include "SharedDefines.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 
 #include <algorithm>
 #include <functional>
@@ -109,7 +111,7 @@ void AddSource(std::unordered_map<std::uint32_t, std::vector<std::string>>& sour
         return;
     auto& values = sources[item];
     text = Clean(std::move(text), 80);
-    if (std::find(values.begin(), values.end(), text) == values.end() && values.size() < 3)
+    if (std::find(values.begin(), values.end(), text) == values.end() && values.size() < 4)
         values.push_back(std::move(text));
 }
 
@@ -121,11 +123,28 @@ std::string JoinSources(std::vector<std::string> const& sources)
     for (std::string const& source : sources)
     {
         if (!result.empty())
-            result += "; ";
+            result += "\n";
         result += source;
     }
-    return Clean(std::move(result));
+    if (result.size() > 160)
+        result.resize(160);
+    return result;
 }
+
+std::string ItemName(std::uint32_t item)
+{
+    if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(item))
+        return Clean(itemTemplate->Name1, 48);
+    return "Item " + std::to_string(item);
+}
+
+struct VendorSource
+{
+    std::uint32_t item = 0;
+    std::uint32_t creature = 0;
+    std::uint32_t extendedCost = 0;
+    std::string name;
+};
 
 std::string VariantName(std::string const& base, std::vector<SetPiece> const& pieces, std::size_t variantCount)
 {
@@ -204,21 +223,63 @@ void SetCatalog::Initialize()
             legacyItems.insert(entry);
     }
 
-    std::unordered_map<std::uint32_t, std::vector<std::string>> sources;
+    std::vector<std::pair<std::uint32_t, Quest const*>> quests;
+    std::unordered_set<std::uint32_t> sourceItems = catalogItems;
+    quests.reserve(sObjectMgr->GetQuestTemplates().size());
+    for (auto const& [questId, quest] : sObjectMgr->GetQuestTemplates())
+    {
+        if (!quest)
+            continue;
+        quests.emplace_back(questId, quest);
+        bool rewardsCatalogItem = std::any_of(std::begin(quest->RewardItemId), std::end(quest->RewardItemId),
+            [&](std::uint32_t item) { return catalogItems.count(item) != 0; }) ||
+            std::any_of(std::begin(quest->RewardChoiceItemId), std::end(quest->RewardChoiceItemId),
+                [&](std::uint32_t item) { return catalogItems.count(item) != 0; });
+        if (rewardsCatalogItem)
+            for (std::uint32_t item : quest->RequiredItemId)
+                if (item)
+                    sourceItems.insert(item);
+    }
+    std::sort(quests.begin(), quests.end(), [](auto const& left, auto const& right)
+    {
+        return left.first < right.first;
+    });
+
+    std::vector<VendorSource> vendors;
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT `v`.`item`, `c`.`name`, `v`.`ExtendedCost` FROM `npc_vendor` `v` "
+        "SELECT `v`.`item`, `v`.`entry`, `c`.`name`, `v`.`ExtendedCost` FROM `npc_vendor` `v` "
         "JOIN `creature_template` `c` ON `c`.`entry` = `v`.`entry` "
         "ORDER BY `v`.`item`, `c`.`entry`"))
     {
         do
         {
             Field* fields = result->Fetch();
-            std::uint32_t item = fields[0].Get<std::uint32_t>();
-            if (catalogItems.count(item))
-                AddSource(sources, item, "Sold by: " + fields[1].Get<std::string>() +
-                    (fields[2].Get<std::uint32_t>() ? " (token/currency exchange)" : ""));
+            VendorSource vendor;
+            vendor.item = fields[0].Get<std::uint32_t>();
+            vendor.creature = fields[1].Get<std::uint32_t>();
+            vendor.name = fields[2].Get<std::string>();
+            vendor.extendedCost = fields[3].Get<std::uint32_t>();
+            vendors.push_back(vendor);
         } while (result->NextRow());
     }
+    for (unsigned depth = 0; depth < 8; ++depth)
+    {
+        bool changed = false;
+        for (VendorSource const& vendor : vendors)
+            if (sourceItems.count(vendor.item))
+                if (ItemExtendedCostEntry const* cost = sItemExtendedCostStore.LookupEntry(vendor.extendedCost))
+                    for (std::uint32_t item : cost->reqitem)
+                        if (item)
+                            changed = sourceItems.insert(item).second || changed;
+        if (!changed)
+            break;
+    }
+    vendors.erase(std::remove_if(vendors.begin(), vendors.end(), [&](VendorSource const& vendor)
+    {
+        return !sourceItems.count(vendor.item);
+    }), vendors.end());
+
+    std::unordered_map<std::uint32_t, std::vector<std::string>> sources;
 
     // Resolve authoritative spawn map names once so boss sources can include their raid/dungeon when known.
     std::unordered_map<std::uint32_t, std::vector<std::string>> creatureMaps;
@@ -247,7 +308,7 @@ void SetCatalog::Initialize()
             std::uint32_t entry = fields[0].Get<std::uint32_t>();
             std::uint32_t item = fields[1].Get<std::uint32_t>();
             std::int32_t reference = fields[2].Get<std::int32_t>();
-            if (catalogItems.count(item))
+            if (sourceItems.count(item))
                 referenceItems[entry].push_back(item);
             if (reference > 0)
                 referenceEdges[entry].push_back(static_cast<std::uint32_t>(reference));
@@ -288,11 +349,11 @@ void SetCatalog::Initialize()
             std::int32_t reference = fields[1].Get<std::int32_t>();
             std::uint32_t creatureEntry = fields[2].Get<std::uint32_t>();
             std::string creature = fields[3].Get<std::string>();
-            std::string source = "Drops from: " + creature;
+            std::string source = creature;
             auto locations = creatureMaps.find(creatureEntry);
             if (locations != creatureMaps.end() && !locations->second.empty())
-                source += " - " + locations->second.front();
-            if (catalogItems.count(item))
+                source += " — " + locations->second.front();
+            if (sourceItems.count(item))
                 AddSource(sources, item, source);
             if (reference > 0)
             {
@@ -303,28 +364,128 @@ void SetCatalog::Initialize()
         } while (result->NextRow());
     }
 
-    std::vector<std::pair<std::uint32_t, Quest const*>> quests;
-    quests.reserve(sObjectMgr->GetQuestTemplates().size());
-    for (auto const& [questId, quest] : sObjectMgr->GetQuestTemplates())
-        if (quest)
-            quests.emplace_back(questId, quest);
-    std::sort(quests.begin(), quests.end(), [](auto const& left, auto const& right)
+    // Vendor costs are resolved from the loaded ItemExtendedCost DBC. Token origins are emitted before the
+    // exchange step, so a token boss is never misrepresented as dropping the finished armor.
+    for (VendorSource const& vendor : vendors)
     {
-        return left.first < right.first;
-    });
+        ItemExtendedCostEntry const* cost = sItemExtendedCostStore.LookupEntry(vendor.extendedCost);
+        bool describedCost = false;
+        if (cost)
+        {
+            for (std::size_t index = 0; index < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++index)
+            {
+                std::uint32_t token = cost->reqitem[index];
+                if (!token)
+                    continue;
+                auto origins = sources.find(token);
+                if (origins != sources.end())
+                    AddSource(sources, vendor.item, origins->second.front());
+                AddSource(sources, vendor.item, "Token: " + ItemName(token) +
+                    (cost->reqitemcount[index] > 1 ? " x" + std::to_string(cost->reqitemcount[index]) : ""));
+                describedCost = true;
+            }
+            if (cost->reqhonorpoints)
+            {
+                AddSource(sources, vendor.item, "Currency: " + std::to_string(cost->reqhonorpoints) + " Honor");
+                describedCost = true;
+            }
+            if (cost->reqarenapoints)
+            {
+                AddSource(sources, vendor.item, "Currency: " + std::to_string(cost->reqarenapoints) + " Arena Points");
+                describedCost = true;
+            }
+        }
+        std::string exchange = vendor.extendedCost ? "Exchange: " : "Vendor: ";
+        exchange += Clean(vendor.name, 48);
+        auto locations = creatureMaps.find(vendor.creature);
+        if (locations != creatureMaps.end() && !locations->second.empty())
+            exchange += " — " + locations->second.front();
+        AddSource(sources, vendor.item, exchange);
+        if (vendor.extendedCost && !describedCost)
+            AddSource(sources, vendor.item, "Cost details unavailable in loaded DBC");
+    }
+
+    std::unordered_set<std::uint32_t> availableQuestStarters;
+    if (QueryResult result = WorldDatabase.Query(
+        "SELECT DISTINCT `q`.`quest` FROM `creature_queststarter` `q` "
+        "JOIN `creature` `s` ON `s`.`id` = `q`.`id` ORDER BY `q`.`quest`"))
+    {
+        do
+        {
+            availableQuestStarters.insert(result->Fetch()[0].Get<std::uint32_t>());
+        } while (result->NextRow());
+    }
+    if (QueryResult result = WorldDatabase.Query(
+        "SELECT DISTINCT `q`.`quest` FROM `gameobject_queststarter` `q` "
+        "JOIN `gameobject` `s` ON `s`.`id` = `q`.`id` ORDER BY `q`.`quest`"))
+    {
+        do
+        {
+            availableQuestStarters.insert(result->Fetch()[0].Get<std::uint32_t>());
+        } while (result->NextRow());
+    }
+    for (auto const& [entry, itemTemplate] : *sObjectMgr->GetItemTemplateStore())
+    {
+        (void)entry;
+        if (itemTemplate.StartQuest)
+            availableQuestStarters.insert(itemTemplate.StartQuest);
+    }
+
     for (auto const& [questId, quest] : quests)
     {
-        (void)questId;
+        bool legacyReward = false;
+        for (std::uint32_t item : quest->RewardItemId)
+            legacyReward = legacyReward || legacyItems.count(item);
+        for (std::uint32_t item : quest->RewardChoiceItemId)
+            legacyReward = legacyReward || legacyItems.count(item);
+        std::vector<std::string> questSources;
+        if (legacyReward)
+            questSources.push_back("Legacy: Original Naxxramas");
+        questSources.push_back(legacyReward ? "T3 armor quest" :
+            "Reward: " + Clean(quest->GetTitle(), 56));
+        std::string requirements;
+        bool requirementsResolved = true;
+        for (std::size_t index = 0; index < std::size(quest->RequiredItemId); ++index)
+        {
+            std::uint32_t required = quest->RequiredItemId[index];
+            if (!required)
+                continue;
+            if (!requirements.empty())
+                requirements += ", ";
+            requirements += ItemName(required);
+            if (quest->RequiredItemCount[index] > 1)
+                requirements += " x" + std::to_string(quest->RequiredItemCount[index]);
+            requirementsResolved = requirementsResolved && sources.count(required);
+        }
+        if (legacyReward)
+        {
+            if (requirementsResolved && availableQuestStarters.count(questId))
+                questSources.push_back("Availability: Installed quest starter found");
+            else
+                questSources.push_back("Availability: Unverified");
+        }
+        if (!requirements.empty())
+            questSources.push_back("Needs: " + requirements);
         for (std::uint32_t item : quest->RewardItemId)
             if (catalogItems.count(item))
-                AddSource(sources, item, legacyItems.count(item) ?
-                    "Legacy quest reward: " + quest->GetTitle() + " (availability unresolved)" :
-                    "Reward from: " + quest->GetTitle());
+                for (std::string const& source : questSources)
+                    AddSource(sources, item, source);
         for (std::uint32_t item : quest->RewardChoiceItemId)
             if (catalogItems.count(item))
-                AddSource(sources, item, legacyItems.count(item) ?
-                    "Legacy quest reward: " + quest->GetTitle() + " (availability unresolved)" :
-                    "Reward from: " + quest->GetTitle());
+                for (std::string const& source : questSources)
+                    AddSource(sources, item, source);
+    }
+
+    // Craft sources are derived from loaded spell data rather than an external/static item list.
+    for (std::uint32_t spellId = 0; spellId < sSpellMgr->GetSpellInfoStoreSize(); ++spellId)
+    {
+        SpellInfo const* spell = sSpellMgr->GetSpellInfo(spellId);
+        if (!spell)
+            continue;
+        for (SpellEffectInfo const& effect : spell->Effects)
+            if ((effect.Effect == SPELL_EFFECT_CREATE_ITEM || effect.Effect == SPELL_EFFECT_CREATE_ITEM_2) &&
+                catalogItems.count(effect.ItemType))
+                AddSource(sources, effect.ItemType, "Crafted: " + Clean(spell->SpellName[0], 56));
     }
 
     _sets.clear();
@@ -417,7 +578,7 @@ void SetCatalog::Initialize()
                 for (std::uint32_t item : piece.alternatives)
                     for (std::string const& source : sources[item])
                         if (std::find(combined.begin(), combined.end(), source) == combined.end() &&
-                            combined.size() < 3)
+                            combined.size() < 4)
                             combined.push_back(source);
                 if (!combined.empty())
                     piece.source = JoinSources(combined);

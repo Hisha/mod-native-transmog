@@ -1,5 +1,40 @@
 # Test results
 
+## Phase 5A pagination and acquisition-source corrections
+
+Test date: 2026-11-05.
+
+### Passed
+
+- Full module suite: `python3 -m unittest discover -s tests -p 'test_*.py'`
+  - 189 tests passed, including independent catalog/detail request state, selection without pagination mutation,
+    intentional filter reset, delayed replies, rapid switching, bounded token chains, extended-cost currencies,
+    quest availability, crafting markers, source ordering, and all prior Phase 1–5A regressions.
+- Installed Playerbot schema/data audit at revision `8a4e76eac8c4`:
+  - `npc_vendor`, creature/gameobject quest-starter, spawn, direct loot, and reference-loot queries match the installed
+    schema. Extended cost 1200 requires Chestguard of the Fallen Champion 29754; reference 34047 connects that token
+    to Magtheridon 17257. Redemption Handguards quest 9048 and its four required materials are present, but no current
+    starter/source chain was established by the installed data.
+- Lua/FrameXML validation:
+  - `NativeTransmogFrame.lua` returned `0` from `luaL_loadbuffer` using the local x86_64 Lua 5.1 runtime.
+  - `NativeTransmogFrame.xml` parsed successfully with Python `xml.etree.ElementTree`.
+- Playerbot Release worldserver:
+  - Changed module sources compiled, `libmodules.a` linked, and `worldserver` linked at 100%.
+  - Build artifact SHA-256: `ab3f657fc281d5a6c0d92b1eb903bf95556f098ad95844256a7748f28a32fede`.
+- Deterministic EPF verification:
+  - Four members; two consecutive builds were byte-for-byte identical and `python3 content/build_epf.py --check`
+    passed.
+  - SHA-256: `e7fa6fb1dd515c456125901de5ef5c443b41049084beb1f2e38f8329c12c34eb`.
+- AzerothCore C++ codestyle and `git diff --check` passed. Protocol version remains 3; no SQL/configuration change
+  was added.
+
+### Not run or not proven
+
+No live PTR database startup/source-count audit, build-12340 client, Content Manager activation, Portalkeeper
+publication, or deployment was performed. Script/event/mail/container acquisition, exact city/zone text beyond loaded
+map names, profession recipe reachability, and live asynchronous/UI behavior remain PTR validation items. No database
+mutation, deployment, commit, or push was performed.
+
 ## Phase 5A final polish and catalog completion
 
 Test date: 2026-11-05.

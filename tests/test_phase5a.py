@@ -155,12 +155,15 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
             CREATE TABLE npc_vendor (entry INTEGER, item INTEGER, ExtendedCost INTEGER);
             CREATE TABLE creature_template (entry INTEGER, name TEXT, lootid INTEGER);
             CREATE TABLE creature (guid INTEGER, id INTEGER, map INTEGER);
+            CREATE TABLE gameobject (guid INTEGER, id INTEGER, map INTEGER);
+            CREATE TABLE creature_queststarter (id INTEGER, quest INTEGER);
+            CREATE TABLE gameobject_queststarter (id INTEGER, quest INTEGER);
             CREATE TABLE reference_loot_template (Entry INTEGER, Item INTEGER, Reference INTEGER);
             CREATE TABLE creature_loot_template (Entry INTEGER, Item INTEGER, Reference INTEGER);
             """
         )
         queries = acquisition_queries()
-        self.assertEqual(len(queries), 4)
+        self.assertEqual(len(queries), 6)
         for query in queries:
             with self.subTest(query=query):
                 db.execute(query).fetchall()
@@ -181,12 +184,24 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
     def test_sources_cover_vendor_quest_direct_and_reference_loot(self):
         for value in ("npc_vendor", "creature_loot_template", "reference_loot_template", "RewardChoiceItemId"):
             self.assertIn(value, CATALOG)
-        for label in ("Sold by: ", "Drops from: ", "Reward from: "):
+        for label in ("Vendor: ", "Exchange: ", "Token: ", "Reward: "):
             self.assertIn(label, CATALOG)
-        self.assertIn("token/currency exchange", CATALOG)
-        self.assertIn("Legacy quest reward: ", CATALOG)
-        self.assertIn("availability unresolved", CATALOG)
+        self.assertIn("sItemExtendedCostStore.LookupEntry", CATALOG)
+        self.assertIn("Legacy: Original Naxxramas", CATALOG)
+        self.assertIn('questSources.push_back("Availability: Unverified")', CATALOG)
+        self.assertIn("creature_queststarter", CATALOG)
+        self.assertIn("gameobject_queststarter", CATALOG)
+        self.assertIn("SPELL_EFFECT_CREATE_ITEM", CATALOG)
         self.assertIn("sMapStore.LookupEntry", CATALOG)
+
+    def test_token_chain_orders_origin_before_token_and_exchange(self):
+        vendor_block = CATALOG[CATALOG.index("for (VendorSource const& vendor : vendors)"):
+                               CATALOG.index("std::unordered_set<std::uint32_t> availableQuestStarters")]
+        self.assertLess(vendor_block.index("origins->second"), vendor_block.index('"Token: "'))
+        self.assertLess(vendor_block.index('"Token: "'), vendor_block.index('"Exchange: "'))
+        self.assertIn("reqitemcount[index]", vendor_block)
+        self.assertIn("reqhonorpoints", vendor_block)
+        self.assertIn("reqarenapoints", vendor_block)
 
     def test_reference_resolution_is_bounded_and_cycle_safe(self):
         self.assertIn("depth < 8", CATALOG)
@@ -215,7 +230,15 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
         self.assertIn("FindFor(player, fields[1])", WARDROBE)
         self.assertIn("readOnlySetRequest", WARDROBE)
         self.assertIn('command=="RESULT" and fields[3]=="0"', LUA)
-        self.assertIn('tonumber(fields[4])~=request.id', LUA)
+        self.assertIn('responseId~=request.id', LUA)
+
+    def test_structured_source_payload_stays_within_addon_message_budget(self):
+        self.assertIn("if (value.size() > 160)", WARDROBE)
+        self.assertIn("CleanProtocolText(itemTemplate->Name1, 30)", WARDROBE)
+        clean_source = WARDROBE[WARDROBE.index("std::string CleanSourceText"):
+                                WARDROBE.index("bool ParseUnsigned")]
+        self.assertNotIn("character == '\\n'", clean_source)
+        self.assertIn('string.find(text or "","\\n"', LUA)
 
 
 class PhaseFiveAUiTests(unittest.TestCase):
@@ -231,6 +254,7 @@ class PhaseFiveAUiTests(unittest.TestCase):
     def test_native_tooltips_and_full_set_preview(self):
         self.assertIn('GameTooltip:SetHyperlink("item:"..self.entry)', LUA)
         self.assertIn('GameTooltip:AddLine("Source"', LUA)
+        self.assertIn("addTooltipLines(GameTooltip,self.sourceText)", LUA)
         self.assertIn('GameTooltip:SetPoint("TOPRIGHT",NativeTransmogFrameSetsPanel,"TOPLEFT"', LUA)
         self.assertNotIn("row.source=", LUA)
         preview = LUA[LUA.index("local function previewSet"):LUA.index("local function requestSets")]
@@ -241,7 +265,8 @@ class PhaseFiveAUiTests(unittest.TestCase):
 
     def test_server_item_names_precede_cache_fallback(self):
         self.assertIn("itemTemplate->Name1", WARDROBE)
-        self.assertIn("piece.source + '\\t' + itemName", WARDROBE)
+        self.assertIn("source + '\\t' + itemName", WARDROBE)
+        self.assertIn("CleanSourceText(piece.source)", WARDROBE)
         self.assertIn('GetItemInfo(entry) or authoritativeName or ("Item " .. entry)', LUA)
         self.assertIn('name=fields[10]~="" and fields[10] or nil', LUA)
 

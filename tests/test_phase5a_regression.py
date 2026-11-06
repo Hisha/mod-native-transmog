@@ -54,6 +54,45 @@ class SetResponseModel:
         self.active = None
 
 
+class SetNavigationModel:
+    """Executable model of independent page and detail request state."""
+
+    def __init__(self):
+        self.page = 0
+        self.next_page = 8
+        self.has_next = True
+        self.history = []
+        self.filter = 0
+        self.page_request = None
+        self.detail_request = None
+        self.selected = None
+        self.request_id = 0
+
+    def select(self, set_id):
+        self.request_id += 1
+        self.selected = set_id
+        self.detail_request = (self.request_id, set_id)
+        return self.request_id
+
+    def change_filter(self, value):
+        self.filter = value
+        self.history = []
+        return self.request_page(0)
+
+    def request_page(self, page):
+        self.request_id += 1
+        self.page_request = (self.request_id, self.filter, page)
+        self.detail_request = None
+        self.selected = None
+        return self.request_id
+
+    def finish_detail(self, request_id, set_id):
+        if self.detail_request != (request_id, set_id):
+            return False
+        self.detail_request = None
+        return True
+
+
 def protocol_version() -> str:
     match = re.search(r"constexpr std::uint32_t Version = (\d+);", PROTOCOL)
     if not match:
@@ -81,7 +120,8 @@ class PhaseFiveAProtocolRegressionTests(unittest.TestCase):
         self.assertNotIn("NativeTransmogFrameSetsPrevious", LUA)
 
     def test_set_response_lifecycle_is_bounded_and_request_owned(self):
-        for marker in ("activeSetRequest", "matchingSetRequest", "cancelSetRequest", "SET_PAGE_SIZE", "MAXIMUM_SET_PIECES"):
+        for marker in ("activeSetPageRequest", "activeSetDetailRequest", "matchingSetRequest",
+                       "cancelSetRequest", "SET_PAGE_SIZE", "MAXIMUM_SET_PIECES"):
             self.assertIn(marker, LUA)
         self.assertIn('request.phase~="PAGE"', LUA)
         self.assertIn('request.phase~="ROWS"', LUA)
@@ -90,6 +130,38 @@ class PhaseFiveAProtocolRegressionTests(unittest.TestCase):
         self.assertIn("incomingPieces[pieceIndex]=", LUA)
         self.assertIn("#completedPieces~=selectedSet.total", LUA)
         self.assertIn("setPieces={}; setStatus", LUA)
+
+    def test_selection_preserves_catalog_navigation_and_filter(self):
+        state = SetNavigationModel()
+        state.page = 16
+        state.next_page = 24
+        state.history = [0, 8]
+        state.filter = 1
+        request = state.select(217)
+        self.assertEqual((state.page, state.next_page, state.history, state.filter), (16, 24, [0, 8], 1))
+        self.assertTrue(state.has_next)
+        self.assertTrue(state.finish_detail(request, 217))
+        self.assertTrue(state.has_next)
+
+    def test_filter_intentionally_resets_page_and_cancels_detail(self):
+        state = SetNavigationModel()
+        state.page = 16
+        state.history = [0, 8]
+        state.select(217)
+        state.change_filter(2)
+        self.assertEqual(state.filter, 2)
+        self.assertEqual(state.history, [])
+        self.assertIsNone(state.detail_request)
+        self.assertEqual(state.page_request[2], 0)
+
+    def test_delayed_detail_and_rapid_switching_are_request_owned(self):
+        state = SetNavigationModel()
+        first = state.select(217)
+        second = state.select(875)
+        self.assertFalse(state.finish_detail(first, 217))
+        self.assertEqual(state.selected, 875)
+        self.assertTrue(state.finish_detail(second, 875))
+        self.assertEqual(state.page, 0)
 
     def test_repeated_responses_and_maximum_size_are_idempotent(self):
         state = SetResponseModel()

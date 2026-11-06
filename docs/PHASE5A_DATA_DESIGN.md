@@ -68,27 +68,33 @@ carry broad masks.
 
 ## Acquisition metadata
 
-The immutable startup index is bounded to catalog items and at most three unique source lines per item/piece. It uses:
+The immutable startup index is bounded to relevant catalog items, their extended-cost tokens, and quest materials,
+with at most four unique source lines per item/piece. It uses:
 
-- `npc_vendor`, including an honest `token/currency exchange` qualifier when `ExtendedCost` is nonzero;
+- `npc_vendor` plus the loaded `ItemExtendedCost.dbc` store for token quantities, Honor, and Arena Point costs;
 - direct creature loot and cycle-safe reference-loot expansion (maximum depth eight);
 - creature spawn maps plus loaded `Map.dbc` names for raid/dungeon location context when present;
-- guaranteed and choice quest rewards from loaded quest templates.
+- guaranteed and choice quest rewards, spawned creature/gameobject quest starters, item quest starters, and required
+  materials from loaded world data;
+- loaded create-item spell effects for crafting sources.
 
-The index does not convert a vendor token exchange into a direct boss drop. A boss line is emitted only when the
-finished item is present in direct/reference creature loot. Multiple authoritative paths are deduplicated and
-retained. Gameobject/container loot, mail/event/script rewards, crafting, PvP rating/rank requirements, and exact
-extended-cost token/currency names are not indexed. Ordinary unresolved pieces say
+For a token exchange, the resolved boss/raid line is emitted first, followed by the token and exchange NPC/location.
+The index never converts that into a finished-item boss drop. A boss-only line for finished equipment is emitted only
+when that equipment is itself present in direct/reference creature loot. Multiple authoritative paths are
+deduplicated and retained. Gameobject/container loot, mail/event/script rewards, profession recipe availability,
+PvP bracket/rating requirements, and scripted quest starters are not fully indexed. Ordinary unresolved pieces say
 `Source not resolved in installed world data`; Tier 3 unresolved pieces say
-`Legacy source unavailable in installed WotLK world data`. A loaded Tier 3 reward quest is labeled
-`Legacy quest reward: … (availability unresolved)` because a quest template alone does not prove that removed
-Naxxramas content is reachable. None of these messages asserts that every unresolved item is unobtainable.
+`Legacy source unavailable in installed WotLK world data`. Loaded Tier 3 reward quests are labeled as Original
+Naxxramas armor quests, list required materials, and report installed availability separately. A quest template alone
+never proves availability; only a proven starter plus resolved material sources is labeled installed, while incomplete
+or uncertain paths remain unverified.
 
-Representative installed-data checks cover Judgement Crown 16955 in reference loot, TBC token-exchange item 29062
-in `npc_vendor` with extended cost 1200, Turalyon's Headpiece 48564 with extended cost 2686, Avenger's Crown 21387
-as quest 8628's reward, and legacy Redemption pieces 22429–22431 as loaded quest rewards whose live availability is
-not proven. These fixtures exercise Classic boss/reference loot, TBC and Wrath exchanges, a normal quest reward, and
-the legacy availability qualifier; they do not imply that every catalog source has been manually checked.
+Representative installed-data checks cover Judgement Crown 16955 in reference loot; Justicar Chestpiece 29062 with
+extended cost 1200, whose loaded DBC cost is Chestguard of the Fallen Champion 29754 and whose reference loot traces
+to Magtheridon 17257; Turalyon's Headpiece 48564 with extended cost 2686; Avenger's Crown 21387 as quest 8628's reward;
+and Redemption Handguards 22426 as quest 9048's reward with four historical required materials and no proven current
+chain. These fixtures exercise Classic boss/reference loot, TBC and Wrath exchanges, a normal quest reward, and legacy
+availability; they do not imply that every catalog source has been manually checked.
 
 ## Sets UI and tooltips
 
@@ -107,8 +113,11 @@ left of the Sets panel so it does not cover the rows.
 
 Protocol version 3 is unchanged. `SETS` remains an eight-entry paged read-only request; `SETDETAIL` remains bounded
 to 32 pieces. `SET` replies add expansion/family/category tail fields, which is compatible with the version-3 client
-parser and does not change mutation semantics. Requests remain owned by request ID and phase; repeated rows replace
-their ordinal, and stale replies after selection changes, pagination, closure, or reopening are ignored.
+parser and does not change mutation semantics. Page and detail requests have independent request ownership and
+timeout state. Selecting a set changes only detail state, so it cannot clear the current page, next cursor, history,
+filter, or navigation buttons. Filter and page changes intentionally clear selection/detail state. Repeated rows
+replace their ordinal, and stale replies after rapid selection, pagination, filtering, closure, or reopening are
+ignored.
 
 `CAT`, `APPLY`, `HIDE`, `REMOVE`, NPC authorization, persistence, and CharacterFrame tooltip synchronization are
 unchanged. Set browsing does not require an NPC session. No schema or configuration change is required.
@@ -118,5 +127,5 @@ unchanged. Set browsing does not require an NPC session. No schema or configurat
 WotLK `DressUpModel` is last-write-wins per slot and has no modern transmog-set API. Client cache misses can briefly
 delay native icons/tooltips, although server-provided names keep rows meaningful. Installed custom/partial templates
 can yield different startup counts and are logged rather than invented. Actual protected-FrameXML geometry, tooltip
-placement at supported UI scales, rapid asynchronous switching, and every race/gender model combination still require
-the PTR checks in `PHASE5A_PTR_VALIDATION.md`.
+placement at supported UI scales, scripted/event acquisition paths, profession recipe reachability, and every
+race/gender model combination still require the PTR checks in `PHASE5A_PTR_VALIDATION.md`.

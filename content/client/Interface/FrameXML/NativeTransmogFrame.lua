@@ -23,7 +23,8 @@ local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 5, 52, 10
 local browserMode, setFilter, setCursor, setNextCursor, setHasNext = "APPEARANCES", 0, 0, 0, false
 local setRequestId = 0
 local setHistory, setCatalog, incomingSets, selectedSet, setPieces = {}, {}, {}, nil, {}
-local incomingSetIds, incomingPieces, activeSetRequest = {}, {}, nil
+local incomingSetIds, incomingPieces, activeSetPageRequest, activeSetDetailRequest = {}, {}, nil, nil
+local setPagePending, setDetailPending = nil, nil
 local setRows, pieceRows = {}, {}
 local SET_PAGE_SIZE, MAXIMUM_SET_PIECES = 8, 32
 local requestCatalog, renderPieces, requestSetDetail
@@ -109,11 +110,21 @@ local function truncateLabel(text,maximum)
  if string.len(text)<=maximum then return text end
  return string.sub(text,1,maximum-3).."..."
 end
+local function addTooltipLines(tooltip,text)
+ local start=1
+ while true do
+  local separator=string.find(text or "","\n",start,true)
+  local line=separator and string.sub(text,start,separator-1) or string.sub(text or "",start)
+  if line~="" then tooltip:AddLine(line,.75,.75,.75,true) end
+  if not separator then return end
+  start=separator+1
+ end
+end
 
 local function sendReadOnly(operation,tail)
  if not SendAddonMessage then setStatus("Set catalog transport is unavailable.",true); return false end
  SendAddonMessage(PREFIX,VERSION.."\t"..operation..(tail and ("\t"..tail) or ""),"WHISPER",UnitName("player"))
- pending={operation=operation,started=GetTime()}; setStatus("Waiting for server...",false)
+ setStatus("Waiting for server...",false)
  return true
 end
 
@@ -140,8 +151,8 @@ local function renderSets()
  for index=#setCatalog+1,#setRows do setRows[index]:Hide() end
  NativeTransmogFrameSetsPanelListScrollChild:SetHeight(math.max(292,#setCatalog*35+4))
  NativeTransmogFrameSetsPanelListScroll:SetVerticalScroll(0)
- setButtonEnabled(NativeTransmogFrameSetsPanelPrevious,#setHistory>0 and not pending)
- setButtonEnabled(NativeTransmogFrameSetsPanelNext,setHasNext and not pending)
+ setButtonEnabled(NativeTransmogFrameSetsPanelPrevious,#setHistory>0 and not setPagePending)
+ setButtonEnabled(NativeTransmogFrameSetsPanelNext,setHasNext and not setPagePending)
 end
 local function createPieceRow(index)
  local row=CreateFrame("Button","NativeTransmogPieceRow"..index,NativeTransmogFrameSetsPanelPieceScrollChild)
@@ -154,7 +165,7 @@ local function createPieceRow(index)
   GameTooltip:SetOwner(self,"ANCHOR_NONE"); GameTooltip:SetPoint("TOPRIGHT",NativeTransmogFrameSetsPanel,"TOPLEFT",-6,0)
   GameTooltip:SetHyperlink("item:"..self.entry)
   if not GetItemInfo(self.entry) and self.itemName then GameTooltip:AddLine(self.itemName,1,.82,0,true) end
-  GameTooltip:AddLine(" "); GameTooltip:AddLine("Source",1,.82,0); GameTooltip:AddLine(self.sourceText,.75,.75,.75,true); GameTooltip:Show()
+  GameTooltip:AddLine(" "); GameTooltip:AddLine("Source",1,.82,0); addTooltipLines(GameTooltip,self.sourceText); GameTooltip:Show()
  end)
  row:SetScript("OnLeave",function() GameTooltip:Hide() end)
  pieceRows[index]=row; return row
@@ -174,24 +185,27 @@ local function previewSet()
  model:SetRotation(modelRotation)
 end
 local function requestSets(newCursor)
- setRequestId=setRequestId+1; setCursor=newCursor or 0; incomingSets={}; incomingSetIds={}; setHasNext=false; selectedSet=nil; setPieces={}; incomingPieces={}; renderPieces()
- activeSetRequest={id=setRequestId,kind="SETS",phase="PAGE",filter=setFilter,cursor=setCursor}
- if not sendReadOnly("SETS",setRequestId.."\t"..setFilter.."\t"..setCursor) then activeSetRequest=nil end
+ setRequestId=setRequestId+1; setCursor=newCursor or 0; incomingSets={}; incomingSetIds={}; selectedSet=nil; setPieces={}; incomingPieces={}; renderPieces()
+ activeSetDetailRequest=nil; setDetailPending=nil
+ activeSetPageRequest={id=setRequestId,kind="SETS",phase="PAGE",filter=setFilter,cursor=setCursor}
+ if sendReadOnly("SETS",setRequestId.."\t"..setFilter.."\t"..setCursor) then setPagePending={id=setRequestId,started=GetTime()}
+ else activeSetPageRequest=nil; setPagePending=nil end
  renderSets()
 end
 requestSetDetail=function(set)
  if not set or not set.id then return end
  setRequestId=setRequestId+1; selectedSet=set; setPieces={}; incomingPieces={}; renderPieces()
- activeSetRequest={id=setRequestId,kind="SETDETAIL",phase="INFO",setId=set.id}
- if not sendReadOnly("SETDETAIL",setRequestId.."\t"..set.id) then activeSetRequest=nil end
+ activeSetDetailRequest={id=setRequestId,kind="SETDETAIL",phase="INFO",setId=set.id}
+ if sendReadOnly("SETDETAIL",setRequestId.."\t"..set.id) then setDetailPending={id=setRequestId,started=GetTime()}
+ else activeSetDetailRequest=nil; setDetailPending=nil end
  renderSets()
 end
 local function cancelSetRequest()
- setRequestId=setRequestId+1; activeSetRequest=nil; incomingSets={}; incomingSetIds={}; incomingPieces={}
- if pending and (pending.operation=="SETS" or pending.operation=="SETDETAIL") then pending=nil end
+ setRequestId=setRequestId+1; activeSetPageRequest=nil; activeSetDetailRequest=nil; incomingSets={}; incomingSetIds={}; incomingPieces={}
+ setPagePending=nil; setDetailPending=nil
 end
 local function matchingSetRequest(kind,responseId)
- local request=activeSetRequest
+ local request=kind=="SETS" and activeSetPageRequest or activeSetDetailRequest
  if browserMode~="SETS" or not NativeTransmogFrame:IsShown() then return nil end
  if not request or request.kind~=kind or request.id~=responseId then return nil end
  return request
@@ -439,10 +453,15 @@ function NativeTransmog_GameTooltip_OnTooltipSetItem(tooltip)
 end
 
 function NativeTransmog_FrameUpdate()
+ if setPagePending and GetTime()-setPagePending.started>5 then
+  activeSetPageRequest=nil; setPagePending=nil; renderSets(); setStatus("Set catalog request timed out.",true)
+ end
+ if setDetailPending and GetTime()-setDetailPending.started>5 then
+  activeSetDetailRequest=nil; setDetailPending=nil; setStatus("Set detail request timed out.",true)
+ end
  if pending and GetTime()-pending.started>5 then
   local operation=pending.operation; pending=nil
-  if operation=="SETS" or operation=="SETDETAIL" then activeSetRequest=nil; renderSets()
-  else refreshSelection() end
+  refreshSelection()
   setStatus("Server unavailable or request timed out.",true)
  end
  if scheduledRefresh and GetTime()>=scheduledRefresh then scheduledRefresh=nil; requestCatalog(cursor) end
@@ -520,13 +539,13 @@ function NativeTransmog_OnEvent(_,event,...)
   incomingSetIds[setId]=true; table.insert(incomingSets,{id=setId,collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7] or "Unknown set",expansion=fields[8],family=fields[9],category=fields[10]}); return
  elseif command=="SETEND" then
   local request=matchingSetRequest("SETS",tonumber(fields[3])); if not request or request.phase~="ROWS" then return end
-  activeSetRequest=nil; pending=nil
+  activeSetPageRequest=nil; setPagePending=nil
   if #incomingSets~=request.expected then setStatus("Set page response was incomplete; try again.",true); renderSets(); return end
   setCatalog=incomingSets; renderSets(); setStatus(#setCatalog>0 and "Select a set to preview its pieces." or "No sets match this filter.",false); return
  elseif command=="SETINFO" then
   local request=matchingSetRequest("SETDETAIL",tonumber(fields[3])); local setId=tonumber(fields[4]); local total=tonumber(fields[6])
   if not request or request.phase~="INFO" or setId~=request.setId or not total or total<0 or total>MAXIMUM_SET_PIECES then return end
-  selectedSet={id=setId,collected=tonumber(fields[5]) or 0,total=total,name=fields[7] or "Unknown set"}; setPieces={}; incomingPieces={}; request.phase="PIECES"; return
+  selectedSet.collected=tonumber(fields[5]) or 0; selectedSet.total=total; selectedSet.name=fields[7] or selectedSet.name or "Unknown set"; setPieces={}; incomingPieces={}; request.phase="PIECES"; return
  elseif command=="SETPIECE" then
   local request=matchingSetRequest("SETDETAIL",tonumber(fields[3])); local setId,pieceIndex=tonumber(fields[4]),tonumber(fields[5]); local entry,slot=tonumber(fields[6]),tonumber(fields[7])
   if not request or request.phase~="PIECES" or setId~=request.setId or not pieceIndex or pieceIndex<1 or pieceIndex>MAXIMUM_SET_PIECES or not entry or not slot then return end
@@ -536,14 +555,15 @@ function NativeTransmog_OnEvent(_,event,...)
   if not request or request.phase~="PIECES" or setId~=request.setId or not selectedSet or selectedSet.id~=setId then return end
   local completedPieces={}
   for pieceIndex=1,selectedSet.total do if incomingPieces[pieceIndex] then table.insert(completedPieces,incomingPieces[pieceIndex]) end end
-  activeSetRequest=nil; pending=nil
+  activeSetDetailRequest=nil; setDetailPending=nil
   if #completedPieces~=selectedSet.total then setPieces={}; setStatus("Set detail response was incomplete; select the set again.",true); renderPieces(); return end
   setPieces=completedPieces
   renderPieces(); previewSet(); setStatus(selectedSet.name.." — "..selectedSet.collected.."/"..selectedSet.total.." collected",false); return
  elseif command=="RESULT" and fields[3]=="0" then
-  local request=activeSetRequest
-  if not request or tonumber(fields[4])~=request.id then return end
-  activeSetRequest=nil; pending=nil; setStatus(RESULT_TEXT[fields[6]] or ("Set request failed: "..(fields[6] or "MALFORMED")),true); renderSets(); return
+  local responseId=tonumber(fields[4]); local request=activeSetPageRequest
+  if request and responseId==request.id then activeSetPageRequest=nil; setPagePending=nil
+  else request=activeSetDetailRequest; if not request or responseId~=request.id then return end; activeSetDetailRequest=nil; setDetailPending=nil end
+  setStatus(RESULT_TEXT[fields[6]] or ("Set request failed: "..(fields[6] or "MALFORMED")),true); renderSets(); return
  elseif command=="PAGE" and tonumber(fields[4])==requestId then
   if not authorizedToken or fields[3]~=authorizedToken then return end
   snapshotNonce=fields[5]; nextCursor=tonumber(fields[8]) or 0; hasNext=fields[9]=="1"
