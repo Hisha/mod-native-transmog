@@ -39,23 +39,27 @@ class PhaseOneTests(unittest.TestCase):
         )
         self.assertEqual(frame_xml["loadEntries"], [{
             "target": "Interface/FrameXML/NativeTransmogFrame.xml",
-            "after": "Interface/FrameXML/ContentManagerNativePve.lua",
+            "after": "Interface/FrameXML/ContentManagerCollections.lua",
         }])
-        self.assertEqual(self.manifest["nativePvePages"], [{
+        self.assertNotIn("nativePvePages", self.manifest)
+        self.assertEqual(self.manifest["nativeCollectionPages"], [{
             "id": "appearances",
             "name": "Appearances",
-            "frame": "NativeTransmogFrame",
+            "order": 100,
+            "frame": "NativeTransmogCollectionsFrame",
             "loadTarget": "Interface/FrameXML/NativeTransmogFrame.xml",
             "onShow": "NativeTransmog_OpenCollections",
+            "onHide": "NativeTransmog_CloseCollections",
         }])
 
-    def test_shared_pve_entry_is_read_only(self) -> None:
+    def test_collections_entry_is_read_only(self) -> None:
         body = self.lua[
             self.lua.index("function NativeTransmog_OpenCollections"):
             self.lua.index("function NativeTransmog_OnEvent")
         ]
-        self.assertIn("authorizedToken=nil", body)
-        self.assertIn('if browserMode~="SETS" then NativeTransmog_SetMode("SETS") end', body)
+        self.assertIn('browserMode="SETS"', body)
+        self.assertIn("requestSets(0)", body)
+        self.assertIn("cancelSetRequest()", body)
         self.assertNotIn("sendRequest", body)
         self.assertNotIn('"APPLY"', body)
         self.assertNotIn('"HIDE"', body)
@@ -71,9 +75,23 @@ class PhaseOneTests(unittest.TestCase):
         root = ET.parse(XML_PATH).getroot()
         names = [element.attrib.get("name") for element in root.iter()]
         self.assertIn("NativeTransmogFrame", names)
+        self.assertIn("NativeTransmogCollectionsFrame", names)
         children = list(root)
         self.assertTrue(children[0].tag.endswith("Script"))
         self.assertEqual(children[0].attrib["file"], "NativeTransmogFrame.lua")
+
+    def test_collections_frame_has_no_vendor_customization_controls(self) -> None:
+        root = ET.parse(XML_PATH).getroot()
+        collections = next(
+            element for element in root.iter()
+            if element.attrib.get("name") == "NativeTransmogCollectionsFrame"
+        )
+        names = {element.attrib.get("name", "") for element in collections.iter()}
+        scripts = " ".join((element.text or "") for element in collections.iter())
+        self.assertFalse(any("EquipmentSlot" in name for name in names))
+        self.assertNotIn("NativeTransmog_Apply", scripts)
+        self.assertNotIn("NativeTransmog_Remove", scripts)
+        self.assertNotIn("NativeTransmog_SelectSlot", scripts)
 
     def test_phase1_preview_behaviors_are_preserved(self) -> None:
         for token in (

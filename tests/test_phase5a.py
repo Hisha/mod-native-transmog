@@ -243,24 +243,25 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
 
 class PhaseFiveAUiTests(unittest.TestCase):
     def test_sets_page_and_selection_restore_after_reopen(self):
-        self.assertIn('if browserMode=="SETS" then requestSets(setCursor); return end', LUA)
-        self.assertIn('if browserMode=="SETS" and selectedSet then restoreSetId=selectedSet.id end', LUA)
+        self.assertIn('browserMode="SETS"; restoreSetId=nil; setHistory={}; requestSets(0)', LUA)
+        self.assertIn('if selectedSet then restoreSetId=selectedSet.id end', LUA)
+        self.assertIn('NativeTransmog_EndRotation(getCollectionModel())', LUA)
         self.assertIn('for _,set in ipairs(setCatalog) do if set.id==wanted then requestSetDetail(set)', LUA)
 
     def test_modes_filters_progress_and_missing_pieces_are_rendered(self):
-        self.assertIn('text="Appearances"', XML)
-        self.assertIn('text="Sets"', XML)
+        self.assertIn('name="NativeTransmogCollectionsFrame"', XML)
+        self.assertIn('parent="ContentManagerCollectionsFrame"', XML)
         self.assertIn('text="Incomplete"', XML)
         self.assertIn('text="Complete"', XML)
         self.assertIn('row.progress:SetText(set.collected.."/"..set.total)', LUA)
         self.assertIn("ReadyCheck-NotReady", LUA)
-        self.assertIn("EQUIPMENT_SLOT_LABELS[piece.slot]", LUA)
+        self.assertIn('row:SetAlpha(piece.collected and 1 or .45)', LUA)
 
     def test_native_tooltips_and_full_set_preview(self):
         self.assertIn('GameTooltip:SetHyperlink("item:"..self.entry)', LUA)
         self.assertIn('GameTooltip:AddLine("Source"', LUA)
         self.assertIn("addTooltipLines(GameTooltip,self.sourceText)", LUA)
-        self.assertIn('GameTooltip:SetPoint("TOPRIGHT",NativeTransmogFrameSetsPanel,"TOPLEFT"', LUA)
+        self.assertIn('GameTooltip:SetOwner(self,"ANCHOR_RIGHT")', LUA)
         self.assertNotIn("row.source=", LUA)
         preview = LUA[LUA.index("local function previewSet"):LUA.index("local function requestSets")]
         self.assertIn('model:SetUnit("player")', preview)
@@ -281,11 +282,12 @@ class PhaseFiveAUiTests(unittest.TestCase):
         self.assertIn('sendRequest("APPLY"', LUA)
         self.assertNotIn("Apply Set", XML + LUA)
 
-    def test_long_names_are_truncated_and_rows_stay_within_piece_scroll(self):
+    def test_long_set_names_and_piece_icons_fit_collections_layout(self):
         self.assertIn("local function truncateLabel", LUA)
-        self.assertIn('truncateLabel(itemLabel(piece.entry,"Unknown item",piece.name),24)', LUA)
-        self.assertIn("#setPieces*40+4", LUA)
-        self.assertIn('row.slot:SetText(EQUIPMENT_SLOT_LABELS[piece.slot]', LUA)
+        self.assertIn('truncateLabel(set.name,22)', LUA)
+        self.assertIn('NativeTransmogCollectionsFramePieceBar', LUA)
+        self.assertIn('(index-1)*54', LUA)
+        self.assertIn('row.itemName=piece.name', LUA)
 
 
 if __name__ == "__main__":

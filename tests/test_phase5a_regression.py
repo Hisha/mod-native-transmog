@@ -114,9 +114,9 @@ def response_commands() -> set[str]:
 
 class PhaseFiveAProtocolRegressionTests(unittest.TestCase):
     def test_xml_generated_pagination_names_match_lua_globals(self):
-        self.assertIn('<Button name="$parentPrevious"', XML)
-        self.assertIn("NativeTransmogFrameSetsPanelPrevious", LUA)
-        self.assertIn("NativeTransmogFrameSetsPanelNext", LUA)
+        self.assertIn('<Button name="NativeTransmogCollectionsFramePrevious"', XML)
+        self.assertIn("NativeTransmogCollectionsFramePrevious", LUA)
+        self.assertIn("NativeTransmogCollectionsFrameNext", LUA)
         self.assertNotIn("NativeTransmogFrameSetsPrevious", LUA)
 
     def test_set_response_lifecycle_is_bounded_and_request_owned(self):

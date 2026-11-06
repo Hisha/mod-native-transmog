@@ -9,9 +9,6 @@ local SLOT_LABELS = { HEAD="Head Appearances", SHOULDERS="Shoulder Appearances",
     WRISTS="Wrist Appearances", HANDS="Hand Appearances", BACK="Back Appearances",
     MAIN_HAND="Main-Hand Appearances", OFF_HAND="Off-Hand Appearances", RANGED="Ranged Appearances",
     TABARD="Tabard Appearances" }
-local EQUIPMENT_SLOT_LABELS = { [0]="Head",[2]="Shoulders",[3]="Shirt",[4]="Chest",[5]="Waist",[6]="Legs",
-    [7]="Feet",[8]="Wrists",[9]="Hands",[14]="Back",[15]="Main Hand",[16]="Off Hand",[17]="Ranged",[18]="Tabard" }
-
 local authorizedToken, selectedSlot, selectedSlotId = nil, "HEAD", 1
 local requestId, snapshotNonce, cursor, nextCursor, hasNext = 0, nil, 0, 0, false
 local cursorHistory, catalog, incomingCatalog, buttons = {}, {}, {}, {}
@@ -67,9 +64,11 @@ local function splitTabs(value)
 end
 
 local function getModel() return NativeTransmogFramePreviewPanelModel end
+local function getCollectionModel() return NativeTransmogCollectionsFramePreviewModel end
 local function setStatus(text, failure)
- NativeTransmogFrameStatus:SetText(text or "")
- NativeTransmogFrameStatus:SetTextColor(failure and 1 or .25, failure and .25 or 1, .25)
+ local target=NativeTransmogCollectionsFrame and NativeTransmogCollectionsFrame:IsShown() and NativeTransmogCollectionsFrameStatus or NativeTransmogFrameStatus
+ target:SetText(text or "")
+ target:SetTextColor(failure and 1 or .25, failure and .25 or 1, .25)
 end
 local function itemLabel(entry, emptyText, authoritativeName)
  if not entry or entry == 0 then return emptyText end
@@ -130,9 +129,9 @@ local function sendReadOnly(operation,tail)
 end
 
 local function createSetRow(index)
- local row=CreateFrame("Button","NativeTransmogSetRow"..index,NativeTransmogFrameSetsPanelListScrollChild)
- row:SetWidth(170); row:SetHeight(34)
- row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",5,-3); row.name:SetWidth(126); row.name:SetJustifyH("LEFT")
+ local row=CreateFrame("Button","NativeTransmogSetRow"..index,NativeTransmogCollectionsFrameListScrollChild)
+ row:SetWidth(274); row:SetHeight(42)
+ row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",7,-5); row.name:SetWidth(215); row.name:SetJustifyH("LEFT")
  row.meta=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.meta:SetPoint("TOPLEFT",5,-18); row.meta:SetWidth(155); row.meta:SetJustifyH("LEFT")
  row.progress=row:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall"); row.progress:SetPoint("TOPRIGHT",-5,-3)
  row.selected=row:CreateTexture(nil,"BACKGROUND"); row.selected:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight"); row.selected:SetBlendMode("ADD"); row.selected:SetAllPoints(row)
@@ -144,26 +143,25 @@ local function createSetRow(index)
 end
 local function renderSets()
  for index,set in ipairs(setCatalog) do
-  local row=setRows[index] or createSetRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*35); row.set=set
+  local row=setRows[index] or createSetRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*43); row.set=set
   row.name:SetText(truncateLabel(set.name,22)); row.meta:SetText((set.category or "PvE").." • "..(set.family or "Set")); row.progress:SetText(set.collected.."/"..set.total)
   row.name:SetTextColor(set.collected==set.total and .2 or 1,set.collected==set.total and 1 or .82,.2); row:Show()
   setShown(row.selected,selectedSet and selectedSet.id==set.id)
  end
  for index=#setCatalog+1,#setRows do setRows[index]:Hide() end
- NativeTransmogFrameSetsPanelListScrollChild:SetHeight(math.max(292,#setCatalog*35+4))
- NativeTransmogFrameSetsPanelListScroll:SetVerticalScroll(0)
- setButtonEnabled(NativeTransmogFrameSetsPanelPrevious,#setHistory>0 and not setPagePending)
- setButtonEnabled(NativeTransmogFrameSetsPanelNext,setHasNext and not setPagePending)
+ NativeTransmogCollectionsFrameListScrollChild:SetHeight(math.max(365,#setCatalog*43+4))
+ NativeTransmogCollectionsFrameListScroll:SetVerticalScroll(0)
+ setButtonEnabled(NativeTransmogCollectionsFramePrevious,#setHistory>0 and not setPagePending)
+ setButtonEnabled(NativeTransmogCollectionsFrameNext,setHasNext and not setPagePending)
 end
 local function createPieceRow(index)
- local row=CreateFrame("Button","NativeTransmogPieceRow"..index,NativeTransmogFrameSetsPanelPieceScrollChild)
- row:SetWidth(178); row:SetHeight(39)
- row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetWidth(36); row.icon:SetHeight(36); row.icon:SetPoint("LEFT",3,0); row.icon:SetTexCoord(.08,.92,.08,.92)
- row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",43,-3); row.name:SetWidth(130); row.name:SetJustifyH("LEFT")
- row.slot=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.slot:SetPoint("TOPLEFT",43,-19); row.slot:SetWidth(130); row.slot:SetJustifyH("LEFT")
- row.mark=row:CreateTexture(nil,"OVERLAY"); row.mark:SetWidth(15); row.mark:SetHeight(15); row.mark:SetPoint("BOTTOMLEFT",27,2)
+ local row=CreateFrame("Button","NativeTransmogPieceRow"..index,NativeTransmogCollectionsFramePieceBar)
+ row:SetWidth(46); row:SetHeight(46)
+ row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetAllPoints(row); row.icon:SetTexCoord(.08,.92,.08,.92)
+ row.border=row:CreateTexture(nil,"OVERLAY"); row.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); row.border:SetAllPoints(row)
+ row.mark=row:CreateTexture(nil,"OVERLAY"); row.mark:SetWidth(16); row.mark:SetHeight(16); row.mark:SetPoint("BOTTOMRIGHT",1,-1)
  row:SetScript("OnEnter",function(self)
-  GameTooltip:SetOwner(self,"ANCHOR_NONE"); GameTooltip:SetPoint("TOPRIGHT",NativeTransmogFrameSetsPanel,"TOPLEFT",-6,0)
+  GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
   GameTooltip:SetHyperlink("item:"..self.entry)
   if not GetItemInfo(self.entry) and self.itemName then GameTooltip:AddLine(self.itemName,1,.82,0,true) end
   GameTooltip:AddLine(" "); GameTooltip:AddLine("Source",1,.82,0); addTooltipLines(GameTooltip,self.sourceText); GameTooltip:Show()
@@ -173,15 +171,16 @@ local function createPieceRow(index)
 end
 renderPieces=function()
  for index,piece in ipairs(setPieces) do
-  local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-(index-1)*40); row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
-  row.icon:SetTexture(GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row.name:SetText(truncateLabel(itemLabel(piece.entry,"Unknown item",piece.name),24)); row.slot:SetText(EQUIPMENT_SLOT_LABELS[piece.slot] or "Equipment")
+  local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("LEFT",NativeTransmogCollectionsFramePieceBar,"LEFT",(index-1)*54,0); row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
+  row.icon:SetTexture(GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row:SetAlpha(piece.collected and 1 or .45)
   row.mark:SetTexture(piece.collected and "Interface\\RaidFrame\\ReadyCheck-Ready" or "Interface\\RaidFrame\\ReadyCheck-NotReady"); row:Show()
  end
  for index=#setPieces+1,#pieceRows do pieceRows[index]:Hide() end
- NativeTransmogFrameSetsPanelPieceScrollChild:SetHeight(math.max(336,#setPieces*40+4)); NativeTransmogFrameSetsPanelPieceScroll:SetVerticalScroll(0)
+ local progress=selectedSet and (selectedSet.name.."  "..selectedSet.collected.."/"..selectedSet.total) or "Select an armor set"
+ NativeTransmogCollectionsFrameSelection:SetText(progress)
 end
 local function previewSet()
- local model=getModel(); model:SetUnit("player"); model:Undress()
+ local model=getCollectionModel(); model:SetUnit("player"); model:Undress()
  for _,piece in ipairs(setPieces) do model:TryOn(piece.entry) end
  model:SetRotation(modelRotation)
 end
@@ -207,18 +206,9 @@ local function cancelSetRequest()
 end
 local function matchingSetRequest(kind,responseId)
  local request=kind=="SETS" and activeSetPageRequest or activeSetDetailRequest
- if browserMode~="SETS" or not NativeTransmogFrame:IsShown() then return nil end
+ if browserMode~="SETS" or not NativeTransmogCollectionsFrame:IsShown() then return nil end
  if not request or request.kind~=kind or request.id~=responseId then return nil end
  return request
-end
-function NativeTransmog_SetMode(mode)
- cancelSetRequest()
- browserMode=mode
- local sets=mode=="SETS"; if sets then NativeTransmogFrameSetsPanel:Show(); NativeTransmogFrameBrowserPanel:Hide() else NativeTransmogFrameSetsPanel:Hide(); NativeTransmogFrameBrowserPanel:Show() end
- setShown(NativeTransmogFrameSlotTitle,not sets); setShown(NativeTransmogFrameHint,not sets); setShown(NativeTransmogFrameActual,not sets); setShown(NativeTransmogFrameApplied,not sets); setShown(NativeTransmogFramePreview,not sets)
- setShown(NativeTransmogFramePrevious,not sets); setShown(NativeTransmogFrameNext,not sets); setShown(NativeTransmogFrameApply,not sets); setShown(NativeTransmogFrameRemove,not sets)
- if sets then restoreSetId=nil; requestId=requestId+1; snapshotNonce=nil; scheduledRefresh=nil; setHistory={}; requestSets(0)
- elseif authorizedToken then cursorHistory={}; requestCatalog(0) else NativeTransmog_ResetPreview() end
 end
 function NativeTransmog_SetFilter(filter) restoreSetId=nil; setFilter=filter; setHistory={}; requestSets(0) end
 function NativeTransmog_SetsNext() if setHasNext then restoreSetId=nil; table.insert(setHistory,setCursor); requestSets(setNextCursor) end end
@@ -377,7 +367,7 @@ local function sendRequest(operation,tail)
  SendAddonMessage(PREFIX,VERSION.."\t"..operation.."\t"..authorizedToken.."\t"..tail,"WHISPER",UnitName("player"))
  pending={operation=operation,started=GetTime()}; setStatus("Waiting for server...",false); refreshSelection(); return true
 end
--- local function requestCatalog is forward-declared because the Sets tab can return to it.
+-- local function requestCatalog is forward-declared for authorized wardrobe render helpers.
 requestCatalog=function(newCursor)
  if not slotIsUsable(selectedSlotId) then clearCatalogForUnavailableSlot(unavailableSlotMessage(selectedSlotId)); return end
  if not slotHasItem(selectedSlotId) then clearCatalogForUnavailableSlot("Equip an item to customize this slot."); return end
@@ -408,12 +398,13 @@ function NativeTransmog_SelectSlot(slotId)
  else hasPhysicalItem=true; catalog={}; renderCatalog() end
 end
 function NativeTransmog_Rotate(amount) modelRotation=modelRotation+amount; getModel():SetRotation(modelRotation) end
+function NativeTransmog_RotateCollections(amount) modelRotation=modelRotation+amount; getCollectionModel():SetRotation(modelRotation) end
 function NativeTransmog_BeginRotation(model) model.rotating=true; model.rotationCursorX=GetCursorPosition() end
 function NativeTransmog_EndRotation(model) model.rotating=false end
 function NativeTransmog_UpdateRotation(model)
  if not model.rotating then return end
  local cursorX=GetCursorPosition(); local delta=(cursorX-model.rotationCursorX)/UIParent:GetEffectiveScale()
- model.rotationCursorX=cursorX; NativeTransmog_Rotate(delta*.01)
+ model.rotationCursorX=cursorX; modelRotation=modelRotation+delta*.01; model:SetRotation(modelRotation)
 end
 
 function NativeTransmog_EquipmentSlot_OnLoad(button)
@@ -475,30 +466,35 @@ function NativeTransmog_OnLoad(frame)
  UISpecialFrames[#UISpecialFrames+1]=frame:GetName(); NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
 end
 function NativeTransmog_OnShow()
+ browserMode="APPEARANCES"
  updateEquipmentSlots(); NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
- if browserMode=="SETS" then requestSets(setCursor); return end
  if not slotIsUsable(selectedSlotId) or not slotHasItem(selectedSlotId) then NativeTransmog_SelectSlot(selectedSlotId)
  elseif authorizedToken then cursorHistory={}; requestCatalog(0)
  else hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
 end
 function NativeTransmog_OnHide()
- if browserMode=="SETS" and selectedSet then restoreSetId=selectedSet.id end
- NativeTransmog_EndRotation(getModel()); cancelSetRequest(); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil
+ NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
 function NativeTransmog_OpenAuthorized(token)
+ browserMode="APPEARANCES"
  authorizedToken=token; updateEquipmentSlots()
  if NativeTransmogFrame:IsShown() then
   if browserMode=="APPEARANCES" then cursorHistory={}; requestCatalog(0) end
  else NativeTransmogFrame:Show() end
 end
 function NativeTransmog_HasAuthorizedSession() return authorizedToken~=nil end
--- Shared PvE entry point. It deliberately discards any NPC token and opens
--- only the read-only equipment-set transport; apply/hide/remove remain behind
--- sendRequest's authorizedToken check and the server's live NPC session check.
+-- Collections entry point. It uses only the unauthenticated read-only set
+-- transport. The separate frame contains no equipment slots or mutations;
+-- apply/hide/remove remain in the NPC-authorized wardrobe.
 function NativeTransmog_OpenCollections()
- authorizedToken=nil
- if browserMode~="SETS" then NativeTransmog_SetMode("SETS") end
+ browserMode="SETS"; restoreSetId=nil; setHistory={}; requestSets(0)
+ PlaySound("igCharacterInfoOpen")
+end
+function NativeTransmog_CloseCollections()
+ if selectedSet then restoreSetId=selectedSet.id end
+ NativeTransmog_EndRotation(getCollectionModel()); cancelSetRequest(); browserMode="APPEARANCES"
+ GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
 function NativeTransmog_OnEvent(_,event,...)
  if event=="PLAYER_EQUIPMENT_CHANGED" then
