@@ -39,8 +39,27 @@ class PhaseOneTests(unittest.TestCase):
         )
         self.assertEqual(frame_xml["loadEntries"], [{
             "target": "Interface/FrameXML/NativeTransmogFrame.xml",
-            "after": "Interface/FrameXML/DressUpFrame.xml",
+            "after": "Interface/FrameXML/ContentManagerNativePve.lua",
         }])
+        self.assertEqual(self.manifest["nativePvePages"], [{
+            "id": "appearances",
+            "name": "Appearances",
+            "frame": "NativeTransmogFrame",
+            "loadTarget": "Interface/FrameXML/NativeTransmogFrame.xml",
+            "onShow": "NativeTransmog_OpenCollections",
+        }])
+
+    def test_shared_pve_entry_is_read_only(self) -> None:
+        body = self.lua[
+            self.lua.index("function NativeTransmog_OpenCollections"):
+            self.lua.index("function NativeTransmog_OnEvent")
+        ]
+        self.assertIn("authorizedToken=nil", body)
+        self.assertIn('if browserMode~="SETS" then NativeTransmog_SetMode("SETS") end', body)
+        self.assertNotIn("sendRequest", body)
+        self.assertNotIn('"APPLY"', body)
+        self.assertNotIn('"HIDE"', body)
+        self.assertNotIn('"REMOVE"', body)
 
     def test_no_addon_loader_or_raw_toc_replacement(self) -> None:
         targets = [entry["target"].replace("\\", "/") for entry in self.manifest["content"]]

@@ -2,7 +2,7 @@
   "schema": 3,
   "package": "mod-native-transmog",
   "name": "Native Transmog Wardrobe",
-  "version": "5.0.0-phase5a",
+  "version": "5.1.0-pve1",
   "description": "Native build-12340 wardrobe with authoritative gameplay equipment-set browsing and preview.",
   "creatureTemplates": [
     {
@@ -40,8 +40,17 @@
     "loadEntries": [
       {
         "target": "Interface/FrameXML/NativeTransmogFrame.xml",
-        "after": "Interface/FrameXML/DressUpFrame.xml"
+        "after": "Interface/FrameXML/ContentManagerNativePve.lua"
       }
     ]
-  }
+  },
+  "nativePvePages": [
+    {
+      "id": "appearances",
+      "name": "Appearances",
+      "frame": "NativeTransmogFrame",
+      "loadTarget": "Interface/FrameXML/NativeTransmogFrame.xml",
+      "onShow": "NativeTransmog_OpenCollections"
+    }
+  ]
 }

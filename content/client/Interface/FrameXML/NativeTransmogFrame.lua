@@ -23,6 +23,7 @@ local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 5, 52, 10
 local browserMode, setFilter, setCursor, setNextCursor, setHasNext = "APPEARANCES", 0, 0, 0, false
 local setRequestId = 0
 local setHistory, setCatalog, incomingSets, selectedSet, setPieces = {}, {}, {}, nil, {}
+local restoreSetId = nil
 local incomingSetIds, incomingPieces, activeSetPageRequest, activeSetDetailRequest = {}, {}, nil, nil
 local setPagePending, setDetailPending = nil, nil
 local setRows, pieceRows = {}, {}
@@ -216,12 +217,12 @@ function NativeTransmog_SetMode(mode)
  local sets=mode=="SETS"; if sets then NativeTransmogFrameSetsPanel:Show(); NativeTransmogFrameBrowserPanel:Hide() else NativeTransmogFrameSetsPanel:Hide(); NativeTransmogFrameBrowserPanel:Show() end
  setShown(NativeTransmogFrameSlotTitle,not sets); setShown(NativeTransmogFrameHint,not sets); setShown(NativeTransmogFrameActual,not sets); setShown(NativeTransmogFrameApplied,not sets); setShown(NativeTransmogFramePreview,not sets)
  setShown(NativeTransmogFramePrevious,not sets); setShown(NativeTransmogFrameNext,not sets); setShown(NativeTransmogFrameApply,not sets); setShown(NativeTransmogFrameRemove,not sets)
- if sets then requestId=requestId+1; snapshotNonce=nil; scheduledRefresh=nil; setHistory={}; requestSets(0)
+ if sets then restoreSetId=nil; requestId=requestId+1; snapshotNonce=nil; scheduledRefresh=nil; setHistory={}; requestSets(0)
  elseif authorizedToken then cursorHistory={}; requestCatalog(0) else NativeTransmog_ResetPreview() end
 end
-function NativeTransmog_SetFilter(filter) setFilter=filter; setHistory={}; requestSets(0) end
-function NativeTransmog_SetsNext() if setHasNext then table.insert(setHistory,setCursor); requestSets(setNextCursor) end end
-function NativeTransmog_SetsPrevious() if #setHistory>0 then requestSets(table.remove(setHistory)) end end
+function NativeTransmog_SetFilter(filter) restoreSetId=nil; setFilter=filter; setHistory={}; requestSets(0) end
+function NativeTransmog_SetsNext() if setHasNext then restoreSetId=nil; table.insert(setHistory,setCursor); requestSets(setNextCursor) end end
+function NativeTransmog_SetsPrevious() if #setHistory>0 then restoreSetId=nil; requestSets(table.remove(setHistory)) end end
 
 local function refreshEquipmentSelection()
  for wireSlot, button in pairs(slotButtons) do
@@ -475,12 +476,13 @@ function NativeTransmog_OnLoad(frame)
 end
 function NativeTransmog_OnShow()
  updateEquipmentSlots(); NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
- if browserMode=="SETS" then requestSets(0); return end
+ if browserMode=="SETS" then requestSets(setCursor); return end
  if not slotIsUsable(selectedSlotId) or not slotHasItem(selectedSlotId) then NativeTransmog_SelectSlot(selectedSlotId)
  elseif authorizedToken then cursorHistory={}; requestCatalog(0)
  else hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
 end
 function NativeTransmog_OnHide()
+ if browserMode=="SETS" and selectedSet then restoreSetId=selectedSet.id end
  NativeTransmog_EndRotation(getModel()); cancelSetRequest(); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
@@ -491,6 +493,13 @@ function NativeTransmog_OpenAuthorized(token)
  else NativeTransmogFrame:Show() end
 end
 function NativeTransmog_HasAuthorizedSession() return authorizedToken~=nil end
+-- Shared PvE entry point. It deliberately discards any NPC token and opens
+-- only the read-only equipment-set transport; apply/hide/remove remain behind
+-- sendRequest's authorizedToken check and the server's live NPC session check.
+function NativeTransmog_OpenCollections()
+ authorizedToken=nil
+ if browserMode~="SETS" then NativeTransmog_SetMode("SETS") end
+end
 function NativeTransmog_OnEvent(_,event,...)
  if event=="PLAYER_EQUIPMENT_CHANGED" then
   local changedInventorySlot=...
@@ -541,7 +550,12 @@ function NativeTransmog_OnEvent(_,event,...)
   local request=matchingSetRequest("SETS",tonumber(fields[3])); if not request or request.phase~="ROWS" then return end
   activeSetPageRequest=nil; setPagePending=nil
   if #incomingSets~=request.expected then setStatus("Set page response was incomplete; try again.",true); renderSets(); return end
-  setCatalog=incomingSets; renderSets(); setStatus(#setCatalog>0 and "Select a set to preview its pieces." or "No sets match this filter.",false); return
+  setCatalog=incomingSets; renderSets(); setStatus(#setCatalog>0 and "Select a set to preview its pieces." or "No sets match this filter.",false)
+  if restoreSetId then
+   local wanted=restoreSetId; restoreSetId=nil
+   for _,set in ipairs(setCatalog) do if set.id==wanted then requestSetDetail(set); break end end
+  end
+  return
  elseif command=="SETINFO" then
   local request=matchingSetRequest("SETDETAIL",tonumber(fields[3])); local setId=tonumber(fields[4]); local total=tonumber(fields[6])
   if not request or request.phase~="INFO" or setId~=request.setId or not total or total<0 or total>MAXIMUM_SET_PIECES then return end

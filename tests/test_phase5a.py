@@ -242,6 +242,11 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
 
 
 class PhaseFiveAUiTests(unittest.TestCase):
+    def test_sets_page_and_selection_restore_after_reopen(self):
+        self.assertIn('if browserMode=="SETS" then requestSets(setCursor); return end', LUA)
+        self.assertIn('if browserMode=="SETS" and selectedSet then restoreSetId=selectedSet.id end', LUA)
+        self.assertIn('for _,set in ipairs(setCatalog) do if set.id==wanted then requestSetDetail(set)', LUA)
+
     def test_modes_filters_progress_and_missing_pieces_are_rendered(self):
         self.assertIn('text="Appearances"', XML)
         self.assertIn('text="Sets"', XML)
