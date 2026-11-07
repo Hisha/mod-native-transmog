@@ -217,60 +217,90 @@
        currency controls, or authorized-session entry points here. -->
   <Frame name="NativeTransmogCollectionsFrame" parent="ContentManagerCollectionsFrame" hidden="true"
       enableMouse="true">
-    <Size x="900" y="515" />
-    <Anchors><Anchor point="TOP"><Offset x="0" y="-48" /></Anchor></Anchors>
-    <Layers>
-      <Layer level="ARTWORK">
-        <FontString name="$parentListTitle" inherits="GameFontNormalLarge" justifyH="LEFT"
-            text="Armor Sets">
-          <Size x="294" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="20" y="-7" /></Anchor></Anchors>
-        </FontString>
-        <FontString name="$parentSelection" inherits="GameFontNormalLarge" justifyH="LEFT"
-            text="Select an armor set">
-          <Size x="542" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="338" y="-7" /></Anchor></Anchors>
-        </FontString>
-        <FontString name="$parentStatus" inherits="GameFontNormalSmall" justifyH="CENTER">
-          <Size x="542" y="18" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-12" y="10" /></Anchor></Anchors>
-        </FontString>
-      </Layer>
-    </Layers>
+    <Size x="704" y="584" />
+    <Anchors><Anchor point="TOP"><Offset x="0" y="-32" /></Anchor></Anchors>
     <Frames>
+      <!-- The catalog is already authoritatively restricted to the player's class. -->
+      <Frame name="$parentClassDisplay">
+        <Size x="145" y="22" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-13" y="-7" /></Anchor></Anchors>
+        <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark" edgeFile="Interface\DialogFrame\UI-DialogBox-Gold-Border" tile="true">
+          <BackgroundInsets><AbsInset left="2" right="2" top="2" bottom="2" /></BackgroundInsets>
+          <TileSize><AbsValue val="8" /></TileSize><EdgeSize><AbsValue val="8" /></EdgeSize>
+        </Backdrop>
+        <Layers><Layer level="ARTWORK">
+          <FontString name="NativeTransmogCollectionsFrameClassLabel" inherits="GameFontHighlightSmall" justifyH="CENTER" text="Class">
+            <Size x="137" y="18" /><Anchors><Anchor point="CENTER" /></Anchors>
+          </FontString>
+        </Layer></Layers>
+      </Frame>
+      <!-- Items is deliberately disabled until its collection browser exists. -->
+      <Button name="$parentItemsTab" inherits="CharacterFrameTabButtonTemplate" text="Items">
+        <Size x="58" y="25" /><Anchors><Anchor point="TOPLEFT"><Offset x="75" y="-10" /></Anchor></Anchors>
+        <Scripts><OnLoad>self:Disable();</OnLoad></Scripts>
+      </Button>
+      <Button name="$parentSetsTab" inherits="CharacterFrameTabButtonTemplate" text="Sets">
+        <Size x="69" y="25" /><Anchors><Anchor point="LEFT" relativeTo="$parentItemsTab" relativePoint="RIGHT"><Offset x="6" y="0" /></Anchor></Anchors>
+        <Scripts><OnLoad>self:LockHighlight();</OnLoad></Scripts>
+      </Button>
+      <StatusBar name="$parentProgressBar">
+        <Size x="200" y="14" /><Anchors><Anchor point="TOP"><Offset x="0" y="-13" /></Anchor></Anchors>
+        <BarTexture file="Interface\TargetingFrame\UI-StatusBar" />
+        <BarColor r="0.08" g="0.62" b="0.12" a="1" />
+        <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark" edgeFile="Interface\DialogFrame\UI-DialogBox-Gold-Border" tile="true">
+          <BackgroundInsets><AbsInset left="2" right="2" top="2" bottom="2" /></BackgroundInsets>
+          <TileSize><AbsValue val="8" /></TileSize><EdgeSize><AbsValue val="8" /></EdgeSize>
+        </Backdrop>
+        <Layers><Layer level="OVERLAY">
+          <FontString name="NativeTransmogCollectionsFrameProgressText" inherits="GameFontHighlightSmall" justifyH="CENTER" text="0 / 0">
+            <Size x="194" y="14" /><Anchors><Anchor point="CENTER" /></Anchors>
+          </FontString>
+        </Layer></Layers>
+      </StatusBar>
       <Frame name="$parentListPanel">
-        <Size x="306" y="447" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-32" /></Anchor></Anchors>
+        <Size x="270" y="539" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-37" /></Anchor></Anchors>
         <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark"
             edgeFile="Interface\DialogFrame\UI-DialogBox-Gold-Border" tile="true">
           <BackgroundInsets><AbsInset left="11" right="12" top="12" bottom="11" /></BackgroundInsets>
           <TileSize><AbsValue val="32" /></TileSize><EdgeSize><AbsValue val="32" /></EdgeSize>
         </Backdrop>
+        <Layers>
+          <Layer level="ARTWORK">
+            <FontString name="NativeTransmogCollectionsFrameSearchHint" inherits="GameFontDisableSmall" text="Search" justifyH="LEFT">
+              <Size x="120" y="16" /><Anchors><Anchor point="TOPLEFT"><Offset x="27" y="-12" /></Anchor></Anchors>
+            </FontString>
+          </Layer>
+        </Layers>
         <Frames>
-          <Button name="$parentAll" inherits="UIPanelButtonTemplate" text="All">
-            <Size x="66" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-13" /></Anchor></Anchors>
-            <Scripts><OnClick>NativeTransmog_SetFilter(0);</OnClick></Scripts>
-          </Button>
-          <Button name="$parentIncomplete" inherits="UIPanelButtonTemplate" text="Incomplete">
-            <Size x="92" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentAll" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
-            <Scripts><OnClick>NativeTransmog_SetFilter(1);</OnClick></Scripts>
-          </Button>
-          <Button name="$parentComplete" inherits="UIPanelButtonTemplate" text="Complete">
-            <Size x="84" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentIncomplete" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
-            <Scripts><OnClick>NativeTransmog_SetFilter(2);</OnClick></Scripts>
-          </Button>
+          <EditBox name="$parentSearch" inherits="InputBoxTemplate" autoFocus="false">
+            <Size x="150" y="20" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-8" /></Anchor></Anchors>
+            <FontString inherits="GameFontHighlightSmall" />
+            <Scripts>
+              <OnLoad>self:SetTextInsets(18,4,0,0);</OnLoad>
+              <OnTextChanged>NativeTransmog_SetSearch(self:GetText());</OnTextChanged>
+              <OnEscapePressed>self:ClearFocus();</OnEscapePressed>
+              <OnEnterPressed>self:ClearFocus();</OnEnterPressed>
+            </Scripts>
+          </EditBox>
+          <Frame name="$parentFilter" inherits="UIDropDownMenuTemplate">
+            <Size x="100" y="24" /><Anchors><Anchor point="TOPRIGHT"><Offset x="5" y="-6" /></Anchor></Anchors>
+            <Scripts><OnLoad>NativeTransmog_FilterDropDown_OnLoad(self);</OnLoad></Scripts>
+          </Frame>
           <ScrollFrame name="NativeTransmogCollectionsFrameListScroll" inherits="UIPanelScrollFrameTemplate">
-            <Size x="282" y="326" /><Anchors><Anchor point="TOPLEFT"><Offset x="9" y="-47" /></Anchor></Anchors>
-            <ScrollChild><Frame name="$parentChild"><Size x="282" y="326" /></Frame></ScrollChild>
+            <Size x="246" y="452" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-35" /></Anchor></Anchors>
+            <ScrollChild><Frame name="$parentChild"><Size x="246" y="452" /></Frame></ScrollChild>
           </ScrollFrame>
-          <Button name="NativeTransmogCollectionsFramePrevious" inherits="UIPanelButtonTemplate" text="Previous">
-            <Size x="92" y="22" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="55" y="13" /></Anchor></Anchors>
+          <Button name="NativeTransmogCollectionsFramePrevious" inherits="UIPanelButtonTemplate" text="&lt;">
+            <Size x="32" y="20" /><Anchors><Anchor point="BOTTOM"><Offset x="-24" y="10" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_SetsPrevious();</OnClick></Scripts>
           </Button>
-          <Button name="NativeTransmogCollectionsFrameNext" inherits="UIPanelButtonTemplate" text="Next">
-            <Size x="92" y="22" /><Anchors><Anchor point="LEFT" relativeTo="NativeTransmogCollectionsFramePrevious" relativePoint="RIGHT"><Offset x="8" y="0" /></Anchor></Anchors>
+          <Button name="NativeTransmogCollectionsFrameNext" inherits="UIPanelButtonTemplate" text="&gt;">
+            <Size x="32" y="20" /><Anchors><Anchor point="LEFT" relativeTo="NativeTransmogCollectionsFramePrevious" relativePoint="RIGHT"><Offset x="8" y="0" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_SetsNext();</OnClick></Scripts>
           </Button>
         </Frames>
       </Frame>
       <Frame name="$parentPreview">
-        <Size x="558" y="447" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-12" y="-32" /></Anchor></Anchors>
+        <Size x="412" y="539" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-1" y="-37" /></Anchor></Anchors>
         <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark"
             edgeFile="Interface\DialogFrame\UI-DialogBox-Gold-Border" tile="true">
           <BackgroundInsets><AbsInset left="11" right="12" top="12" bottom="11" /></BackgroundInsets>
@@ -279,17 +309,37 @@
         <Layers>
           <Layer level="BORDER">
             <Texture name="$parentDivider" file="Interface\DialogFrame\UI-DialogBox-Divider">
-              <Size x="500" y="16" /><Anchors><Anchor point="TOP"><Offset x="0" y="-67" /></Anchor></Anchors>
+              <Size x="370" y="16" /><Anchors><Anchor point="TOP"><Offset x="0" y="-113" /></Anchor></Anchors>
             </Texture>
+            <Texture name="$parentCornerLeft" file="Interface\DialogFrame\UI-DialogBox-Header" alpha="0.55">
+              <Size x="90" y="44" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="7" y="6" /></Anchor></Anchors>
+              <TexCoords left="0" right="0.28" top="1" bottom="0" />
+            </Texture>
+            <Texture name="$parentCornerRight" file="Interface\DialogFrame\UI-DialogBox-Header" alpha="0.55">
+              <Size x="90" y="44" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-7" y="6" /></Anchor></Anchors>
+              <TexCoords left="1" right="0.72" top="1" bottom="0" />
+            </Texture>
+          </Layer>
+          <Layer level="ARTWORK">
+            <FontString name="NativeTransmogCollectionsFrameSetTitle" inherits="GameFontNormalLarge" justifyH="CENTER" text="SELECT AN ARMOR SET">
+              <Size x="372" y="29" /><Anchors><Anchor point="TOP"><Offset x="0" y="-25" /></Anchor></Anchors>
+              <FontHeight><AbsValue val="22" /></FontHeight>
+            </FontString>
+            <FontString name="NativeTransmogCollectionsFrameSetDescription" inherits="GameFontHighlightSmall" justifyH="CENTER">
+              <Size x="360" y="18" /><Anchors><Anchor point="TOP"><Offset x="0" y="-53" /></Anchor></Anchors>
+            </FontString>
+            <FontString name="NativeTransmogCollectionsFrameStatus" inherits="GameFontNormalSmall" justifyH="CENTER">
+              <Size x="360" y="18" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="12" /></Anchor></Anchors>
+            </FontString>
           </Layer>
         </Layers>
         <Frames>
           <!-- The selected set's actual item icons run across the preview top. -->
           <Frame name="NativeTransmogCollectionsFramePieceBar">
-            <Size x="430" y="48" /><Anchors><Anchor point="TOP"><Offset x="0" y="-12" /></Anchor></Anchors>
+            <Size x="360" y="36" /><Anchors><Anchor point="TOP"><Offset x="0" y="-72" /></Anchor></Anchors>
           </Frame>
           <DressUpModel name="$parentModel" enableMouse="true" enableMouseWheel="true">
-            <Size x="526" y="358" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="12" /></Anchor></Anchors>
+            <Size x="392" y="398" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="16" /></Anchor></Anchors>
             <Scripts>
               <OnMouseDown>NativeTransmog_BeginRotation(self);</OnMouseDown>
               <OnMouseUp>NativeTransmog_EndRotation(self);</OnMouseUp>
@@ -299,14 +349,14 @@
             </Scripts>
           </DressUpModel>
           <Button name="$parentRotateLeft">
-            <Size x="32" y="32" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="10" /></Anchor></Anchors>
+            <Size x="32" y="32" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="13" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_RotateCollections(-0.20);</OnClick></Scripts>
             <NormalTexture file="Interface\Buttons\UI-RotationLeft-Button-Up" />
             <PushedTexture file="Interface\Buttons\UI-RotationLeft-Button-Down" />
             <HighlightTexture file="Interface\Buttons\ButtonHilight-Round" alphaMode="ADD" />
           </Button>
           <Button name="$parentRotateRight">
-            <Size x="32" y="32" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-14" y="10" /></Anchor></Anchors>
+            <Size x="32" y="32" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-14" y="13" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_RotateCollections(0.20);</OnClick></Scripts>
             <NormalTexture file="Interface\Buttons\UI-RotationRight-Button-Up" />
             <PushedTexture file="Interface\Buttons\UI-RotationRight-Button-Down" />

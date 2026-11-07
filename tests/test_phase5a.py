@@ -228,6 +228,15 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
         self.assertIn("filter > 2 || cursor > MaximumCursor", WARDROBE)
         self.assertIn('parts[2] == "SETDETAIL" && fields.size() == 2', WARDROBE)
         self.assertIn("FindFor(player, fields[1])", WARDROBE)
+
+    def test_set_page_supplies_global_progress_and_representative_thumbnails(self):
+        sets = WARDROBE[WARDROBE.index("void WardrobeService::HandleSets"):WARDROBE.index("void WardrobeService::HandleSetDetail")]
+        self.assertIn("collectionCollected += progress.collected", sets)
+        self.assertIn("collectionTotal += progress.total", sets)
+        self.assertIn("RepresentativeFor(player, piece)", sets)
+        self.assertIn("std::to_string(iconEntry)", sets)
+        self.assertIn("setOverallCollected=tonumber(fields[9])", LUA)
+        self.assertIn("iconEntry=tonumber(fields[11])", LUA)
         self.assertIn("readOnlySetRequest", WARDROBE)
         self.assertIn('command=="RESULT" and fields[3]=="0"', LUA)
         self.assertIn('responseId~=request.id', LUA)
@@ -267,7 +276,9 @@ class PhaseFiveAUiTests(unittest.TestCase):
         self.assertEqual(piece.count('row.icon=row:CreateTexture'), 1)
         self.assertEqual(piece.count('row.border=row:CreateTexture'), 1)
         self.assertEqual(piece.count(r'UI-Quickslot2'), 1)
-        self.assertEqual(piece.count('row.mark=row:CreateTexture'), 1)
+        self.assertEqual(piece.count('row.state=row:CreateTexture'), 1)
+        self.assertNotIn("ReadyCheck-Ready", piece)
+        self.assertNotIn("ReadyCheck-NotReady", piece)
         self.assertNotIn("ButtonHilight-Square", piece)
         self.assertNotIn("SetPushedTexture", piece)
 
@@ -280,10 +291,10 @@ class PhaseFiveAUiTests(unittest.TestCase):
     def test_modes_filters_progress_and_missing_pieces_are_rendered(self):
         self.assertIn('name="NativeTransmogCollectionsFrame"', XML)
         self.assertIn('parent="ContentManagerCollectionsFrame"', XML)
-        self.assertIn('text="Incomplete"', XML)
-        self.assertIn('text="Complete"', XML)
+        self.assertIn('local labels={"All","Incomplete","Complete"}', LUA)
+        self.assertIn('NativeTransmog_FilterDropDown_OnLoad', LUA)
         self.assertIn('row.progress:SetText(set.collected.."/"..set.total)', LUA)
-        self.assertIn("ReadyCheck-NotReady", LUA)
+        self.assertIn('row.state:SetTexture(piece.collected and .15 or .65', LUA)
         self.assertIn('row:SetAlpha(piece.collected and 1 or .45)', LUA)
 
     def test_native_tooltips_and_full_set_preview(self):
@@ -313,10 +324,24 @@ class PhaseFiveAUiTests(unittest.TestCase):
 
     def test_long_set_names_and_piece_icons_fit_collections_layout(self):
         self.assertIn("local function truncateLabel", LUA)
-        self.assertIn('truncateLabel(set.name,22)', LUA)
+        self.assertIn('truncateLabel(set.name,20)', LUA)
         self.assertIn('NativeTransmogCollectionsFramePieceBar', LUA)
-        self.assertIn('(index-1)*54', LUA)
+        self.assertIn('(index-1)*39', LUA)
         self.assertIn('row.itemName=piece.name', LUA)
+
+    def test_retail_proportions_navigation_search_and_thumbnails(self):
+        collections = XML[XML.index('<Frame name="NativeTransmogCollectionsFrame"'):]
+        for marker in (
+            '<Size x="704" y="584" />', 'text="Items"', 'text="Sets"',
+            '<Size x="270" y="539" />', '<Size x="412" y="539" />',
+            'NativeTransmogCollectionsFrameSetTitle', '<Size x="392" y="398" />',
+        ):
+            self.assertIn(marker, collections)
+        self.assertIn('self:Disable()', collections)
+        self.assertIn('NativeTransmog_SetSearch', collections)
+        self.assertIn('row.icon:SetTexture(GetItemIcon(set.iconEntry)', LUA)
+        self.assertIn('row.selected:SetAllPoints(row)', LUA)
+        self.assertIn('setOverallCollected.." / "..setOverallTotal', LUA)
 
 
 if __name__ == "__main__":

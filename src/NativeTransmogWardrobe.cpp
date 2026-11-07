@@ -221,9 +221,12 @@ void WardrobeService::HandleSets(Player* player, std::vector<std::uint32_t> cons
     }
 
     std::vector<std::pair<EquipmentSet const*, SetProgress>> visible;
+    std::uint32_t collectionCollected = 0, collectionTotal = 0;
     for (EquipmentSet const* set : SetCatalog::Instance().ListFor(player))
     {
         SetProgress progress = SetCatalog::Instance().Progress(player, *set);
+        collectionCollected += progress.collected;
+        collectionTotal += progress.total;
         bool complete = progress.total && progress.collected == progress.total;
         if ((filter == 1 && complete) || (filter == 2 && !complete) || !progress.total)
             continue;
@@ -233,13 +236,19 @@ void WardrobeService::HandleSets(Player* player, std::vector<std::uint32_t> cons
     std::uint32_t end = std::min<std::uint32_t>(cursor + SetPageSize, visible.size());
     Send(player, "SETPAGE\t" + std::to_string(requestId) + '\t' + std::to_string(filter) + '\t' + std::to_string(cursor) + '\t' +
         std::to_string(end) + '\t' + std::to_string(end < visible.size() ? 1 : 0) + '\t' +
-        std::to_string(end - cursor));
+        std::to_string(end - cursor) + '\t' + std::to_string(collectionCollected) + '\t' + std::to_string(collectionTotal));
     for (std::uint32_t index = cursor; index < end; ++index)
     {
         EquipmentSet const& set = *visible[index].first;
         SetProgress progress = visible[index].second;
+        std::uint32_t iconEntry = 0;
+        for (SetPiece const& piece : set.pieces)
+            if (SetCatalog::Instance().IsPieceEligible(player, piece) &&
+                (iconEntry = SetCatalog::Instance().RepresentativeFor(player, piece)))
+                break;
         Send(player, "SET\t" + std::to_string(requestId) + '\t' + std::to_string(set.id) + '\t' + std::to_string(progress.collected) + '\t' +
-            std::to_string(progress.total) + '\t' + set.name + '\t' + set.expansion + '\t' + set.family + '\t' + set.category);
+            std::to_string(progress.total) + '\t' + set.name + '\t' + set.expansion + '\t' + set.family + '\t' + set.category + '\t' +
+            std::to_string(iconEntry));
     }
     Send(player, "SETEND\t" + std::to_string(requestId));
 }

@@ -24,6 +24,7 @@ local restoreSetId = nil
 local incomingSetIds, incomingPieces, activeSetPageRequest, activeSetDetailRequest = {}, {}, nil, nil
 local setPagePending, setDetailPending = nil, nil
 local setRows, pieceRows = {}, {}
+local setSearch, setOverallCollected, setOverallTotal = "", 0, 0
 local SET_PAGE_SIZE, MAXIMUM_SET_PIECES = 8, 32
 local requestCatalog, renderPieces, requestSetDetail
 
@@ -130,11 +131,13 @@ end
 
 local function createSetRow(index)
  local row=CreateFrame("Button","NativeTransmogSetRow"..index,NativeTransmogCollectionsFrameListScrollChild)
- row:SetWidth(280); row:SetHeight(39)
+ row:SetWidth(244); row:SetHeight(46)
  row.background=row:CreateTexture(nil,"BACKGROUND"); row.background:SetTexture(.07,.06,.05,.72); row.background:SetAllPoints(row)
- row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",9,-5); row.name:SetWidth(205); row.name:SetJustifyH("LEFT")
- row.meta=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.meta:SetPoint("TOPLEFT",9,-20); row.meta:SetWidth(220); row.meta:SetJustifyH("LEFT")
- row.progress=row:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall"); row.progress:SetPoint("TOPRIGHT",-8,-7)
+ row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetWidth(36); row.icon:SetHeight(36); row.icon:SetPoint("LEFT",5,0); row.icon:SetTexCoord(.08,.92,.08,.92)
+ row.iconBorder=row:CreateTexture(nil,"OVERLAY"); row.iconBorder:SetTexture("Interface\\Buttons\\UI-Quickslot2"); row.iconBorder:SetWidth(42); row.iconBorder:SetHeight(42); row.iconBorder:SetPoint("CENTER",row.icon,"CENTER")
+ row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",48,-7); row.name:SetWidth(145); row.name:SetJustifyH("LEFT")
+ row.meta=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.meta:SetPoint("TOPLEFT",48,-23); row.meta:SetWidth(185); row.meta:SetJustifyH("LEFT")
+ row.progress=row:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall"); row.progress:SetPoint("TOPRIGHT",-7,-7)
  row.selected=row:CreateTexture(nil,"BORDER"); row.selected:SetTexture(.55,.36,.05,.52); row.selected:SetAllPoints(row)
  row.highlight=row:CreateTexture(nil,"HIGHLIGHT"); row.highlight:SetTexture(.32,.24,.09,.28); row.highlight:SetAllPoints(row)
  row:SetScript("OnClick",function(self) requestSetDetail(self.set) end)
@@ -143,30 +146,40 @@ local function createSetRow(index)
  setRows[index]=row; return row
 end
 local function refreshSetFilters()
- local buttons={NativeTransmogCollectionsFrameListPanelAll,NativeTransmogCollectionsFrameListPanelIncomplete,NativeTransmogCollectionsFrameListPanelComplete}
- for index,button in ipairs(buttons) do if index-1==setFilter then button:LockHighlight() else button:UnlockHighlight() end end
+ if NativeTransmogCollectionsFrameListPanelFilter then
+  UIDropDownMenu_SetSelectedValue(NativeTransmogCollectionsFrameListPanelFilter,setFilter)
+  UIDropDownMenu_SetText(NativeTransmogCollectionsFrameListPanelFilter,({"All","Incomplete","Complete"})[setFilter+1])
+ end
 end
 local function renderSets()
- for index,set in ipairs(setCatalog) do
-  local row=setRows[index] or createSetRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",1,-1-(index-1)*40); row.set=set
-  row.name:SetText(truncateLabel(set.name,22)); row.meta:SetText((set.expansion or "").." • "..(set.category or "PvE").." • "..(set.family or "Set")); row.progress:SetText(set.collected.."/"..set.total)
+ local visible={}
+ for _,set in ipairs(setCatalog) do
+  if setSearch=="" or string.find(string.lower((set.name or "").." "..(set.expansion or "").." "..(set.family or "").." "..(set.category or "")),setSearch,1,true) then table.insert(visible,set) end
+ end
+ for index,set in ipairs(visible) do
+  local row=setRows[index] or createSetRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",1,-1-(index-1)*47); row.set=set
+  row.name:SetText(truncateLabel(set.name,20)); row.meta:SetText(truncateLabel((set.expansion or "").." • "..(set.family or "Set"),28)); row.progress:SetText(set.collected.."/"..set.total)
+  row.icon:SetTexture(GetItemIcon(set.iconEntry) or "Interface\\Icons\\INV_Misc_QuestionMark")
   local complete=set.total>0 and set.collected==set.total
   row.name:SetTextColor(complete and .25 or 1,complete and 1 or .82,.2); row.progress:SetTextColor(complete and .25 or 1,complete and 1 or 1,complete and .25 or 1); row:Show()
   setShown(row.selected,selectedSet and selectedSet.id==set.id)
  end
- for index=#setCatalog+1,#setRows do setRows[index]:Hide() end
- NativeTransmogCollectionsFrameListScrollChild:SetHeight(math.max(326,#setCatalog*40+2))
+ for index=#visible+1,#setRows do setRows[index]:Hide() end
+ NativeTransmogCollectionsFrameListScrollChild:SetHeight(math.max(452,#visible*47+2))
  NativeTransmogCollectionsFrameListScroll:SetVerticalScroll(0)
+ NativeTransmogCollectionsFrameProgressBar:SetMinMaxValues(0,math.max(1,setOverallTotal)); NativeTransmogCollectionsFrameProgressBar:SetValue(setOverallCollected)
+ NativeTransmogCollectionsFrameProgressText:SetText(setOverallCollected.." / "..setOverallTotal)
  refreshSetFilters()
  setButtonEnabled(NativeTransmogCollectionsFramePrevious,#setHistory>0 and not setPagePending)
  setButtonEnabled(NativeTransmogCollectionsFrameNext,setHasNext and not setPagePending)
 end
 local function createPieceRow(index)
  local row=CreateFrame("Button","NativeTransmogPieceRow"..index,NativeTransmogCollectionsFramePieceBar)
- row:SetWidth(46); row:SetHeight(46)
- row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetAllPoints(row); row.icon:SetTexCoord(.08,.92,.08,.92)
+ row:SetWidth(34); row:SetHeight(34)
+ row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetPoint("TOPLEFT",2,-2); row.icon:SetPoint("BOTTOMRIGHT",-2,2); row.icon:SetTexCoord(.08,.92,.08,.92)
  row.border=row:CreateTexture(nil,"OVERLAY"); row.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); row.border:SetAllPoints(row)
- row.mark=row:CreateTexture(nil,"OVERLAY"); row.mark:SetWidth(16); row.mark:SetHeight(16); row.mark:SetPoint("BOTTOMRIGHT",1,-1)
+ -- A narrow edge strip carries collection state without covering the icon.
+ row.state=row:CreateTexture(nil,"OVERLAY"); row.state:SetWidth(26); row.state:SetHeight(3); row.state:SetPoint("BOTTOM",0,2)
  row:SetScript("OnEnter",function(self)
   GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
   GameTooltip:SetHyperlink("item:"..self.entry)
@@ -177,14 +190,15 @@ local function createPieceRow(index)
  pieceRows[index]=row; return row
 end
 renderPieces=function()
+ local count=#setPieces; local width=count>0 and count*34+(count-1)*5 or 0; local start=(360-width)/2
  for index,piece in ipairs(setPieces) do
-  local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("LEFT",NativeTransmogCollectionsFramePieceBar,"LEFT",(index-1)*54,0); row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
+  local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("LEFT",NativeTransmogCollectionsFramePieceBar,"LEFT",start+(index-1)*39,0); row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
   row.icon:SetTexture(GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row:SetAlpha(piece.collected and 1 or .45)
-  row.mark:SetTexture(piece.collected and "Interface\\RaidFrame\\ReadyCheck-Ready" or "Interface\\RaidFrame\\ReadyCheck-NotReady"); row:Show()
+  row.state:SetTexture(piece.collected and .15 or .65,piece.collected and .8 or .12,piece.collected and .2 or .12,1); row:Show()
  end
  for index=#setPieces+1,#pieceRows do pieceRows[index]:Hide() end
- local progress=selectedSet and (selectedSet.name.."  "..selectedSet.collected.."/"..selectedSet.total) or "Select an armor set"
- NativeTransmogCollectionsFrameSelection:SetText(progress)
+ NativeTransmogCollectionsFrameSetTitle:SetText(selectedSet and string.upper(truncateLabel(selectedSet.name or "Armor Set",32)) or "SELECT AN ARMOR SET")
+ NativeTransmogCollectionsFrameSetDescription:SetText(selectedSet and ((selectedSet.expansion or "").." • "..(selectedSet.category or "PvE").." • "..(selectedSet.family or "Set").."  "..selectedSet.collected.."/"..selectedSet.total) or "")
 end
 local function previewSet()
  local model=getCollectionModel(); model:SetUnit("player"); model:Undress()
@@ -218,6 +232,19 @@ local function matchingSetRequest(kind,responseId)
  return request
 end
 function NativeTransmog_SetFilter(filter) restoreSetId=nil; setFilter=filter; setHistory={}; requestSets(0) end
+function NativeTransmog_SetSearch(value)
+ setSearch=string.lower(value or ""); setShown(NativeTransmogCollectionsFrameSearchHint,setSearch==""); renderSets()
+end
+function NativeTransmog_FilterDropDown_OnLoad(frame)
+ UIDropDownMenu_Initialize(frame,function()
+  local labels={"All","Incomplete","Complete"}
+  for index,label in ipairs(labels) do
+   local value=index-1; local info=UIDropDownMenu_CreateInfo(); info.text=label; info.value=value; info.checked=value==setFilter
+   info.func=function() NativeTransmog_SetFilter(value) end; UIDropDownMenu_AddButton(info)
+  end
+ end)
+ UIDropDownMenu_SetWidth(frame,75); UIDropDownMenu_SetText(frame,"All")
+end
 function NativeTransmog_SetsNext() if setHasNext then restoreSetId=nil; table.insert(setHistory,setCursor); requestSets(setNextCursor) end end
 function NativeTransmog_SetsPrevious() if #setHistory>0 then restoreSetId=nil; requestSets(table.remove(setHistory)) end end
 
@@ -496,6 +523,8 @@ function NativeTransmog_HasAuthorizedSession() return authorizedToken~=nil end
 -- apply/hide/remove remain in the NPC-authorized wardrobe.
 function NativeTransmog_OpenCollections()
  browserMode="SETS"; restoreSetId=nil; setHistory={}; requestSets(0)
+ local class=UnitClass("player"); NativeTransmogCollectionsFrameClassLabel:SetText(class or "Class")
+ NativeTransmogCollectionsFrameSetTitle:SetFont("Fonts\\MORPHEUS.ttf",22)
  PlaySound("igCharacterInfoOpen")
 end
 function NativeTransmog_CloseCollections()
@@ -542,13 +571,13 @@ function NativeTransmog_OnEvent(_,event,...)
   local responseId=tonumber(fields[3]); local request=matchingSetRequest("SETS",responseId)
   local responseFilter,responseCursor,responseCount=tonumber(fields[4]),tonumber(fields[5]),tonumber(fields[8])
   if not request or request.phase~="PAGE" or responseFilter~=request.filter or responseCursor~=request.cursor or not responseCount or responseCount<0 or responseCount>SET_PAGE_SIZE then return end
-  setFilter=responseFilter; setCursor=responseCursor; setNextCursor=tonumber(fields[6]) or 0; setHasNext=fields[7]=="1"; incomingSets={}; incomingSetIds={}
+  setFilter=responseFilter; setCursor=responseCursor; setNextCursor=tonumber(fields[6]) or 0; setHasNext=fields[7]=="1"; setOverallCollected=tonumber(fields[9]) or 0; setOverallTotal=tonumber(fields[10]) or 0; incomingSets={}; incomingSetIds={}
   request.phase="ROWS"; request.expected=responseCount; return
  elseif command=="SET" then
   local request=matchingSetRequest("SETS",tonumber(fields[3])); local setId=tonumber(fields[4])
   if not request or request.phase~="ROWS" or not setId or incomingSetIds[setId] then return end
   if #incomingSets>=request.expected then return end
-  incomingSetIds[setId]=true; table.insert(incomingSets,{id=setId,collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7] or "Unknown set",expansion=fields[8],family=fields[9],category=fields[10]}); return
+  incomingSetIds[setId]=true; table.insert(incomingSets,{id=setId,collected=tonumber(fields[5]) or 0,total=tonumber(fields[6]) or 0,name=fields[7] or "Unknown set",expansion=fields[8],family=fields[9],category=fields[10],iconEntry=tonumber(fields[11])}); return
  elseif command=="SETEND" then
   local request=matchingSetRequest("SETS",tonumber(fields[3])); if not request or request.phase~="ROWS" then return end
   activeSetPageRequest=nil; setPagePending=nil
