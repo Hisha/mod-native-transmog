@@ -242,6 +242,18 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
 
 
 class PhaseFiveAUiTests(unittest.TestCase):
+    def test_collections_page_uses_verified_wotlk_panel_art(self):
+        collections = XML[XML.index('<Frame name="NativeTransmogCollectionsFrame"'):]
+        for texture in (
+            r"Interface\DialogFrame\UI-DialogBox-Background-Dark",
+            r"Interface\DialogFrame\UI-DialogBox-Gold-Border",
+            r"Interface\DialogFrame\UI-DialogBox-Divider",
+        ):
+            self.assertIn(texture, collections)
+        self.assertNotIn(r"Interface\Tooltips\UI-Tooltip-Background", collections)
+        self.assertIn(r"Interface\\AchievementFrame\\UI-Achievement-Category-Background", LUA)
+        self.assertIn(r"Interface\\AchievementFrame\\UI-Achievement-Category-Highlight", LUA)
+
     def test_sets_page_and_selection_restore_after_reopen(self):
         self.assertIn('browserMode="SETS"; restoreSetId=nil; setHistory={}; requestSets(0)', LUA)
         self.assertIn('if selectedSet then restoreSetId=selectedSet.id end', LUA)
