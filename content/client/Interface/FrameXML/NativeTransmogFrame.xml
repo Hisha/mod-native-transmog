@@ -217,8 +217,13 @@
        currency controls, or authorized-session entry points here. -->
   <Frame name="NativeTransmogCollectionsFrame" parent="ContentManagerCollectionsFrame" hidden="true"
       enableMouse="true">
-    <Size x="704" y="584" />
-    <Anchors><Anchor point="TOP"><Offset x="0" y="-32" /></Anchor></Anchors>
+    <!-- Content Manager replaces these two anchors whenever this page becomes
+         active. Keeping the same fill contract here also makes the ownership
+         explicit if the XML is inspected before the controller selects it. -->
+    <Anchors>
+      <Anchor point="TOPLEFT" relativePoint="TOPLEFT"><Offset x="0" y="-32" /></Anchor>
+      <Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT"><Offset x="0" y="0" /></Anchor>
+    </Anchors>
     <Frames>
       <!-- The catalog is already authoritatively restricted to the player's class. -->
       <Frame name="$parentClassDisplay">

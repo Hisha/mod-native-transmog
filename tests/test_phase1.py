@@ -45,7 +45,10 @@ class PhaseOneTests(unittest.TestCase):
         self.assertEqual(self.manifest["nativeCollectionPages"], [{
             "id": "appearances",
             "name": "Appearances",
+            "title": "Appearances",
             "order": 100,
+            "width": 704,
+            "height": 616,
             "frame": "NativeTransmogCollectionsFrame",
             "loadTarget": "Interface/FrameXML/NativeTransmogFrame.xml",
             "onShow": "NativeTransmog_OpenCollections",

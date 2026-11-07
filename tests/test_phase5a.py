@@ -8,6 +8,7 @@ import json
 import re
 import sqlite3
 import unittest
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = (ROOT / "src/NativeTransmogSetCatalog.cpp").read_text()
@@ -251,6 +252,18 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
 
 
 class PhaseFiveAUiTests(unittest.TestCase):
+    def test_collections_page_has_no_duplicate_window_chrome(self):
+        root = ET.fromstring(XML)
+        collections = next(
+            element for element in root.iter()
+            if element.attrib.get("name") == "NativeTransmogCollectionsFrame"
+        )
+        self.assertFalse(any(child.tag.endswith("Backdrop") for child in collections))
+        self.assertFalse(any(
+            element.tag.endswith("Button") and "Close" in element.attrib.get("name", "")
+            for element in collections.iter()
+        ))
+
     def test_collections_page_uses_verified_wotlk_panel_art(self):
         collections = XML[XML.index('<Frame name="NativeTransmogCollectionsFrame"'):]
         for texture in (
@@ -332,7 +345,9 @@ class PhaseFiveAUiTests(unittest.TestCase):
     def test_retail_proportions_navigation_search_and_thumbnails(self):
         collections = XML[XML.index('<Frame name="NativeTransmogCollectionsFrame"'):]
         for marker in (
-            '<Size x="704" y="584" />', 'text="Items"', 'text="Sets"',
+            '<Anchor point="TOPLEFT" relativePoint="TOPLEFT">',
+            '<Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT">',
+            'text="Items"', 'text="Sets"',
             '<Size x="270" y="539" />', '<Size x="412" y="539" />',
             'NativeTransmogCollectionsFrameSetTitle', '<Size x="392" y="398" />',
         ):
