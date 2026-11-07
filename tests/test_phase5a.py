@@ -348,8 +348,8 @@ class PhaseFiveAUiTests(unittest.TestCase):
             '<Anchor point="TOPLEFT" relativePoint="TOPLEFT">',
             '<Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT">',
             'text="Items"', 'text="Sets"',
-            '<Size x="270" y="539" />', '<Size x="412" y="539" />',
-            'NativeTransmogCollectionsFrameSetTitle', '<Size x="392" y="398" />',
+            '<Size x="270" y="507" />', '<Size x="412" y="507" />',
+            'NativeTransmogCollectionsFrameSetTitle', '<Size x="392" y="366" />',
         ):
             self.assertIn(marker, collections)
         self.assertIn('self:Disable()', collections)

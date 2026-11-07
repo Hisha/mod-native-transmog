@@ -222,7 +222,7 @@
          explicit if the XML is inspected before the controller selects it. -->
     <Anchors>
       <Anchor point="TOPLEFT" relativePoint="TOPLEFT"><Offset x="0" y="-32" /></Anchor>
-      <Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT"><Offset x="0" y="0" /></Anchor>
+      <Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT"><Offset x="0" y="32" /></Anchor>
     </Anchors>
     <Frames>
       <!-- The catalog is already authoritatively restricted to the player's class. -->
@@ -262,7 +262,7 @@
         </Layer></Layers>
       </StatusBar>
       <Frame name="$parentListPanel">
-        <Size x="270" y="539" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-37" /></Anchor></Anchors>
+        <Size x="270" y="507" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-37" /></Anchor></Anchors>
         <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark"
             edgeFile="Interface\DialogFrame\UI-DialogBox-Gold-Border" tile="true">
           <BackgroundInsets><AbsInset left="11" right="12" top="12" bottom="11" /></BackgroundInsets>
@@ -291,8 +291,8 @@
             <Scripts><OnLoad>NativeTransmog_FilterDropDown_OnLoad(self);</OnLoad></Scripts>
           </Frame>
           <ScrollFrame name="NativeTransmogCollectionsFrameListScroll" inherits="UIPanelScrollFrameTemplate">
-            <Size x="246" y="452" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-35" /></Anchor></Anchors>
-            <ScrollChild><Frame name="$parentChild"><Size x="246" y="452" /></Frame></ScrollChild>
+            <Size x="246" y="420" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-35" /></Anchor></Anchors>
+            <ScrollChild><Frame name="$parentChild"><Size x="246" y="420" /></Frame></ScrollChild>
           </ScrollFrame>
           <Button name="NativeTransmogCollectionsFramePrevious" inherits="UIPanelButtonTemplate" text="&lt;">
             <Size x="32" y="20" /><Anchors><Anchor point="BOTTOM"><Offset x="-24" y="10" /></Anchor></Anchors>
@@ -305,7 +305,7 @@
         </Frames>
       </Frame>
       <Frame name="$parentPreview">
-        <Size x="412" y="539" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-1" y="-37" /></Anchor></Anchors>
+        <Size x="412" y="507" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-1" y="-37" /></Anchor></Anchors>
         <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark"
             edgeFile="Interface\DialogFrame\UI-DialogBox-Gold-Border" tile="true">
           <BackgroundInsets><AbsInset left="11" right="12" top="12" bottom="11" /></BackgroundInsets>
@@ -344,7 +344,7 @@
             <Size x="360" y="36" /><Anchors><Anchor point="TOP"><Offset x="0" y="-72" /></Anchor></Anchors>
           </Frame>
           <DressUpModel name="$parentModel" enableMouse="true" enableMouseWheel="true">
-            <Size x="392" y="398" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="16" /></Anchor></Anchors>
+            <Size x="392" y="366" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="16" /></Anchor></Anchors>
             <Scripts>
               <OnMouseDown>NativeTransmog_BeginRotation(self);</OnMouseDown>
               <OnMouseUp>NativeTransmog_EndRotation(self);</OnMouseUp>

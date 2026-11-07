@@ -165,7 +165,7 @@ local function renderSets()
   setShown(row.selected,selectedSet and selectedSet.id==set.id)
  end
  for index=#visible+1,#setRows do setRows[index]:Hide() end
- NativeTransmogCollectionsFrameListScrollChild:SetHeight(math.max(452,#visible*47+2))
+ NativeTransmogCollectionsFrameListScrollChild:SetHeight(math.max(420,#visible*47+2))
  NativeTransmogCollectionsFrameListScroll:SetVerticalScroll(0)
  NativeTransmogCollectionsFrameProgressBar:SetMinMaxValues(0,math.max(1,setOverallTotal)); NativeTransmogCollectionsFrameProgressBar:SetValue(setOverallCollected)
  NativeTransmogCollectionsFrameProgressText:SetText(setOverallCollected.." / "..setOverallTotal)
