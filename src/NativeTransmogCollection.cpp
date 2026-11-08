@@ -169,6 +169,7 @@ char const* CollectionService::SourceName(AcquisitionSource source)
         case AcquisitionSource::QuestCompletion: return "quest-completion";
         case AcquisitionSource::QuestBackfill: return "quest-backfill";
         case AcquisitionSource::Equipment: return "equipment";
+        case AcquisitionSource::DisenchantRoll: return "disenchant-roll";
         default: return "unknown";
     }
 }
@@ -233,6 +234,7 @@ bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate,
             case AcquisitionSource::NewItem:
             case AcquisitionSource::InventoryTransfer:
             case AcquisitionSource::Vendor:
+            case AcquisitionSource::DisenchantRoll:
                 sourceEnabled = _config.unlockOnAcquire;
                 break;
             case AcquisitionSource::QuestCompletion:

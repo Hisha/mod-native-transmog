@@ -106,6 +106,20 @@ local function setButtonEnabled(button, enabled)
  if enabled then button:Enable() else button:Disable() end
 end
 local function setShown(frame,shown) if shown then frame:Show() else frame:Hide() end end
+function NativeTransmog_StyleCollectionTab(button, selected, enabled)
+ local name=button:GetName()
+ local selectedParts={_G[name.."LeftSelected"],_G[name.."MiddleSelected"],_G[name.."RightSelected"]}
+ local inactiveParts={_G[name.."LeftInactive"],_G[name.."MiddleInactive"],_G[name.."RightInactive"]}
+ for _,texture in ipairs(selectedParts) do setShown(texture,selected) end
+ for _,texture in ipairs(inactiveParts) do setShown(texture,not selected) end
+ if enabled then button:Enable() else button:Disable() end
+ local label=button:GetFontString()
+ if label then
+  if selected then label:SetTextColor(1,.82,0)
+  elseif enabled then label:SetTextColor(.78,.68,.48)
+  else label:SetTextColor(.45,.42,.36) end
+ end
+end
 local function truncateLabel(text,maximum)
  text=text or ""
  if string.len(text)<=maximum then return text end

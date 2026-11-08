@@ -86,6 +86,36 @@ class PhaseThreeAContractTests(unittest.TestCase):
         self.assertIn("sItemDisplayInfoStore.LookupEntry(itemTemplate->DisplayInfoID)", resolver)
         self.assertIn("if (!player || !player->GetSession()", COLLECTION_CPP)
 
+    def test_gray_and_white_equipment_policy(self) -> None:
+        resolver = COLLECTION_CPP[COLLECTION_CPP.index("bool CollectionService::ResolveAppearance"):]
+        resolver = resolver[:resolver.index("char const* CollectionService::SourceName")]
+        self.assertNotIn("Quality", resolver)
+        self.assertNotIn("ITEM_QUALITY", resolver)
+
+        eligible_types = {
+            "HEAD", "SHOULDERS", "BODY", "CHEST", "WAIST", "LEGS", "FEET", "WRISTS",
+            "HANDS", "WEAPON", "SHIELD", "RANGED", "CLOAK", "2HWEAPON", "TABARD",
+            "ROBE", "WEAPONMAINHAND", "WEAPONOFFHAND", "HOLDABLE", "THROWN", "RANGEDRIGHT",
+        }
+
+        def eligible(quality: int, item_class: str, inventory_type: str,
+                     display_id: int, display_exists: bool = True) -> bool:
+            del quality  # Quality is intentionally irrelevant to appearance eligibility.
+            return (
+                item_class in {"ARMOR", "WEAPON"}
+                and inventory_type in eligible_types
+                and display_id != 0
+                and display_exists
+            )
+
+        self.assertTrue(eligible(0, "ARMOR", "LEGS", 123))
+        self.assertTrue(eligible(1, "ARMOR", "CHEST", 124))
+        self.assertTrue(eligible(0, "WEAPON", "WEAPON", 125))
+        self.assertTrue(eligible(1, "WEAPON", "2HWEAPON", 126))
+        self.assertFalse(eligible(0, "MISC", "NON_EQUIP", 127))
+        self.assertFalse(eligible(1, "ARMOR", "LEGS", 0))
+        self.assertFalse(eligible(0, "WEAPON", "WEAPON", 128, False))
+
     def test_central_acquisition_hooks_and_synchronous_insert(self) -> None:
         for hook in (
             "PLAYERHOOK_ON_STORE_NEW_ITEM",

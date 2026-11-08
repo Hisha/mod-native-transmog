@@ -16,6 +16,7 @@
 #include "ItemTemplate.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "QuestDef.h"
 #include "RBAC.h"
@@ -280,7 +281,8 @@ public:
           PLAYERHOOK_ON_SEND_LIST_INVENTORY, PLAYERHOOK_ON_BEFORE_RECEIVE_SPELL_LIST_FROM_TRAINER,
           PLAYERHOOK_ON_STORE_NEW_ITEM, PLAYERHOOK_ON_AFTER_MOVE_ITEM_TO_INVENTORY,
           PLAYERHOOK_ON_AFTER_MOVE_ITEM_FROM_INVENTORY, PLAYERHOOK_ON_AFTER_SET_VISIBLE_ITEM_SLOT,
-          PLAYERHOOK_ON_EQUIP, PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST, PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT }) { }
+          PLAYERHOOK_ON_EQUIP, PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST, PLAYERHOOK_ON_GROUP_ROLL_DISENCHANT,
+          PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT }) { }
 
     void OnPlayerLogin(Player* player) override
     {
@@ -351,6 +353,16 @@ public:
 
         native_transmog::CollectionService::Instance().Unlock(
             player, equipped, native_transmog::AcquisitionSource::Equipment);
+    }
+
+    void OnPlayerGroupRollDisenchant(Player* player, std::uint32_t itemEntry,
+        std::uint32_t, Roll*) override
+    {
+        // This core hook fires only after winner resolution and immediately
+        // before the original item is converted to enchanting materials.
+        native_transmog::CollectionService::Instance().Unlock(player,
+            sObjectMgr->GetItemTemplate(itemEntry),
+            native_transmog::AcquisitionSource::DisenchantRoll);
     }
 
     void OnPlayerAfterSetVisibleItemSlot(Player* player, std::uint8_t slot, Item* item) override

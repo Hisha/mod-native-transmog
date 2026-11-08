@@ -4,6 +4,61 @@
     xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
   <Script file="NativeTransmogFrame.lua" />
 
+  <!-- WotLK's CharacterFrame tab template uses a blue locked highlight for the
+       selected state. Collections uses the gold OptionsFrame active art and a
+       dark inactive state, matching the supplied retail references. -->
+  <Button name="NativeTransmogCollectionsTabTemplate" virtual="true">
+    <Size x="70" y="25" />
+    <Layers>
+      <Layer level="BACKGROUND">
+        <Texture name="$parentLeftInactive" file="Interface\OptionsFrame\UI-OptionsFrame-InActiveTab">
+          <Size x="20" y="24" /><Anchors><Anchor point="TOPLEFT" /></Anchors>
+          <TexCoords left="0" right="0.15625" top="0" bottom="1" />
+        </Texture>
+        <Texture name="$parentRightInactive" file="Interface\OptionsFrame\UI-OptionsFrame-InActiveTab">
+          <Size x="20" y="24" /><Anchors><Anchor point="TOPRIGHT" /></Anchors>
+          <TexCoords left="0.84375" right="1" top="0" bottom="1" />
+        </Texture>
+        <Texture name="$parentMiddleInactive" file="Interface\OptionsFrame\UI-OptionsFrame-InActiveTab">
+          <Anchors>
+            <Anchor point="TOPLEFT" relativeTo="$parentLeftInactive" relativePoint="TOPRIGHT" />
+            <Anchor point="BOTTOMRIGHT" relativeTo="$parentRightInactive" relativePoint="BOTTOMLEFT" />
+          </Anchors>
+          <TexCoords left="0.15625" right="0.84375" top="0" bottom="1" />
+        </Texture>
+      </Layer>
+      <Layer level="BORDER">
+        <Texture name="$parentLeftSelected" file="Interface\OptionsFrame\UI-OptionsFrame-ActiveTab" hidden="true">
+          <Size x="20" y="24" /><Anchors><Anchor point="TOPLEFT"><Offset x="0" y="2" /></Anchor></Anchors>
+          <TexCoords left="0" right="0.15625" top="0" bottom="1" />
+        </Texture>
+        <Texture name="$parentRightSelected" file="Interface\OptionsFrame\UI-OptionsFrame-ActiveTab" hidden="true">
+          <Size x="20" y="24" /><Anchors><Anchor point="TOPRIGHT"><Offset x="0" y="2" /></Anchor></Anchors>
+          <TexCoords left="0.84375" right="1" top="0" bottom="1" />
+        </Texture>
+        <Texture name="$parentMiddleSelected" file="Interface\OptionsFrame\UI-OptionsFrame-ActiveTab" hidden="true">
+          <Anchors>
+            <Anchor point="TOPLEFT" relativeTo="$parentLeftSelected" relativePoint="TOPRIGHT" />
+            <Anchor point="BOTTOMRIGHT" relativeTo="$parentRightSelected" relativePoint="BOTTOMLEFT" />
+          </Anchors>
+          <TexCoords left="0.15625" right="0.84375" top="0" bottom="1" />
+        </Texture>
+      </Layer>
+    </Layers>
+    <ButtonText name="$parentText">
+      <Anchors><Anchor point="CENTER"><Offset x="0" y="0" /></Anchor></Anchors>
+    </ButtonText>
+    <NormalFont style="GameFontNormalSmall" />
+    <HighlightFont style="GameFontHighlightSmall" />
+    <DisabledFont style="GameFontDisableSmall" />
+    <HighlightTexture file="Interface\PaperDollInfoFrame\UI-Character-Tab-Highlight-yellow" alphaMode="ADD">
+      <Anchors>
+        <Anchor point="TOPLEFT"><Offset x="8" y="0" /></Anchor>
+        <Anchor point="BOTTOMRIGHT"><Offset x="-8" y="2" /></Anchor>
+      </Anchors>
+    </HighlightTexture>
+  </Button>
+
   <!-- ItemButtonTemplate supplies Blizzard's 37px icon, count, normal border, and highlight conventions.
        The wardrobe owns only selection and confirmed-override markers; it intentionally does not inherit
        PaperDollItemSlotButtonTemplate's CharacterFrame equip, drag, event, or flyout handlers. -->
@@ -239,13 +294,13 @@
         </Layer></Layers>
       </Frame>
       <!-- Items is deliberately disabled until its collection browser exists. -->
-      <Button name="$parentItemsTab" inherits="CharacterFrameTabButtonTemplate" text="Items">
+      <Button name="$parentItemsTab" inherits="NativeTransmogCollectionsTabTemplate" text="Items">
         <Size x="58" y="25" /><Anchors><Anchor point="TOPLEFT"><Offset x="75" y="-10" /></Anchor></Anchors>
-        <Scripts><OnLoad>self:Disable();</OnLoad></Scripts>
+        <Scripts><OnLoad>NativeTransmog_StyleCollectionTab(self, false, false);</OnLoad></Scripts>
       </Button>
-      <Button name="$parentSetsTab" inherits="CharacterFrameTabButtonTemplate" text="Sets">
+      <Button name="$parentSetsTab" inherits="NativeTransmogCollectionsTabTemplate" text="Sets">
         <Size x="69" y="25" /><Anchors><Anchor point="LEFT" relativeTo="$parentItemsTab" relativePoint="RIGHT"><Offset x="6" y="0" /></Anchor></Anchors>
-        <Scripts><OnLoad>self:LockHighlight();</OnLoad></Scripts>
+        <Scripts><OnLoad>NativeTransmog_StyleCollectionTab(self, true, false);</OnLoad></Scripts>
       </Button>
       <StatusBar name="$parentProgressBar">
         <Size x="200" y="14" /><Anchors><Anchor point="TOP"><Offset x="0" y="-13" /></Anchor></Anchors>

@@ -252,6 +252,22 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
 
 
 class PhaseFiveAUiTests(unittest.TestCase):
+    def test_items_sets_tabs_use_gold_active_and_dark_inactive_art(self):
+        self.assertIn('name="NativeTransmogCollectionsTabTemplate"', XML)
+        self.assertIn(r"Interface\OptionsFrame\UI-OptionsFrame-ActiveTab", XML)
+        self.assertIn(r"Interface\OptionsFrame\UI-OptionsFrame-InActiveTab", XML)
+        self.assertIn(r"UI-Character-Tab-Highlight-yellow", XML)
+        collections = XML[XML.index('<Frame name="NativeTransmogCollectionsFrame"'):]
+        self.assertIn('inherits="NativeTransmogCollectionsTabTemplate" text="Items"', collections)
+        self.assertIn('inherits="NativeTransmogCollectionsTabTemplate" text="Sets"', collections)
+        self.assertIn('NativeTransmog_StyleCollectionTab(self, false, false)', collections)
+        self.assertIn('NativeTransmog_StyleCollectionTab(self, true, false)', collections)
+        self.assertNotIn("self:LockHighlight()", collections)
+        style = LUA[LUA.index("function NativeTransmog_StyleCollectionTab"):
+                    LUA.index("local function truncateLabel")]
+        self.assertIn('label:SetTextColor(1,.82,0)', style)
+        self.assertIn('setShown(texture,not selected)', style)
+
     def test_collections_page_has_no_duplicate_window_chrome(self):
         root = ET.fromstring(XML)
         collections = next(
@@ -354,7 +370,7 @@ class PhaseFiveAUiTests(unittest.TestCase):
             'NativeTransmogCollectionsFrameSetTitle', '<Size x="392" y="398" />',
         ):
             self.assertIn(marker, collections)
-        self.assertIn('self:Disable()', collections)
+        self.assertIn('NativeTransmog_StyleCollectionTab(self, false, false)', collections)
         self.assertIn('NativeTransmog_SetSearch', collections)
         self.assertIn('row.icon:SetTexture(GetItemIcon(set.iconEntry)', LUA)
         self.assertIn('row.selected:SetAllPoints(row)', LUA)
