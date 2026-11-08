@@ -285,9 +285,9 @@ class PhaseFiveAUiTests(unittest.TestCase):
         for texture in (
             r"Interface\DialogFrame\UI-DialogBox-Background-Dark",
             r"Interface\DialogFrame\UI-DialogBox-Gold-Border",
-            r"Interface\DialogFrame\UI-DialogBox-Divider",
         ):
             self.assertIn(texture, collections)
+        self.assertNotIn(r"Interface\DialogFrame\UI-DialogBox-Divider", collections)
         self.assertNotIn(r"Interface\Tooltips\UI-Tooltip-Background", collections)
 
     def test_set_rows_use_full_extent_fills_without_inset_artwork(self):

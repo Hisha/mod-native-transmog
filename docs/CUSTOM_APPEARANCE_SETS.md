@@ -31,8 +31,11 @@ item-instance overrides; back up both custom-set tables before rollback.
 `My Custom Sets` provides New Set, Edit, and Delete. Editing uses a bounded server-side draft. The client requests the
 existing Items browser in Collected mode for selection, then submits only the chosen representative entry and slot.
 The server resolves it back to a canonical key and verifies collection ownership and structural slot compatibility.
-Right-click clears a draft slot; Shift-click requests explicit hide where the application configuration permits it.
-Save is the only operation that writes the draft. Cancel discards it.
+The picker keeps Back to Set, Clear Slot, and Hide Appearance visible even when its category has no results. Clear is
+server-acknowledged and removes the row so the slot becomes unspecified. Hide availability comes from the server's
+current per-slot application policy (including the weapon-hide setting) and is stored as a distinct hidden state rather
+than an appearance. Right-click clear and Shift-click hide remain shortcuts. Save is the only operation that writes the
+draft. Cancel or closing Collections discards it.
 
 Custom preview starts with the player's current model and applies only specified pieces, so unspecified slots remain as
 they are. Predefined preview continues to undress the model and dress the complete predefined set. Neither path writes

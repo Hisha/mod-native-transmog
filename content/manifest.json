@@ -2,7 +2,7 @@
   "schema": 3,
   "package": "mod-native-transmog",
   "name": "Native Transmog Wardrobe",
-  "version": "6.0.0-custom-sets1",
+  "version": "6.0.0-custom-sets2",
   "description": "Native build-12340 wardrobe with persistent player-created custom appearance sets.",
   "creatureTemplates": [
     {

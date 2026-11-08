@@ -147,6 +147,30 @@ class PreviewAndUiContractTests(unittest.TestCase):
         self.assertIn('sendReadOnly("CUSTOMCANCEL"', cancel)
         self.assertNotIn('sendReadOnly("CUSTOMSAVE"', cancel)
 
+    def test_picker_navigation_clear_and_hide_are_explicit_and_authoritative(self):
+        for label in ('text="Back to Set"', 'text="Clear Slot"', 'text="Hide Appearance"'):
+            self.assertIn(label, XML)
+        self.assertIn('CUSTOMDRAFTCLEAR', LUA + WARDROBE)
+        self.assertIn('CanHide(ResolveSlot(wireSlot))', WARDROBE)
+        self.assertIn('customHideMask', LUA)
+        self.assertIn('NativeTransmog_BackToCustomSet', LUA)
+
+    def test_custom_detail_completion_clears_timeout_and_piece_tooltip_guards_entry(self):
+        detail_end = LUA[LUA.index('elseif command=="CUSTOMDETAILEND"'):LUA.index('elseif command=="CUSTOMDRAFTPIECE"')]
+        self.assertIn('setDetailPending=nil', detail_end)
+        self.assertIn('self.entry and self.entry>0 and not GetItemInfo(self.entry)', LUA)
+
+    def test_single_line_inputs_do_not_run_scrolling_edit_updates(self):
+        self.assertEqual(XML.count('inherits="InputBoxTemplate"'), 3)
+        self.assertEqual(XML.count('NativeTransmog_InitializeSingleLineEditBox(self)'), 3)
+        initializer = LUA[LUA.index('function NativeTransmog_InitializeSingleLineEditBox'):LUA.index('function NativeTransmog_StyleCollectionTab')]
+        self.assertIn('SetMultiLine(false)', initializer)
+        self.assertIn('SetScript("OnUpdate",nil)', initializer)
+
+    def test_preview_divider_was_removed(self):
+        self.assertNotIn('$parentDivider', XML)
+        self.assertNotIn('UI-DialogBox-Divider', XML)
+
     def test_predefined_totals_remain_on_original_path(self):
         predefined = WARDROBE[WARDROBE.index("void WardrobeService::HandleSets"):WARDROBE.index("void WardrobeService::HandleSetDetail")]
         self.assertIn("collectionCollected += progress.collected", predefined)

@@ -495,9 +495,14 @@ void WardrobeService::HandleSetDetail(Player* player, std::vector<std::uint32_t>
 void WardrobeService::SendCustomDetail(Player* player, std::uint32_t requestId, CustomSet const& set,
     char const* prefix) const
 {
+    std::uint32_t hideMask = 0;
+    for (std::uint32_t wireSlot = 1; wireSlot <= 14; ++wireSlot)
+        if (ApplicationService::Instance().CanHide(ResolveSlot(wireSlot)))
+            hideMask |= 1U << (wireSlot - 1);
     Send(player, std::string(prefix) + "INFO\t" + std::to_string(requestId) + '\t' +
         std::to_string(set.id) + '\t' + std::to_string(set.pieces.size()) + '\t' +
-        CleanProtocolText(set.name, CustomSetService::Instance().MaximumNameBytes()));
+        CleanProtocolText(set.name, CustomSetService::Instance().MaximumNameBytes()) + '\t' +
+        std::to_string(hideMask));
     std::uint32_t index = 0;
     for (CustomSetPiece const& piece : set.pieces)
     {
@@ -621,7 +626,11 @@ void WardrobeService::HandleCustomClear(Player* player, std::vector<std::uint32_
                 return value.equipmentSlot == slot;
             }), draft.pieces.end());
     }
-    SendError(player, 0, fields[0], "CUSTOMCLEAR", active ? "ok" : "STALE");
+    if (active)
+        Send(player, "CUSTOMDRAFTCLEAR\t" + std::to_string(fields[0]) + '\t' +
+            std::to_string(fields[1]));
+    else
+        SendError(player, 0, fields[0], "CUSTOMCLEAR", "STALE");
 }
 
 void WardrobeService::HandleCustomSave(Player* player, std::vector<std::uint32_t> const& fields,

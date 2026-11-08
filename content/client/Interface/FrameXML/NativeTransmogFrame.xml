@@ -348,16 +348,28 @@
           </Layer>
         </Layers>
         <Frames>
-          <EditBox name="$parentSearch" inherits="InputBoxTemplate" autoFocus="false">
+          <EditBox name="$parentSearch" inherits="InputBoxTemplate" autoFocus="false" multiLine="false">
             <Size x="145" y="20" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-120" y="-8" /></Anchor></Anchors>
             <FontString inherits="GameFontHighlightSmall" />
             <Scripts>
-              <OnLoad>self:SetTextInsets(18,4,0,0);</OnLoad>
+              <OnLoad>NativeTransmog_InitializeSingleLineEditBox(self); self:SetTextInsets(18,4,0,0);</OnLoad>
               <OnTextChanged>NativeTransmog_ItemSearchChanged(self:GetText());</OnTextChanged>
               <OnEscapePressed>self:SetText(""); self:ClearFocus();</OnEscapePressed>
               <OnEnterPressed>self:ClearFocus();</OnEnterPressed>
             </Scripts>
           </EditBox>
+          <Button name="$parentBackToSet" inherits="UIPanelButtonTemplate" text="Back to Set" hidden="true">
+            <Size x="90" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-8" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_BackToCustomSet();</OnClick></Scripts>
+          </Button>
+          <Button name="$parentClearSlot" inherits="UIPanelButtonTemplate" text="Clear Slot" hidden="true">
+            <Size x="82" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentBackToSet" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_ClearCustomSlot();</OnClick></Scripts>
+          </Button>
+          <Button name="$parentHideAppearance" inherits="UIPanelButtonTemplate" text="Hide Appearance" hidden="true">
+            <Size x="112" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentClearSlot" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_HideCustomSlot();</OnClick></Scripts>
+          </Button>
           <Frame name="$parentFilter" inherits="UIDropDownMenuTemplate">
             <Size x="110" y="24" /><Anchors><Anchor point="TOPRIGHT"><Offset x="6" y="-6" /></Anchor></Anchors>
             <Scripts><OnLoad>NativeTransmog_ItemFilterDropDown_OnLoad(self);</OnLoad></Scripts>
@@ -417,11 +429,11 @@
             <Size x="125" y="20" /><Anchors><Anchor point="LEFT" relativeTo="$parentPredefined" relativePoint="RIGHT"><Offset x="3" y="0" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_SelectSetSection("CUSTOM");</OnClick></Scripts>
           </Button>
-          <EditBox name="$parentSearch" inherits="InputBoxTemplate" autoFocus="false">
+          <EditBox name="$parentSearch" inherits="InputBoxTemplate" autoFocus="false" multiLine="false">
             <Size x="150" y="20" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-34" /></Anchor></Anchors>
             <FontString inherits="GameFontHighlightSmall" />
             <Scripts>
-              <OnLoad>self:SetTextInsets(18,4,0,0);</OnLoad>
+              <OnLoad>NativeTransmog_InitializeSingleLineEditBox(self); self:SetTextInsets(18,4,0,0);</OnLoad>
               <OnTextChanged>NativeTransmog_SetSearch(self:GetText());</OnTextChanged>
               <OnEscapePressed>self:ClearFocus();</OnEscapePressed>
               <OnEnterPressed>self:ClearFocus();</OnEnterPressed>
@@ -466,9 +478,6 @@
         </Backdrop>
         <Layers>
           <Layer level="BORDER">
-            <Texture name="$parentDivider" file="Interface\DialogFrame\UI-DialogBox-Divider">
-              <Size x="370" y="16" /><Anchors><Anchor point="TOP"><Offset x="0" y="-113" /></Anchor></Anchors>
-            </Texture>
             <Texture name="$parentCornerLeft" file="Interface\DialogFrame\UI-DialogBox-Header" alpha="0.55">
               <Size x="90" y="44" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="7" y="6" /></Anchor></Anchors>
               <TexCoords left="0" right="0.28" top="1" bottom="0" />
@@ -496,10 +505,14 @@
           <Frame name="NativeTransmogCollectionsFramePieceBar">
             <Size x="360" y="76" /><Anchors><Anchor point="TOP"><Offset x="0" y="-72" /></Anchor></Anchors>
           </Frame>
-          <EditBox name="$parentCustomName" inherits="InputBoxTemplate" autoFocus="false" hidden="true" maxLetters="48">
+          <EditBox name="$parentCustomName" inherits="InputBoxTemplate" autoFocus="false" multiLine="false" hidden="true" maxLetters="48">
             <Size x="210" y="22" /><Anchors><Anchor point="BOTTOM"><Offset x="-55" y="12" /></Anchor></Anchors>
             <FontString inherits="GameFontHighlightSmall" />
-            <Scripts><OnEscapePressed>self:ClearFocus(); NativeTransmog_CancelCustomEdit();</OnEscapePressed></Scripts>
+            <Scripts>
+              <OnLoad>NativeTransmog_InitializeSingleLineEditBox(self);</OnLoad>
+              <OnEscapePressed>self:ClearFocus(); NativeTransmog_CancelCustomEdit();</OnEscapePressed>
+              <OnEnterPressed>self:ClearFocus(); NativeTransmog_SaveCustomSet();</OnEnterPressed>
+            </Scripts>
           </EditBox>
           <Button name="$parentCustomSave" inherits="UIPanelButtonTemplate" text="Save" hidden="true">
             <Size x="58" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentCustomName" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
