@@ -34,12 +34,12 @@ local itemHistory, itemRows, itemCategoryButtons, itemDirty = {}, {}, {}, {}
 local itemSearchDue, itemRefreshDue = nil, nil
 local ITEM_PAGE_SIZE = 18
 local ITEM_CATEGORIES = {
- {label="Head",iconSlot="HeadSlot"},{label="Shoulders",iconSlot="ShoulderSlot"},
- {label="Back",iconSlot="BackSlot"},{label="Chest",iconSlot="ChestSlot"},
- {label="Shirt",iconSlot="ShirtSlot"},{label="Tabard",iconSlot="TabardSlot"},
- {label="Wrists",iconSlot="WristSlot"},{label="Hands",iconSlot="HandsSlot"},
- {label="Waist",iconSlot="WaistSlot"},{label="Legs",iconSlot="LegsSlot"},
- {label="Feet",iconSlot="FeetSlot"},{label="One-Handed Weapons",icon="Interface\\Icons\\INV_Sword_04"},
+ {label="Head",icon="Interface\\Icons\\INV_Helmet_03"},{label="Shoulders",icon="Interface\\Icons\\INV_Shoulder_01"},
+ {label="Back",icon="Interface\\Icons\\INV_Misc_Cape_11"},{label="Chest",icon="Interface\\Icons\\INV_Chest_Chain_04"},
+ {label="Shirt",icon="Interface\\Icons\\INV_Shirt_White_01"},{label="Tabard",icon="Interface\\Icons\\INV_Shirt_GuildTabard_01"},
+ {label="Wrists",icon="Interface\\Icons\\INV_Bracer_07"},{label="Hands",icon="Interface\\Icons\\INV_Gauntlets_04"},
+ {label="Waist",icon="Interface\\Icons\\INV_Belt_15"},{label="Legs",icon="Interface\\Icons\\INV_Pants_03"},
+ {label="Feet",icon="Interface\\Icons\\INV_Boots_05"},{label="One-Handed Weapons",icon="Interface\\Icons\\INV_Sword_04"},
  {label="Two-Handed Weapons",icon="Interface\\Icons\\INV_Sword_25"},
  {label="Ranged Weapons",icon="Interface\\Icons\\INV_Weapon_Bow_07"},
  {label="Off-Hand Appearances",icon="Interface\\Icons\\INV_Misc_Book_09"},
@@ -285,19 +285,22 @@ function NativeTransmog_SetsPrevious() if #setHistory>0 then restoreSetId=nil; r
 local function itemCategoryIcon(category)
  local definition=ITEM_CATEGORIES[category]
  if not definition then return "Interface\\Icons\\INV_Misc_QuestionMark" end
- if definition.icon then return definition.icon end
- local _,texture=GetInventorySlotInfo(definition.iconSlot)
- return texture or "Interface\\Icons\\INV_Misc_QuestionMark"
+ return definition.icon or "Interface\\Icons\\INV_Misc_QuestionMark"
 end
 local function refreshItemCategories()
- for category,button in ipairs(itemCategoryButtons) do setShown(button.selection,category==itemCategory) end
+ for category,button in ipairs(itemCategoryButtons) do
+  local enabled=button:IsEnabled()
+  button:SetAlpha(enabled and 1 or .45); button.icon:SetDesaturated(not enabled)
+  if enabled then button.icon:SetVertexColor(1,1,1) else button.icon:SetVertexColor(.45,.45,.45) end
+  setShown(button.selection,category==itemCategory and enabled)
+ end
 end
 local function createItemCategoryButton(category)
  local button=CreateFrame("Button","NativeTransmogItemCategory"..category,NativeTransmogCollectionsFrameItemsPanelCategoryBar)
  button:SetWidth(34); button:SetHeight(34); button.category=category
  button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetPoint("TOPLEFT",3,-3); button.icon:SetPoint("BOTTOMRIGHT",-3,3); button.icon:SetTexCoord(.08,.92,.08,.92); button.icon:SetTexture(itemCategoryIcon(category))
  button.border=button:CreateTexture(nil,"OVERLAY"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetAllPoints(button)
- button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\CheckButtonHilight"); button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-5,5); button.selection:SetPoint("BOTTOMRIGHT",5,-5); button.selection:Hide()
+ button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\CheckButtonHilight"); button.selection:SetBlendMode("ADD"); button.selection:SetVertexColor(1,.82,0); button.selection:SetPoint("TOPLEFT",-5,5); button.selection:SetPoint("BOTTOMRIGHT",5,-5); button.selection:Hide()
  button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square","ADD")
  button:SetScript("OnClick",function(self) NativeTransmog_SelectItemCategory(self.category) end)
  button:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_TOP"); GameTooltip:SetText(ITEM_CATEGORIES[self.category].label,1,.82,0); GameTooltip:Show() end)
@@ -307,12 +310,9 @@ end
 local function createItemRow(index)
  local button=CreateFrame("Button","NativeTransmogCollectionItem"..index,NativeTransmogCollectionsFrameItemsGridScrollChild)
  button:SetWidth(96); button:SetHeight(112)
- button.background=button:CreateTexture(nil,"BACKGROUND"); button.background:SetTexture(.035,.028,.02,.94); button.background:SetPoint("TOPLEFT",3,-3); button.background:SetPoint("BOTTOMRIGHT",-3,3)
+ button.background=button:CreateTexture(nil,"BACKGROUND"); button.background:SetTexture(.035,.028,.02,.94); button.background:SetWidth(92); button.background:SetHeight(92); button.background:SetPoint("TOP",0,-3)
  button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetWidth(82); button.icon:SetHeight(82); button.icon:SetPoint("TOP",0,-8); button.icon:SetTexCoord(.08,.92,.08,.92)
- button.shade=button:CreateTexture(nil,"OVERLAY"); button.shade:SetTexture(0,0,0,.55); button.shade:SetAllPoints(button.icon)
- button.border=button:CreateTexture(nil,"OVERLAY"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetPoint("TOPLEFT",-4,4); button.border:SetPoint("BOTTOMRIGHT",4,-4)
- button.state=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); button.state:SetPoint("BOTTOM",0,8)
- button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square","ADD")
+ button.highlight=button:CreateTexture(nil,"HIGHLIGHT"); button.highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square"); button.highlight:SetBlendMode("ADD"); button.highlight:SetAllPoints(button.background)
  button:SetScript("OnEnter",function(self)
   if not self.entry then return end
   GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetHyperlink("item:"..self.entry)
@@ -328,8 +328,9 @@ renderItems=function()
   local button=itemRows[index] or createItemRow(index); local column,row=(index-1)%6,math.floor((index-1)/6)
   button:ClearAllPoints(); button:SetPoint("TOPLEFT",12+column*101,-9-row*121); button.entry=appearance.entry; button.collected=appearance.collected
   button.icon:SetTexture(GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark")
-  button:SetAlpha(appearance.collected and 1 or .72); setShown(button.shade,not appearance.collected)
-  button.state:SetText(appearance.collected and "COLLECTED" or "MISSING"); button.state:SetTextColor(appearance.collected and .2 or .75,appearance.collected and 1 or .2,.2); button:Show()
+  button:SetAlpha(1); button.icon:SetDesaturated(not appearance.collected)
+  if appearance.collected then button.icon:SetVertexColor(1,1,1) else button.icon:SetVertexColor(.55,.55,.55) end
+  button:Show()
  end
  for index=#itemCatalog+1,#itemRows do itemRows[index].entry=nil; itemRows[index]:Hide() end
  NativeTransmogCollectionsFrameItemsGridScrollChild:SetHeight(math.max(374,math.ceil(#itemCatalog/6)*121+8))
@@ -380,18 +381,17 @@ end
 function NativeTransmog_ItemsNext() if itemHasNext then table.insert(itemHistory,itemCursor); requestItems(itemNextCursor,true) end end
 function NativeTransmog_ItemsPrevious() if #itemHistory>0 then requestItems(table.remove(itemHistory),true) end end
 
-local function positionCollectionsClassDisplay(items)
- NativeTransmogCollectionsFrameClassDisplay:ClearAllPoints()
- if items then NativeTransmogCollectionsFrameClassDisplay:SetPoint("TOPLEFT",NativeTransmogCollectionsFrame,"TOPLEFT",13,-7)
- else NativeTransmogCollectionsFrameClassDisplay:SetPoint("TOPRIGHT",NativeTransmogCollectionsFrame,"TOPRIGHT",-13,-7) end
+local function setCollectionsClassDisplayVisible(visible)
+ NativeTransmogCollectionsFrameClassDisplay:EnableMouse(visible)
+ setShown(NativeTransmogCollectionsFrameClassDisplay,visible)
 end
 function NativeTransmog_SelectCollectionView(mode)
  if mode=="ITEMS" then
-  collectionMode="ITEMS"; browserMode="ITEMS"; cancelSetRequest(); NativeTransmogCollectionsFrameListPanel:Hide(); NativeTransmogCollectionsFramePreview:Hide(); NativeTransmogCollectionsFrameItemsPanel:Show(); positionCollectionsClassDisplay(true)
+  collectionMode="ITEMS"; browserMode="ITEMS"; cancelSetRequest(); NativeTransmogCollectionsFrameListPanel:Hide(); NativeTransmogCollectionsFramePreview:Hide(); NativeTransmogCollectionsFrameItemsPanel:Show(); setCollectionsClassDisplayVisible(false)
   NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameItemsTab,true,true); NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameSetsTab,false,true)
   if #itemCatalog==0 or itemDirty[itemCategory] then itemDirty[itemCategory]=nil; requestItems(itemCursor,true) else renderItems() end
  else
-  collectionMode="SETS"; browserMode="SETS"; cancelItemRequest(); NativeTransmogCollectionsFrameItemsPanel:Hide(); NativeTransmogCollectionsFrameListPanel:Show(); NativeTransmogCollectionsFramePreview:Show(); positionCollectionsClassDisplay(false)
+  collectionMode="SETS"; browserMode="SETS"; cancelItemRequest(); NativeTransmogCollectionsFrameItemsPanel:Hide(); NativeTransmogCollectionsFrameListPanel:Show(); NativeTransmogCollectionsFramePreview:Show(); setCollectionsClassDisplayVisible(true)
   NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameItemsTab,false,true); NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameSetsTab,true,true)
   if #setCatalog==0 and not activeSetPageRequest then requestSets(setCursor) else renderSets(); renderPieces() end
  end

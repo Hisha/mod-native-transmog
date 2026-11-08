@@ -54,6 +54,18 @@ class ItemsBrowserTests(unittest.TestCase):
         self.assertIn('NativeTransmogCollectionsFrameListPanel:Show()', LUA)
         self.assertIn('NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameItemsTab,true,true)', LUA)
 
+    def test_repeated_view_switching_hides_and_restores_sets_class_selector(self):
+        selector = LUA[LUA.index("local function setCollectionsClassDisplayVisible"):
+                       LUA.index("function NativeTransmog_SelectCollectionView")]
+        switcher = LUA[LUA.index("function NativeTransmog_SelectCollectionView"):
+                       LUA.index("local function refreshEquipmentSelection")]
+        self.assertIn("ClassDisplay:EnableMouse(visible)", selector)
+        self.assertIn("setShown(NativeTransmogCollectionsFrameClassDisplay,visible)", selector)
+        self.assertIn("setCollectionsClassDisplayVisible(false)", switcher)
+        self.assertIn("setCollectionsClassDisplayVisible(true)", switcher)
+        self.assertNotIn("ClassDisplay:ClearAllPoints()", LUA)
+        self.assertNotIn("positionCollectionsClassDisplay", LUA)
+
     def test_all_required_categories_are_present(self):
         for label in ("Head", "Shoulders", "Back", "Chest", "Shirt", "Tabard", "Wrists", "Hands",
                       "Waist", "Legs", "Feet", "One-Handed Weapons", "Two-Handed Weapons",
@@ -160,7 +172,32 @@ class ItemsBrowserTests(unittest.TestCase):
     def test_tooltips_and_uncollected_styling(self):
         self.assertIn('GameTooltip:SetHyperlink("item:"..self.entry)', LUA)
         self.assertIn('self.collected and "Collected" or "Not collected"', LUA)
-        self.assertIn("setShown(button.shade,not appearance.collected)", LUA)
+        self.assertIn("button.icon:SetDesaturated(not appearance.collected)", LUA)
+        self.assertIn("button.icon:SetVertexColor(.55,.55,.55)", LUA)
+
+    def test_item_cells_have_one_treatment_and_no_status_label(self):
+        cell = LUA[LUA.index("local function createItemRow"):
+                   LUA.index("renderItems=function()")]
+        render = LUA[LUA.index("renderItems=function()"):
+                     LUA.index("local function matchingItemRequest")]
+        self.assertIn('button.highlight=button:CreateTexture(nil,"HIGHLIGHT")', cell)
+        self.assertNotIn("UI-Quickslot2", cell)
+        self.assertNotIn("CreateFontString", cell)
+        self.assertNotIn("COLLECTED", render)
+        self.assertNotIn("MISSING", render)
+
+    def test_enabled_categories_use_consistent_full_color_icons(self):
+        categories = LUA[LUA.index("local ITEM_CATEGORIES"):
+                         LUA.index("local requestCatalog")]
+        refresh = LUA[LUA.index("local function refreshItemCategories"):
+                      LUA.index("local function createItemCategoryButton")]
+        self.assertNotIn("iconSlot=", categories)
+        self.assertIn("local enabled=button:IsEnabled()", refresh)
+        self.assertNotIn("button:Enable()", refresh)
+        self.assertIn("button:SetAlpha(enabled and 1 or .45)", refresh)
+        self.assertIn("button.icon:SetDesaturated(not enabled)", refresh)
+        self.assertIn("button.icon:SetVertexColor(1,1,1)", refresh)
+        self.assertIn("category==itemCategory and enabled", refresh)
 
     def test_epf_and_sets_contract_remain_intact(self):
         ET.fromstring(XML)
