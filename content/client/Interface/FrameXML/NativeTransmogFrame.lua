@@ -376,10 +376,6 @@ local function createItemCategoryButton(category)
  button:SetScript("OnClick",function(self) NativeTransmog_SelectItemCategory(self.category) end)
  button:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_TOP"); GameTooltip:SetText(ITEM_CATEGORIES[self.category].label,1,.82,0); GameTooltip:Show() end)
  button:SetScript("OnLeave",function() GameTooltip:Hide() end)
- button:SetScript("OnClick",function(self)
-  if not customEditing or not customPickingSlot or not self.entry or not self.collected then return end
-  customRequestId=customRequestId+1; sendReadOnly("CUSTOMCHOOSE",customRequestId.."\t"..customPickingSlot.."\t0\t"..self.entry)
- end)
  itemCategoryButtons[category]=button; return button
 end
 local function createItemRow(index)
@@ -396,6 +392,10 @@ local function createItemRow(index)
   GameTooltip:AddLine("Representative item for this appearance.",.65,.65,.65,true); GameTooltip:Show()
  end)
  button:SetScript("OnLeave",function() GameTooltip:Hide() end)
+ button:SetScript("OnClick",function(self)
+  if not customEditing or not customPickingSlot or not self.entry or not self.collected then return end
+  customRequestId=customRequestId+1; sendReadOnly("CUSTOMCHOOSE",customRequestId.."\t"..customPickingSlot.."\t0\t"..self.entry)
+ end)
  itemRows[index]=button; return button
 end
 renderItems=function()
@@ -819,42 +819,8 @@ local function handleItemMessage(command,fields)
  end
  return false
 end
-function NativeTransmog_OnEvent(_,event,...)
- if event=="PLAYER_EQUIPMENT_CHANGED" then
-  local changedInventorySlot=...
-  for wireSlot=1,#SLOT_ORDER do
-   local inventorySlot=getInventorySlot(wireSlot)
-   if inventorySlot==changedInventorySlot then
-    overrideStates[wireSlot]=nil; updateEquipmentSlot(wireSlot)
-    if browserMode=="APPEARANCES" and wireSlot==selectedSlotId and NativeTransmogFrame:IsShown() then
-     if authorizedToken and slotHasItem(wireSlot) then scheduledRefresh=GetTime()+.35
-     else NativeTransmog_SelectSlot(wireSlot) end
-    end
-    break
-   end
-  end
-  return
- elseif event=="PLAYER_ENTERING_WORLD" then
-  updateEquipmentSlots()
-  if SendAddonMessage then SendAddonMessage(PREFIX,VERSION.."\tSYNC","WHISPER",UnitName("player")) end
-  return
- end
-
- local prefix,message,channel,sender=...
- if event~="CHAT_MSG_ADDON" or prefix~=PREFIX or channel~="WHISPER" or sender~=UnitName("player") then return end
- local fields=splitTabs(message); if fields[1]~=VERSION then return end
- local command=fields[2]
- if command=="OPEN" and fields[3] then NativeTransmog_OpenAuthorized(fields[3]); return end
- if command=="CLOSE" and authorizedToken==fields[3] then NativeTransmogFrame:Hide(); return end
- if command=="STATE" then
-  if fields[3]~="0" and (not authorizedToken or fields[3]~=authorizedToken) then return end
-  local wireSlot,state=tonumber(fields[4]),tonumber(fields[5])
-  if wireSlot and SLOT_ORDER[wireSlot] and state and state>=0 and state<=2 then
-   overrideStates[wireSlot]={state=state,entry=tonumber(fields[6]),name=fields[7]}
-   refreshEquipmentIndicator(wireSlot)
-  end
-  return
- elseif command=="CUSTOMPAGE" then
+local function handleCustomMessage(command,fields)
+ if command=="CUSTOMPAGE" then
   local responseId,count=tonumber(fields[3]),tonumber(fields[7]); if not responseId or not count or count<0 or count>20 then return end
   if NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then savedSetNextCursor=tonumber(fields[5]) or 0; savedSetHasNext=fields[6]=="1"; return end
   local request=matchingSetRequest("CUSTOMSETS",responseId); if not request or request.phase~="PAGE" or tonumber(fields[4])~=request.cursor then return end
@@ -896,9 +862,49 @@ function NativeTransmog_OnEvent(_,event,...)
   if savedPreflight and savedPreflight.valid and savedSetNonce then StaticPopup_Show("NATIVE_TRANSMOG_APPLY_CUSTOM_SET",savedPreflight.name,savedPreflight.count)
   elseif savedPreflight then setStatus("Set cannot be applied: "..table.concat(savedPreflight.failures,"; "),true) end; return
  elseif command=="RESULT" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest and (fields[5]=="CUSTOMPREFLIGHT" or fields[5]=="CUSTOMCONFIRM") then
-  pending=nil; local result=fields[6] or "MALFORMED"; if result=="ok" then setStatus("Custom set applied.",false); updateEquipmentSlots(); scheduledRefresh=GetTime()+.30 else setStatus(RESULT_TEXT[result] or ("Custom set application failed: "..result),true) end; return
+  pending=nil; local result=fields[6] or "MALFORMED"; if result=="ok" then setStatus("Custom set applied.",false); updateEquipmentSlots(); scheduledRefresh=GetTime()+.30 else setStatus(RESULT_TEXT[result] or ("Custom set application failed: "..result),true) end; return true
  elseif command=="RESULT" and fields[3]=="0" and tonumber(fields[4])==customRequestId then
-  setStatus(RESULT_TEXT[fields[6]] or ("Custom set request failed: "..(fields[6] or "MALFORMED")),true); return
+  setStatus(RESULT_TEXT[fields[6]] or ("Custom set request failed: "..(fields[6] or "MALFORMED")),true); return true
+ end
+ return false
+end
+function NativeTransmog_OnEvent(_,event,...)
+ if event=="PLAYER_EQUIPMENT_CHANGED" then
+  local changedInventorySlot=...
+  for wireSlot=1,#SLOT_ORDER do
+   local inventorySlot=getInventorySlot(wireSlot)
+   if inventorySlot==changedInventorySlot then
+    overrideStates[wireSlot]=nil; updateEquipmentSlot(wireSlot)
+    if browserMode=="APPEARANCES" and wireSlot==selectedSlotId and NativeTransmogFrame:IsShown() then
+     if authorizedToken and slotHasItem(wireSlot) then scheduledRefresh=GetTime()+.35
+     else NativeTransmog_SelectSlot(wireSlot) end
+    end
+    break
+   end
+  end
+  return
+ elseif event=="PLAYER_ENTERING_WORLD" then
+  updateEquipmentSlots()
+  if SendAddonMessage then SendAddonMessage(PREFIX,VERSION.."\tSYNC","WHISPER",UnitName("player")) end
+  return
+ end
+
+ local prefix,message,channel,sender=...
+ if event~="CHAT_MSG_ADDON" or prefix~=PREFIX or channel~="WHISPER" or sender~=UnitName("player") then return end
+ local fields=splitTabs(message); if fields[1]~=VERSION then return end
+ local command=fields[2]
+ if command=="OPEN" and fields[3] then NativeTransmog_OpenAuthorized(fields[3]); return end
+ if command=="CLOSE" and authorizedToken==fields[3] then NativeTransmogFrame:Hide(); return end
+ if command=="STATE" then
+  if fields[3]~="0" and (not authorizedToken or fields[3]~=authorizedToken) then return end
+  local wireSlot,state=tonumber(fields[4]),tonumber(fields[5])
+  if wireSlot and SLOT_ORDER[wireSlot] and state and state>=0 and state<=2 then
+   overrideStates[wireSlot]={state=state,entry=tonumber(fields[6]),name=fields[7]}
+   refreshEquipmentIndicator(wireSlot)
+  end
+  return
+ elseif string.sub(command,1,6)=="CUSTOM" then handleCustomMessage(command,fields); return
+ elseif command=="RESULT" and handleCustomMessage(command,fields) then return
  elseif command=="SETPAGE" then
   local responseId=tonumber(fields[3]); local request=matchingSetRequest("SETS",responseId)
   local responseFilter,responseCursor,responseCount=tonumber(fields[4]),tonumber(fields[5]),tonumber(fields[8])

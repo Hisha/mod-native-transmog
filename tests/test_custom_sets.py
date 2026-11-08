@@ -138,6 +138,11 @@ class PreviewAndUiContractTests(unittest.TestCase):
     def test_editor_reuses_items_browser_and_cancel_does_not_save(self):
         self.assertIn('NativeTransmog_SelectCollectionView("ITEMS")', LUA)
         self.assertIn("itemFilter=1", LUA)
+        category = LUA[LUA.index("local function createItemCategoryButton"):LUA.index("local function createItemRow")]
+        item = LUA[LUA.index("local function createItemRow"):LUA.index("renderItems=function()")]
+        self.assertIn("NativeTransmog_SelectItemCategory(self.category)", category)
+        self.assertNotIn('sendReadOnly("CUSTOMCHOOSE"', category)
+        self.assertIn('sendReadOnly("CUSTOMCHOOSE"', item)
         cancel = LUA[LUA.index("function NativeTransmog_CancelCustomEdit"):LUA.index("StaticPopupDialogs")]
         self.assertIn('sendReadOnly("CUSTOMCANCEL"', cancel)
         self.assertNotIn('sendReadOnly("CUSTOMSAVE"', cancel)
