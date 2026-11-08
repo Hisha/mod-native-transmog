@@ -15,16 +15,22 @@ second collection store or eligibility implementation.
   quest rewards after core reward delivery, then uses the same service.
 - Need and Greed group-roll wins create and store the original item; the normal
   `STORE_NEW_ITEM` path therefore collects them.
-- Playerbot revision `8a4e76eac8c4ccebf547113afe7b51d6c3e91641` never creates the original
-  item. The additive `PLAYERHOOK_ON_GROUP_ROLL_DISENCHANT` hook fires once for
-  the resolved winner immediately before the core generates enchanting
-  materials. The module resolves `itemEntry` to the original `ItemTemplate` and
-  calls `CollectionService::Unlock` with `DisenchantRoll` provenance.
+- Playerbot revision `8a4e76eac8c4ccebf547113afe7b51d6c3e91641` does not expose a supported
+  script callback for a successful Disenchant roll. Its
+  `PLAYERHOOK_ON_GROUP_ROLL_REWARD_ITEM` calls are confined to the Need and
+  Greed branches. The Disenchant branch knows both the winner and original item,
+  but converts the item directly into enchanting loot without invoking a public
+  hook that carries both values.
 
-Selecting Disenchant does not invoke the winner hook. Losing, passing, going
-offline before resolution, or another player winning produces no collection
-call for that player. Material generation and its inventory-full mail fallback
-remain entirely core-owned and execute after the hook.
+The item-acquisition hooks invoked by material generation identify only the
+enchanting materials. Inferring the destroyed appearance from those materials
+is ambiguous and is therefore intentionally not attempted. Disenchant-roll
+appearance acquisition remains pending a suitable interface in the target
+core; selecting or winning Disenchant currently produces no collection call.
+
+`AcquisitionSource::DisenchantRoll` remains reserved solely so collection rows
+created by earlier deployments with a custom core patch retain readable
+provenance. There is no active module path that writes this source on PTR.
 
 ## Eligibility and deduplication
 

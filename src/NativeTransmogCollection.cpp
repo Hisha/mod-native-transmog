@@ -234,7 +234,6 @@ bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate,
             case AcquisitionSource::NewItem:
             case AcquisitionSource::InventoryTransfer:
             case AcquisitionSource::Vendor:
-            case AcquisitionSource::DisenchantRoll:
                 sourceEnabled = _config.unlockOnAcquire;
                 break;
             case AcquisitionSource::QuestCompletion:
@@ -247,6 +246,10 @@ bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate,
                 // Equipping is an independent collection path, not an item-
                 // acquisition path controlled by UnlockOnAcquire.
                 sourceEnabled = true;
+                break;
+            case AcquisitionSource::DisenchantRoll:
+                // Historical provenance only. The stock PTR core has no hook
+                // that can safely produce this acquisition source.
                 break;
         }
         if (!_config.enabled || !sourceEnabled || !_databaseAvailable)
@@ -307,7 +310,8 @@ std::uint32_t CollectionService::UnlockBatch(Player* player,
     CollectionOwner owner;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        bool sourceEnabled = source == AcquisitionSource::QuestCompletion ? _config.unlockAllQuestRewards :
+        bool sourceEnabled = source == AcquisitionSource::DisenchantRoll ? false :
+            source == AcquisitionSource::QuestCompletion ? _config.unlockAllQuestRewards :
             source == AcquisitionSource::QuestBackfill ? _config.questBackfillEnabled :
             source == AcquisitionSource::Equipment ? true : _config.unlockOnAcquire;
         if (!_config.enabled || !sourceEnabled || !_databaseAvailable)

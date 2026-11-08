@@ -29,7 +29,9 @@ enum class AcquisitionSource : std::uint8_t
     QuestCompletion = 4,  // Every eligible item offered by a successfully rewarded quest.
     QuestBackfill = 5,    // Current rewards of a quest found in reliable historical completion storage.
     Equipment = 6,        // An eligible item observed in its successfully equipped slot.
-    DisenchantRoll = 7    // Original item won by Disenchant before material conversion.
+    // Retained only to decode provenance written by deployments that carried
+    // the former custom core hook. The stock PTR core cannot produce it.
+    DisenchantRoll = 7
 };
 
 struct AppearanceKey
