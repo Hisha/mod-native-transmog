@@ -50,6 +50,25 @@ class PhaseFourBContracts(unittest.TestCase):
             self.assertIn(marker, LUA)
         self.assertIn('frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")', LUA)
 
+    def test_equipment_slots_remove_only_inherited_quickslot_normal_texture(self):
+        loader = LUA[LUA.index("function NativeTransmog_EquipmentSlot_OnLoad"):
+                     LUA.index("function NativeTransmog_EquipmentSlot_OnClick")]
+        self.assertIn("button:SetNormalTexture(nil)", loader)
+        template = XML[XML.index('<Button name="NativeTransmogEquipmentSlotTemplate"'):
+                       XML.index('<Frame name="NativeTransmogFrame"')]
+        self.assertIn('inherits="ItemButtonTemplate"', template)
+        self.assertIn("$parentSelection", template)
+        self.assertNotIn("<NormalTexture", template)
+
+    def test_appearance_choices_have_clean_icons_and_keep_hover_selection_tooltips(self):
+        appearance = LUA[LUA.index("local function createAppearanceButton"):
+                         LUA.index("local function renderCatalog")]
+        self.assertNotIn("UI-Quickslot2", appearance)
+        self.assertNotIn("button.border", appearance)
+        self.assertIn('button.highlight=button:CreateTexture(nil,"HIGHLIGHT")', appearance)
+        self.assertIn('button.selection=button:CreateTexture(nil,"OVERLAY")', appearance)
+        self.assertIn('button:SetScript("OnEnter",showAppearanceTooltip)', appearance)
+
     def test_empty_slots_never_request_or_enable_application(self):
         request = LUA[LUA.index("local function requestCatalog"):LUA.index("function NativeTransmog_Apply")]
         self.assertLess(request.index("not slotHasItem"), request.index('sendRequest("CAT"'))

@@ -199,6 +199,15 @@ class ItemsBrowserTests(unittest.TestCase):
         self.assertIn("button.icon:SetVertexColor(1,1,1)", refresh)
         self.assertIn("category==itemCategory and enabled", refresh)
 
+    def test_category_icons_keep_interaction_layers_without_quickslot_border(self):
+        category = LUA[LUA.index("local function createItemCategoryButton"):
+                       LUA.index("local function createItemRow")]
+        self.assertNotIn("UI-Quickslot2", category)
+        self.assertNotIn("button.border", category)
+        self.assertIn("CheckButtonHilight", category)
+        self.assertIn("ButtonHilight-Square", category)
+        self.assertIn("GameTooltip:SetOwner", category)
+
     def test_epf_and_sets_contract_remain_intact(self):
         ET.fromstring(XML)
         self.assertEqual(MANIFEST["nativeCollectionPages"][0]["frame"], "NativeTransmogCollectionsFrame")

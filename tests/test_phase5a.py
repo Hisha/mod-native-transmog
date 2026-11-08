@@ -300,16 +300,24 @@ class PhaseFiveAUiTests(unittest.TestCase):
         self.assertNotIn("UI-Achievement-Category-Highlight", row)
         self.assertNotIn("UI-QuestTitleHighlight", row)
 
-    def test_set_piece_icons_have_one_icon_one_border_and_no_square_highlight(self):
+    def test_set_piece_icons_have_clean_artwork_state_strip_and_no_square_border(self):
         piece = LUA[LUA.index("local function createPieceRow"):LUA.index("renderPieces=function")]
         self.assertEqual(piece.count('row.icon=row:CreateTexture'), 1)
-        self.assertEqual(piece.count('row.border=row:CreateTexture'), 1)
-        self.assertEqual(piece.count(r'UI-Quickslot2'), 1)
+        self.assertNotIn('row.border', piece)
+        self.assertNotIn(r'UI-Quickslot2', piece)
         self.assertEqual(piece.count('row.state=row:CreateTexture'), 1)
         self.assertNotIn("ReadyCheck-Ready", piece)
         self.assertNotIn("ReadyCheck-NotReady", piece)
         self.assertNotIn("ButtonHilight-Square", piece)
         self.assertNotIn("SetPushedTexture", piece)
+
+    def test_set_list_icon_has_no_quickslot_border_but_keeps_row_states(self):
+        row = LUA[LUA.index("local function createSetRow"):LUA.index("local function refreshSetFilters")]
+        self.assertNotIn("UI-Quickslot2", row)
+        self.assertNotIn("row.iconBorder", row)
+        self.assertIn('row.selected=row:CreateTexture(nil,"BORDER")', row)
+        self.assertIn('row.highlight=row:CreateTexture(nil,"HIGHLIGHT")', row)
+        self.assertIn('row:SetScript("OnEnter"', row)
 
     def test_sets_page_and_selection_restore_after_reopen(self):
         self.assertIn('browserMode="SETS"; restoreSetId=nil; setHistory={}; requestSets(0)', LUA)

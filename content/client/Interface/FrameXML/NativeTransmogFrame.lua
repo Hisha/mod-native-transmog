@@ -168,7 +168,6 @@ local function createSetRow(index)
  row:SetWidth(244); row:SetHeight(46)
  row.background=row:CreateTexture(nil,"BACKGROUND"); row.background:SetTexture(.07,.06,.05,.72); row.background:SetAllPoints(row)
  row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetWidth(36); row.icon:SetHeight(36); row.icon:SetPoint("LEFT",5,0); row.icon:SetTexCoord(.08,.92,.08,.92)
- row.iconBorder=row:CreateTexture(nil,"OVERLAY"); row.iconBorder:SetTexture("Interface\\Buttons\\UI-Quickslot2"); row.iconBorder:SetWidth(42); row.iconBorder:SetHeight(42); row.iconBorder:SetPoint("CENTER",row.icon,"CENTER")
  row.name=row:CreateFontString(nil,"ARTWORK","GameFontNormalSmall"); row.name:SetPoint("TOPLEFT",48,-7); row.name:SetWidth(145); row.name:SetJustifyH("LEFT")
  row.meta=row:CreateFontString(nil,"ARTWORK","GameFontDisableSmall"); row.meta:SetPoint("TOPLEFT",48,-23); row.meta:SetWidth(185); row.meta:SetJustifyH("LEFT")
  row.progress=row:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall"); row.progress:SetPoint("TOPRIGHT",-7,-7)
@@ -211,7 +210,6 @@ local function createPieceRow(index)
  local row=CreateFrame("Button","NativeTransmogPieceRow"..index,NativeTransmogCollectionsFramePieceBar)
  row:SetWidth(34); row:SetHeight(34)
  row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetPoint("TOPLEFT",2,-2); row.icon:SetPoint("BOTTOMRIGHT",-2,2); row.icon:SetTexCoord(.08,.92,.08,.92)
- row.border=row:CreateTexture(nil,"OVERLAY"); row.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); row.border:SetAllPoints(row)
  -- A narrow edge strip carries collection state without covering the icon.
  row.state=row:CreateTexture(nil,"OVERLAY"); row.state:SetWidth(26); row.state:SetHeight(3); row.state:SetPoint("BOTTOM",0,2)
  row:SetScript("OnEnter",function(self)
@@ -299,7 +297,6 @@ local function createItemCategoryButton(category)
  local button=CreateFrame("Button","NativeTransmogItemCategory"..category,NativeTransmogCollectionsFrameItemsPanelCategoryBar)
  button:SetWidth(34); button:SetHeight(34); button.category=category
  button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetPoint("TOPLEFT",3,-3); button.icon:SetPoint("BOTTOMRIGHT",-3,3); button.icon:SetTexCoord(.08,.92,.08,.92); button.icon:SetTexture(itemCategoryIcon(category))
- button.border=button:CreateTexture(nil,"OVERLAY"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetAllPoints(button)
  button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\CheckButtonHilight"); button.selection:SetBlendMode("ADD"); button.selection:SetVertexColor(1,.82,0); button.selection:SetPoint("TOPLEFT",-5,5); button.selection:SetPoint("BOTTOMRIGHT",5,-5); button.selection:Hide()
  button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square","ADD")
  button:SetScript("OnClick",function(self) NativeTransmog_SelectItemCategory(self.category) end)
@@ -511,7 +508,6 @@ local function createAppearanceButton(index)
  button:SetWidth(ICON_SIZE); button:SetHeight(ICON_SIZE)
  button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetPoint("TOPLEFT",3,-3); button.icon:SetPoint("BOTTOMRIGHT",-3,3)
  button.icon:SetTexCoord(.08,.92,.08,.92)
- button.border=button:CreateTexture(nil,"OVERLAY"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetAllPoints(button)
  button.highlight=button:CreateTexture(nil,"HIGHLIGHT"); button.highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
  button.highlight:SetBlendMode("ADD"); button.highlight:SetAllPoints(button)
  button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\CheckButtonHilight")
@@ -592,6 +588,9 @@ end
 
 function NativeTransmog_EquipmentSlot_OnLoad(button)
  local wireSlot=button:GetID(); slotButtons[wireSlot]=button
+ -- ItemButtonTemplate's normal texture is UI-Quickslot2. Keep its icon, count,
+ -- and highlight behavior, but remove the redundant inset square.
+ button:SetNormalTexture(nil)
  button.selection=_G[button:GetName().."Selection"]
  button.transmogMark=_G[button:GetName().."TransmogMark"]
  button.hiddenMark=_G[button:GetName().."HiddenMark"]

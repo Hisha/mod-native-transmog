@@ -59,9 +59,10 @@
     </HighlightTexture>
   </Button>
 
-  <!-- ItemButtonTemplate supplies Blizzard's 37px icon, count, normal border, and highlight conventions.
-       The wardrobe owns only selection and confirmed-override markers; it intentionally does not inherit
-       PaperDollItemSlotButtonTemplate's CharacterFrame equip, drag, event, or flyout handlers. -->
+  <!-- ItemButtonTemplate supplies Blizzard's 37px icon, count, and highlight conventions. Its
+       UI-Quickslot2 normal texture is cleared on load so equipment artwork has the same clean treatment
+       as other wardrobe icons. The wardrobe owns only selection and confirmed-override markers; it
+       intentionally does not inherit PaperDollItemSlotButtonTemplate's CharacterFrame handlers. -->
   <Button name="NativeTransmogEquipmentSlotTemplate" inherits="ItemButtonTemplate" virtual="true">
     <Size x="40" y="40" />
     <Layers>
