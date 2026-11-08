@@ -2,8 +2,8 @@
   "schema": 3,
   "package": "mod-native-transmog",
   "name": "Native Transmog Wardrobe",
-  "version": "5.2.0-collections1",
-  "description": "Native build-12340 wardrobe with authoritative gameplay equipment-set browsing and preview.",
+  "version": "5.3.0-items1",
+  "description": "Native build-12340 wardrobe with authoritative appearance-item and equipment-set browsing.",
   "creatureTemplates": [
     {
       "symbol": "dedicated-transmogrifier",

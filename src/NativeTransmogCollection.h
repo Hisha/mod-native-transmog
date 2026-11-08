@@ -119,6 +119,8 @@ public:
     std::uint32_t UnlockBatch(Player* player, std::vector<CollectionUnlockRequest> const& requests,
         AcquisitionSource source);
     bool IsCollected(Player const* player, AppearanceKey const& appearance);
+    std::vector<bool> CollectedStates(Player const* player,
+        std::vector<AppearanceKey> const& appearances);
     std::vector<AppearanceRecord> List(Player const* player, CollectionFilter const& filter = {},
         std::uint32_t offset = 0, std::uint32_t limit = 50) const;
     std::uint32_t Count(Player const* player, CollectionFilter const& filter = {}) const;

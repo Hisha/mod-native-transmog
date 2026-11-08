@@ -49,7 +49,8 @@ bool IsNativeTransmogResponse(std::string const& message)
     return command == "OPEN" || command == "CLOSE" || command == "STATE" || command == "PAGE" ||
         command == "ITEM" || command == "END" || command == "RESULT" || command == "SETPAGE" ||
         command == "SET" || command == "SETEND" || command == "SETINFO" || command == "SETPIECE" ||
-        command == "SETDETAILEND";
+        command == "SETDETAILEND" || command == "ITEMSPAGE" || command == "ITEMAPPEAR" ||
+        command == "ITEMSEND" || command == "ITEMUPDATE";
 }
 
 void RefreshOnlineVisibleEquipment()

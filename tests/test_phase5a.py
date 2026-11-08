@@ -260,8 +260,8 @@ class PhaseFiveAUiTests(unittest.TestCase):
         collections = XML[XML.index('<Frame name="NativeTransmogCollectionsFrame"'):]
         self.assertIn('inherits="NativeTransmogCollectionsTabTemplate" text="Items"', collections)
         self.assertIn('inherits="NativeTransmogCollectionsTabTemplate" text="Sets"', collections)
-        self.assertIn('NativeTransmog_StyleCollectionTab(self, false, false)', collections)
-        self.assertIn('NativeTransmog_StyleCollectionTab(self, true, false)', collections)
+        self.assertIn('NativeTransmog_StyleCollectionTab(self, false, true)', collections)
+        self.assertIn('NativeTransmog_StyleCollectionTab(self, true, true)', collections)
         self.assertNotIn("self:LockHighlight()", collections)
         style = LUA[LUA.index("function NativeTransmog_StyleCollectionTab"):
                     LUA.index("local function truncateLabel")]
@@ -370,7 +370,7 @@ class PhaseFiveAUiTests(unittest.TestCase):
             'NativeTransmogCollectionsFrameSetTitle', '<Size x="392" y="398" />',
         ):
             self.assertIn(marker, collections)
-        self.assertIn('NativeTransmog_StyleCollectionTab(self, false, false)', collections)
+        self.assertIn('NativeTransmog_StyleCollectionTab(self, false, true)', collections)
         self.assertIn('NativeTransmog_SetSearch', collections)
         self.assertIn('row.icon:SetTexture(GetItemIcon(set.iconEntry)', LUA)
         self.assertIn('row.selected:SetAllPoints(row)', LUA)

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -34,6 +35,7 @@ public:
     bool HandleAddonWhisper(Player* player, std::string const& message);
     void SendEquipmentState(Player* player, std::uint32_t token) const;
     void EquipmentChanged(Player* player, std::uint8_t equipmentSlot, Item* item);
+    void NotifyAppearanceUnlocked(Player* player, AppearanceKey const& appearance) const;
     void ReleasePlayer(Player const* player);
 
 private:
@@ -55,11 +57,20 @@ private:
         Snapshot snapshot;
     };
 
+    struct BrowseAppearance
+    {
+        AppearanceKey appearance;
+        std::uint32_t representative = 0;
+        std::string searchText;
+    };
+
     WardrobeService() = default;
     void Send(Player* player, std::string const& payload) const;
     void SendError(Player* player, std::uint32_t token, std::uint32_t requestId,
         char const* operation, char const* result) const;
     void HandleCatalog(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleItems(Player* player, std::vector<std::uint32_t> const& fields,
+        std::string_view search);
     void HandleSets(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleSetDetail(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleApply(Player* player, std::vector<std::uint32_t> const& fields);
@@ -77,6 +88,7 @@ private:
     mutable std::mutex _mutex;
     WardrobeConfig _config;
     std::unordered_map<AppearanceKey, std::vector<std::uint32_t>, AppearanceKeyHash> _canonicalSources;
+    std::unordered_map<std::uint32_t, std::vector<BrowseAppearance>> _browseCatalog;
     std::unordered_map<ObjectGuid::LowType, PlayerState> _players;
     std::uint32_t _nextNonce = 1;
 };

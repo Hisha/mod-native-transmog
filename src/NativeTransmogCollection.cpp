@@ -1,4 +1,5 @@
 #include "NativeTransmogCollection.h"
+#include "NativeTransmogWardrobe.h"
 
 #include "Chat.h"
 #include "DatabaseEnv.h"
@@ -290,6 +291,7 @@ bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate,
         itemTemplate->ItemId, sourceQuest, owner.type == CollectionOwnerType::Account ? "account" : "character",
         owner.id, SourceName(source));
     NotifyUnlock(player, itemTemplate, source);
+    WardrobeService::Instance().NotifyAppearanceUnlocked(player, appearance);
     return true;
 }
 
@@ -376,7 +378,10 @@ std::uint32_t CollectionService::UnlockBatch(Player* player,
     }
 
     for (ResolvedRequest const& request : resolved)
+    {
         NotifyUnlock(player, request.itemTemplate, source);
+        WardrobeService::Instance().NotifyAppearanceUnlocked(player, request.appearance);
+    }
 
     LOG_DEBUG("module.native_transmog", "Collected {} batched appearances for {} {} via {}.", resolved.size(),
         owner.type == CollectionOwnerType::Account ? "account" : "character", owner.id, SourceName(source));
@@ -393,6 +398,24 @@ bool CollectionService::IsCollected(Player const* player, AppearanceKey const& a
         return false;
     auto found = _collections.find(owner);
     return found != _collections.end() && found->second.find(appearance) != found->second.end();
+}
+
+std::vector<bool> CollectionService::CollectedStates(Player const* player,
+    std::vector<AppearanceKey> const& appearances)
+{
+    std::vector<bool> states(appearances.size(), false);
+    CollectionOwner owner = OwnerFor(player);
+    if (!owner.id)
+        return states;
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (!_config.enabled || !_databaseAvailable || !EnsureOwnerLoaded(owner))
+        return states;
+    auto found = _collections.find(owner);
+    if (found == _collections.end())
+        return states;
+    for (std::size_t index = 0; index < appearances.size(); ++index)
+        states[index] = found->second.find(appearances[index]) != found->second.end();
+    return states;
 }
 
 std::vector<AppearanceRecord> CollectionService::List(Player const* player, CollectionFilter const& filter,

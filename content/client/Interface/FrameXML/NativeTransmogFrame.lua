@@ -26,7 +26,26 @@ local setPagePending, setDetailPending = nil, nil
 local setRows, pieceRows = {}, {}
 local setSearch, setOverallCollected, setOverallTotal = "", 0, 0
 local SET_PAGE_SIZE, MAXIMUM_SET_PIECES = 8, 32
-local requestCatalog, renderPieces, requestSetDetail
+local collectionMode = "SETS"
+local itemCategory, itemFilter, itemCursor, itemNextCursor, itemHasNext = 1, 0, 0, 0, false
+local itemSearch, itemOverallCollected, itemOverallTotal, itemMatched = "", 0, 0, 0
+local itemRequestId, itemCatalog, incomingItems, activeItemRequest, itemPending = 0, {}, {}, nil, nil
+local itemHistory, itemRows, itemCategoryButtons, itemDirty = {}, {}, {}, {}
+local itemSearchDue, itemRefreshDue = nil, nil
+local ITEM_PAGE_SIZE = 18
+local ITEM_CATEGORIES = {
+ {label="Head",iconSlot="HeadSlot"},{label="Shoulders",iconSlot="ShoulderSlot"},
+ {label="Back",iconSlot="BackSlot"},{label="Chest",iconSlot="ChestSlot"},
+ {label="Shirt",iconSlot="ShirtSlot"},{label="Tabard",iconSlot="TabardSlot"},
+ {label="Wrists",iconSlot="WristSlot"},{label="Hands",iconSlot="HandsSlot"},
+ {label="Waist",iconSlot="WaistSlot"},{label="Legs",iconSlot="LegsSlot"},
+ {label="Feet",iconSlot="FeetSlot"},{label="One-Handed Weapons",icon="Interface\\Icons\\INV_Sword_04"},
+ {label="Two-Handed Weapons",icon="Interface\\Icons\\INV_Sword_25"},
+ {label="Ranged Weapons",icon="Interface\\Icons\\INV_Weapon_Bow_07"},
+ {label="Off-Hand Appearances",icon="Interface\\Icons\\INV_Misc_Book_09"},
+ {label="Shields",icon="Interface\\Icons\\INV_Shield_05"}
+}
+local requestCatalog, renderPieces, requestSetDetail, requestItems, renderItems
 
 local RESULT_TEXT = {
  ["appearance is not collected"]="Appearance not collected.",
@@ -67,7 +86,8 @@ end
 local function getModel() return NativeTransmogFramePreviewPanelModel end
 local function getCollectionModel() return NativeTransmogCollectionsFramePreviewModel end
 local function setStatus(text, failure)
- local target=NativeTransmogCollectionsFrame and NativeTransmogCollectionsFrame:IsShown() and NativeTransmogCollectionsFrameStatus or NativeTransmogFrameStatus
+ local target=NativeTransmogCollectionsFrame and NativeTransmogCollectionsFrame:IsShown() and
+     (browserMode=="ITEMS" and NativeTransmogCollectionsFrameItemsStatus or NativeTransmogCollectionsFrameStatus) or NativeTransmogFrameStatus
  target:SetText(text or "")
  target:SetTextColor(failure and 1 or .25, failure and .25 or 1, .25)
 end
@@ -137,7 +157,7 @@ local function addTooltipLines(tooltip,text)
 end
 
 local function sendReadOnly(operation,tail)
- if not SendAddonMessage then setStatus("Set catalog transport is unavailable.",true); return false end
+ if not SendAddonMessage then setStatus("Collection catalog transport is unavailable.",true); return false end
  SendAddonMessage(PREFIX,VERSION.."\t"..operation..(tail and ("\t"..tail) or ""),"WHISPER",UnitName("player"))
  setStatus("Waiting for server...",false)
  return true
@@ -261,6 +281,121 @@ function NativeTransmog_FilterDropDown_OnLoad(frame)
 end
 function NativeTransmog_SetsNext() if setHasNext then restoreSetId=nil; table.insert(setHistory,setCursor); requestSets(setNextCursor) end end
 function NativeTransmog_SetsPrevious() if #setHistory>0 then restoreSetId=nil; requestSets(table.remove(setHistory)) end end
+
+local function itemCategoryIcon(category)
+ local definition=ITEM_CATEGORIES[category]
+ if not definition then return "Interface\\Icons\\INV_Misc_QuestionMark" end
+ if definition.icon then return definition.icon end
+ local _,texture=GetInventorySlotInfo(definition.iconSlot)
+ return texture or "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+local function refreshItemCategories()
+ for category,button in ipairs(itemCategoryButtons) do setShown(button.selection,category==itemCategory) end
+end
+local function createItemCategoryButton(category)
+ local button=CreateFrame("Button","NativeTransmogItemCategory"..category,NativeTransmogCollectionsFrameItemsPanelCategoryBar)
+ button:SetWidth(34); button:SetHeight(34); button.category=category
+ button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetPoint("TOPLEFT",3,-3); button.icon:SetPoint("BOTTOMRIGHT",-3,3); button.icon:SetTexCoord(.08,.92,.08,.92); button.icon:SetTexture(itemCategoryIcon(category))
+ button.border=button:CreateTexture(nil,"OVERLAY"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetAllPoints(button)
+ button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\CheckButtonHilight"); button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-5,5); button.selection:SetPoint("BOTTOMRIGHT",5,-5); button.selection:Hide()
+ button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square","ADD")
+ button:SetScript("OnClick",function(self) NativeTransmog_SelectItemCategory(self.category) end)
+ button:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_TOP"); GameTooltip:SetText(ITEM_CATEGORIES[self.category].label,1,.82,0); GameTooltip:Show() end)
+ button:SetScript("OnLeave",function() GameTooltip:Hide() end)
+ itemCategoryButtons[category]=button; return button
+end
+local function createItemRow(index)
+ local button=CreateFrame("Button","NativeTransmogCollectionItem"..index,NativeTransmogCollectionsFrameItemsGridScrollChild)
+ button:SetWidth(96); button:SetHeight(112)
+ button.background=button:CreateTexture(nil,"BACKGROUND"); button.background:SetTexture(.035,.028,.02,.94); button.background:SetPoint("TOPLEFT",3,-3); button.background:SetPoint("BOTTOMRIGHT",-3,3)
+ button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetWidth(82); button.icon:SetHeight(82); button.icon:SetPoint("TOP",0,-8); button.icon:SetTexCoord(.08,.92,.08,.92)
+ button.shade=button:CreateTexture(nil,"OVERLAY"); button.shade:SetTexture(0,0,0,.55); button.shade:SetAllPoints(button.icon)
+ button.border=button:CreateTexture(nil,"OVERLAY"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetPoint("TOPLEFT",-4,4); button.border:SetPoint("BOTTOMRIGHT",4,-4)
+ button.state=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); button.state:SetPoint("BOTTOM",0,8)
+ button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square","ADD")
+ button:SetScript("OnEnter",function(self)
+  if not self.entry then return end
+  GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetHyperlink("item:"..self.entry)
+  if not GetItemInfo(self.entry) then GameTooltip:AddLine("Appearance "..self.entry,1,.82,0,true) end
+  GameTooltip:AddLine(" "); GameTooltip:AddLine(self.collected and "Collected" or "Not collected",self.collected and .2 or .85,self.collected and 1 or .2,.2)
+  GameTooltip:AddLine("Representative item for this appearance.",.65,.65,.65,true); GameTooltip:Show()
+ end)
+ button:SetScript("OnLeave",function() GameTooltip:Hide() end)
+ itemRows[index]=button; return button
+end
+renderItems=function()
+ for index,appearance in ipairs(itemCatalog) do
+  local button=itemRows[index] or createItemRow(index); local column,row=(index-1)%6,math.floor((index-1)/6)
+  button:ClearAllPoints(); button:SetPoint("TOPLEFT",12+column*101,-9-row*121); button.entry=appearance.entry; button.collected=appearance.collected
+  button.icon:SetTexture(GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark")
+  button:SetAlpha(appearance.collected and 1 or .72); setShown(button.shade,not appearance.collected)
+  button.state:SetText(appearance.collected and "COLLECTED" or "MISSING"); button.state:SetTextColor(appearance.collected and .2 or .75,appearance.collected and 1 or .2,.2); button:Show()
+ end
+ for index=#itemCatalog+1,#itemRows do itemRows[index].entry=nil; itemRows[index]:Hide() end
+ NativeTransmogCollectionsFrameItemsGridScrollChild:SetHeight(math.max(374,math.ceil(#itemCatalog/6)*121+8))
+ NativeTransmogCollectionsFrameItemsGridScroll:SetVerticalScroll(0)
+ NativeTransmogCollectionsFrameProgressBar:SetMinMaxValues(0,math.max(1,itemOverallTotal)); NativeTransmogCollectionsFrameProgressBar:SetValue(itemOverallCollected)
+ NativeTransmogCollectionsFrameProgressText:SetText(itemOverallCollected.." / "..itemOverallTotal.." Collected")
+ UIDropDownMenu_SetSelectedValue(NativeTransmogCollectionsFrameItemsPanelFilter,itemFilter); UIDropDownMenu_SetText(NativeTransmogCollectionsFrameItemsPanelFilter,({"All","Collected","Uncollected"})[itemFilter+1])
+ NativeTransmogCollectionsFrameItemsPage:SetText("Page "..(math.floor(itemCursor/ITEM_PAGE_SIZE)+1))
+ refreshItemCategories(); setButtonEnabled(NativeTransmogCollectionsFrameItemsPrevious,#itemHistory>0 and not itemPending); setButtonEnabled(NativeTransmogCollectionsFrameItemsNext,itemHasNext and not itemPending)
+end
+local function matchingItemRequest(responseId)
+ if browserMode~="ITEMS" or not NativeTransmogCollectionsFrame:IsShown() then return nil end
+ if not activeItemRequest or activeItemRequest.id~=responseId then return nil end
+ return activeItemRequest
+end
+local function cancelItemRequest()
+ itemRequestId=itemRequestId+1; activeItemRequest=nil; itemPending=nil; incomingItems={}
+end
+requestItems=function(newCursor,preserveHistory)
+ itemRequestId=itemRequestId+1; itemCursor=newCursor or 0; incomingItems={}; itemCatalog={}; itemHasNext=false
+ if not preserveHistory then itemHistory={} end
+ local query=string.gsub(itemSearch or "","[\t\r\n]"," "); if string.len(query)>48 then query=string.sub(query,1,48) end
+ activeItemRequest={id=itemRequestId,category=itemCategory,filter=itemFilter,cursor=itemCursor,search=query,phase="PAGE"}
+ if sendReadOnly("ITEMS",itemRequestId.."\t"..itemCategory.."\t"..itemFilter.."\t"..itemCursor.."\t"..query) then itemPending={id=itemRequestId,started=GetTime()} else activeItemRequest=nil; itemPending=nil end
+ renderItems()
+end
+function NativeTransmog_SelectItemCategory(category)
+ if not ITEM_CATEGORIES[category] or category==itemCategory then return end
+ itemCategory=category; itemSearchDue=nil; itemHistory={}; requestItems(0,true)
+end
+function NativeTransmog_ItemSearchChanged(value)
+ itemSearch=string.lower(value or ""); setShown(NativeTransmogCollectionsFrameItemsSearchHint,itemSearch==""); itemSearchDue=GetTime()+.25
+end
+function NativeTransmog_ItemFilter(filter) itemFilter=filter; itemHistory={}; requestItems(0,true) end
+function NativeTransmog_ItemFilterDropDown_OnLoad(frame)
+ UIDropDownMenu_Initialize(frame,function()
+  local labels={"All","Collected","Uncollected"}
+  for index,label in ipairs(labels) do local value=index-1; local info=UIDropDownMenu_CreateInfo(); info.text=label; info.value=value; info.checked=value==itemFilter; info.func=function() NativeTransmog_ItemFilter(value) end; UIDropDownMenu_AddButton(info) end
+ end)
+ UIDropDownMenu_SetWidth(frame,90); UIDropDownMenu_SetText(frame,"All")
+end
+function NativeTransmog_ItemsPanel_OnLoad()
+ for category=1,#ITEM_CATEGORIES do
+  local button=itemCategoryButtons[category] or createItemCategoryButton(category); button:ClearAllPoints(); button:SetPoint("LEFT",NativeTransmogCollectionsFrameItemsPanelCategoryBar,"LEFT",(category-1)*39,0)
+ end
+ refreshItemCategories()
+end
+function NativeTransmog_ItemsNext() if itemHasNext then table.insert(itemHistory,itemCursor); requestItems(itemNextCursor,true) end end
+function NativeTransmog_ItemsPrevious() if #itemHistory>0 then requestItems(table.remove(itemHistory),true) end end
+
+local function positionCollectionsClassDisplay(items)
+ NativeTransmogCollectionsFrameClassDisplay:ClearAllPoints()
+ if items then NativeTransmogCollectionsFrameClassDisplay:SetPoint("TOPLEFT",NativeTransmogCollectionsFrame,"TOPLEFT",13,-7)
+ else NativeTransmogCollectionsFrameClassDisplay:SetPoint("TOPRIGHT",NativeTransmogCollectionsFrame,"TOPRIGHT",-13,-7) end
+end
+function NativeTransmog_SelectCollectionView(mode)
+ if mode=="ITEMS" then
+  collectionMode="ITEMS"; browserMode="ITEMS"; cancelSetRequest(); NativeTransmogCollectionsFrameListPanel:Hide(); NativeTransmogCollectionsFramePreview:Hide(); NativeTransmogCollectionsFrameItemsPanel:Show(); positionCollectionsClassDisplay(true)
+  NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameItemsTab,true,true); NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameSetsTab,false,true)
+  if #itemCatalog==0 or itemDirty[itemCategory] then itemDirty[itemCategory]=nil; requestItems(itemCursor,true) else renderItems() end
+ else
+  collectionMode="SETS"; browserMode="SETS"; cancelItemRequest(); NativeTransmogCollectionsFrameItemsPanel:Hide(); NativeTransmogCollectionsFrameListPanel:Show(); NativeTransmogCollectionsFramePreview:Show(); positionCollectionsClassDisplay(false)
+  NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameItemsTab,false,true); NativeTransmog_StyleCollectionTab(NativeTransmogCollectionsFrameSetsTab,true,true)
+  if #setCatalog==0 and not activeSetPageRequest then requestSets(setCursor) else renderSets(); renderPieces() end
+ end
+end
 
 local function refreshEquipmentSelection()
  for wireSlot, button in pairs(slotButtons) do
@@ -493,6 +628,11 @@ function NativeTransmog_GameTooltip_OnTooltipSetItem(tooltip)
 end
 
 function NativeTransmog_FrameUpdate()
+ if itemSearchDue and GetTime()>=itemSearchDue then itemSearchDue=nil; itemHistory={}; requestItems(0,true) end
+ if itemRefreshDue and GetTime()>=itemRefreshDue then itemRefreshDue=nil; itemDirty[itemCategory]=nil; requestItems(itemCursor,true) end
+ if itemPending and GetTime()-itemPending.started>5 then
+  activeItemRequest=nil; itemPending=nil; renderItems(); setStatus("Appearance catalog request timed out.",true)
+ end
  if setPagePending and GetTime()-setPagePending.started>5 then
   activeSetPageRequest=nil; setPagePending=nil; renderSets(); setStatus("Set catalog request timed out.",true)
  end
@@ -536,15 +676,49 @@ function NativeTransmog_HasAuthorizedSession() return authorizedToken~=nil end
 -- transport. The separate frame contains no equipment slots or mutations;
 -- apply/hide/remove remain in the NPC-authorized wardrobe.
 function NativeTransmog_OpenCollections()
- browserMode="SETS"; restoreSetId=nil; setHistory={}; requestSets(0)
+ restoreSetId=nil
  local class=UnitClass("player"); NativeTransmogCollectionsFrameClassLabel:SetText(class or "Class")
  NativeTransmogCollectionsFrameSetTitle:SetFont("Fonts\\MORPHEUS.ttf",22)
+ if collectionMode=="ITEMS" then browserMode="ITEMS"; NativeTransmog_SelectCollectionView("ITEMS")
+ else browserMode="SETS"; restoreSetId=nil; setHistory={}; requestSets(0); NativeTransmog_SelectCollectionView("SETS") end
  PlaySound("igCharacterInfoOpen")
 end
 function NativeTransmog_CloseCollections()
  if selectedSet then restoreSetId=selectedSet.id end
- NativeTransmog_EndRotation(getCollectionModel()); cancelSetRequest(); browserMode="APPEARANCES"
+ NativeTransmog_EndRotation(getCollectionModel()); cancelSetRequest(); cancelItemRequest(); itemSearchDue=nil; itemRefreshDue=nil; browserMode="APPEARANCES"
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
+end
+local function handleItemMessage(command,fields)
+ if command=="ITEMSPAGE" then
+  local responseId=tonumber(fields[3]); local request=matchingItemRequest(responseId)
+  local category,filter,responseCursor,responseCount=tonumber(fields[4]),tonumber(fields[5]),tonumber(fields[6]),tonumber(fields[9])
+  if not request or request.phase~="PAGE" or category~=request.category or filter~=request.filter or responseCursor~=request.cursor or not responseCount or responseCount<0 or responseCount>ITEM_PAGE_SIZE then return true end
+  itemCategory=category; itemFilter=filter; itemCursor=responseCursor; itemNextCursor=tonumber(fields[7]) or 0; itemHasNext=fields[8]=="1"; itemOverallCollected=tonumber(fields[10]) or 0; itemOverallTotal=tonumber(fields[11]) or 0; itemMatched=tonumber(fields[12]) or 0; incomingItems={}; request.phase="ROWS"; request.expected=responseCount; return true
+ elseif command=="ITEMAPPEAR" then
+  local request=matchingItemRequest(tonumber(fields[3])); local ordinal,entry=tonumber(fields[4]),tonumber(fields[5])
+  if request and request.phase=="ROWS" and ordinal and ordinal>=1 and ordinal<=request.expected and entry and not incomingItems[ordinal] then incomingItems[ordinal]={entry=entry,collected=fields[6]=="1"} end
+  return true
+ elseif command=="ITEMSEND" then
+  local request=matchingItemRequest(tonumber(fields[3])); if not request or request.phase~="ROWS" then return true end
+  local completed={}; for ordinal=1,request.expected do if incomingItems[ordinal] then table.insert(completed,incomingItems[ordinal]) end end
+  activeItemRequest=nil; itemPending=nil
+  if #completed~=request.expected then itemCatalog={}; renderItems(); setStatus("Appearance page response was incomplete; try again.",true); return true end
+  itemCatalog=completed; renderItems()
+  if #itemCatalog>0 then setStatus(itemMatched.." appearances match this view.",false) else setStatus("No appearances match this category and filter.",false) end
+  return true
+ elseif command=="ITEMUPDATE" then
+  local category=tonumber(fields[3]); if not category or not ITEM_CATEGORIES[category] then return true end
+  itemDirty[category]=true
+  if browserMode=="ITEMS" and NativeTransmogCollectionsFrame:IsShown() and category==itemCategory then itemRefreshDue=GetTime()+.30 end
+  return true
+ elseif command=="RESULT" and fields[3]=="0" then
+  local responseId=tonumber(fields[4]); local request=activeItemRequest
+  if not request or responseId~=request.id then return false end
+  activeItemRequest=nil; itemPending=nil
+  if fields[6]=="RATE_LIMITED" then itemRefreshDue=GetTime()+.30 end
+  setStatus(RESULT_TEXT[fields[6]] or ("Appearance request failed: "..(fields[6] or "MALFORMED")),true); renderItems(); return true
+ end
+ return false
 end
 function NativeTransmog_OnEvent(_,event,...)
  if event=="PLAYER_EQUIPMENT_CHANGED" then
@@ -619,6 +793,7 @@ function NativeTransmog_OnEvent(_,event,...)
   if #completedPieces~=selectedSet.total then setPieces={}; setStatus("Set detail response was incomplete; select the set again.",true); renderPieces(); return end
   setPieces=completedPieces
   renderPieces(); previewSet(); setStatus(selectedSet.name.." — "..selectedSet.collected.."/"..selectedSet.total.." collected",false); return
+ elseif handleItemMessage(command,fields) then return
  elseif command=="RESULT" and fields[3]=="0" then
   local responseId=tonumber(fields[4]); local request=activeSetPageRequest
   if request and responseId==request.id then activeSetPageRequest=nil; setPagePending=nil

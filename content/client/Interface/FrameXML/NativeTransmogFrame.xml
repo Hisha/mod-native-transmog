@@ -293,14 +293,19 @@
           </FontString>
         </Layer></Layers>
       </Frame>
-      <!-- Items is deliberately disabled until its collection browser exists. -->
       <Button name="$parentItemsTab" inherits="NativeTransmogCollectionsTabTemplate" text="Items">
         <Size x="58" y="25" /><Anchors><Anchor point="TOPLEFT"><Offset x="75" y="-10" /></Anchor></Anchors>
-        <Scripts><OnLoad>NativeTransmog_StyleCollectionTab(self, false, false);</OnLoad></Scripts>
+        <Scripts>
+          <OnLoad>NativeTransmog_StyleCollectionTab(self, false, true);</OnLoad>
+          <OnClick>NativeTransmog_SelectCollectionView("ITEMS");</OnClick>
+        </Scripts>
       </Button>
       <Button name="$parentSetsTab" inherits="NativeTransmogCollectionsTabTemplate" text="Sets">
         <Size x="69" y="25" /><Anchors><Anchor point="LEFT" relativeTo="$parentItemsTab" relativePoint="RIGHT"><Offset x="6" y="0" /></Anchor></Anchors>
-        <Scripts><OnLoad>NativeTransmog_StyleCollectionTab(self, true, false);</OnLoad></Scripts>
+        <Scripts>
+          <OnLoad>NativeTransmog_StyleCollectionTab(self, true, true);</OnLoad>
+          <OnClick>NativeTransmog_SelectCollectionView("SETS");</OnClick>
+        </Scripts>
       </Button>
       <StatusBar name="$parentProgressBar">
         <Size x="200" y="14" /><Anchors><Anchor point="TOP"><Offset x="0" y="-13" /></Anchor></Anchors>
@@ -316,6 +321,70 @@
           </FontString>
         </Layer></Layers>
       </StatusBar>
+      <Frame name="$parentItemsPanel" hidden="true">
+        <Size x="680" y="539" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-37" /></Anchor></Anchors>
+        <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark"
+            edgeFile="Interface\DialogFrame\UI-DialogBox-Gold-Border" tile="true">
+          <BackgroundInsets><AbsInset left="11" right="12" top="12" bottom="11" /></BackgroundInsets>
+          <TileSize><AbsValue val="32" /></TileSize><EdgeSize><AbsValue val="32" /></EdgeSize>
+        </Backdrop>
+        <Layers>
+          <Layer level="ARTWORK">
+            <FontString name="NativeTransmogCollectionsFrameItemsSearchHint" inherits="GameFontDisableSmall" text="Search" justifyH="LEFT">
+              <Size x="112" y="16" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-142" y="-12" /></Anchor></Anchors>
+            </FontString>
+            <FontString name="NativeTransmogCollectionsFrameItemsStatus" inherits="GameFontNormalSmall" justifyH="CENTER">
+              <Size x="420" y="18" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="10" /></Anchor></Anchors>
+            </FontString>
+          </Layer>
+        </Layers>
+        <Frames>
+          <EditBox name="$parentSearch" inherits="InputBoxTemplate" autoFocus="false">
+            <Size x="145" y="20" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-120" y="-8" /></Anchor></Anchors>
+            <FontString inherits="GameFontHighlightSmall" />
+            <Scripts>
+              <OnLoad>self:SetTextInsets(18,4,0,0);</OnLoad>
+              <OnTextChanged>NativeTransmog_ItemSearchChanged(self:GetText());</OnTextChanged>
+              <OnEscapePressed>self:SetText(""); self:ClearFocus();</OnEscapePressed>
+              <OnEnterPressed>self:ClearFocus();</OnEnterPressed>
+            </Scripts>
+          </EditBox>
+          <Frame name="$parentFilter" inherits="UIDropDownMenuTemplate">
+            <Size x="110" y="24" /><Anchors><Anchor point="TOPRIGHT"><Offset x="6" y="-6" /></Anchor></Anchors>
+            <Scripts><OnLoad>NativeTransmog_ItemFilterDropDown_OnLoad(self);</OnLoad></Scripts>
+          </Frame>
+          <Frame name="$parentCategoryBar">
+            <Size x="624" y="36" /><Anchors><Anchor point="TOPLEFT"><Offset x="24" y="-39" /></Anchor></Anchors>
+            <Scripts><OnLoad>NativeTransmog_ItemsPanel_OnLoad();</OnLoad></Scripts>
+          </Frame>
+          <Frame name="$parentGrid">
+            <Size x="656" y="420" /><Anchors><Anchor point="TOP"><Offset x="0" y="-77" /></Anchor></Anchors>
+            <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark" edgeFile="Interface\DialogFrame\UI-DialogBox-Gold-Border" tile="true">
+              <BackgroundInsets><AbsInset left="7" right="7" top="7" bottom="7" /></BackgroundInsets>
+              <TileSize><AbsValue val="16" /></TileSize><EdgeSize><AbsValue val="16" /></EdgeSize>
+            </Backdrop>
+            <Layers><Layer level="ARTWORK">
+              <FontString name="NativeTransmogCollectionsFrameItemsPage" inherits="GameFontHighlightSmall" justifyH="CENTER" text="Page 1">
+                <Size x="72" y="18" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="9" /></Anchor></Anchors>
+              </FontString>
+            </Layer></Layers>
+            <Frames>
+              <ScrollFrame name="NativeTransmogCollectionsFrameItemsGridScroll" inherits="UIPanelScrollFrameTemplate">
+                <Size x="625" y="374" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-8" /></Anchor></Anchors>
+                <ScrollChild><Frame name="$parentChild"><Size x="625" y="374" /></Frame></ScrollChild>
+              </ScrollFrame>
+              <Button name="NativeTransmogCollectionsFrameItemsPrevious" inherits="UIPanelButtonTemplate" text="&lt;">
+                <Size x="32" y="20" /><Anchors><Anchor point="BOTTOM"><Offset x="-65" y="8" /></Anchor></Anchors>
+                <Scripts><OnClick>NativeTransmog_ItemsPrevious();</OnClick></Scripts>
+              </Button>
+              <Button name="NativeTransmogCollectionsFrameItemsNext" inherits="UIPanelButtonTemplate" text="&gt;">
+                <Size x="32" y="20" /><Anchors><Anchor point="BOTTOM"><Offset x="65" y="8" /></Anchor></Anchors>
+                <Scripts><OnClick>NativeTransmog_ItemsNext();</OnClick></Scripts>
+              </Button>
+            </Frames>
+          </Frame>
+        </Frames>
+      </Frame>
       <Frame name="$parentListPanel">
         <Size x="270" y="539" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-37" /></Anchor></Anchors>
         <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark"

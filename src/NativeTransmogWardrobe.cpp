@@ -11,6 +11,7 @@
 #include "SharedDefines.h"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <limits>
 #include <string_view>
@@ -22,6 +23,82 @@ namespace
 constexpr std::size_t MaximumRequestLength = 160;
 constexpr std::uint32_t MaximumCursor = 1000000;
 constexpr std::uint32_t SetPageSize = 8;
+constexpr std::uint32_t ItemPageSize = 18;
+constexpr std::size_t MaximumItemSearch = 48;
+
+enum BrowseCategory : std::uint32_t
+{
+    BrowseHead = 1,
+    BrowseShoulders,
+    BrowseBack,
+    BrowseChest,
+    BrowseShirt,
+    BrowseTabard,
+    BrowseWrists,
+    BrowseHands,
+    BrowseWaist,
+    BrowseLegs,
+    BrowseFeet,
+    BrowseOneHand,
+    BrowseTwoHand,
+    BrowseRanged,
+    BrowseOffHand,
+    BrowseShields,
+    BrowseCategoryCount
+};
+
+std::uint32_t BrowseCategoryFor(AppearanceKey const& appearance)
+{
+    if (appearance.itemClass == ITEM_CLASS_ARMOR)
+    {
+        switch (appearance.inventoryType)
+        {
+            case INVTYPE_HEAD: return BrowseHead;
+            case INVTYPE_SHOULDERS: return BrowseShoulders;
+            case INVTYPE_CLOAK: return BrowseBack;
+            case INVTYPE_CHEST:
+            case INVTYPE_ROBE: return BrowseChest;
+            case INVTYPE_BODY: return BrowseShirt;
+            case INVTYPE_TABARD: return BrowseTabard;
+            case INVTYPE_WRISTS: return BrowseWrists;
+            case INVTYPE_HANDS: return BrowseHands;
+            case INVTYPE_WAIST: return BrowseWaist;
+            case INVTYPE_LEGS: return BrowseLegs;
+            case INVTYPE_FEET: return BrowseFeet;
+            case INVTYPE_HOLDABLE: return BrowseOffHand;
+            case INVTYPE_SHIELD: return BrowseShields;
+            default: return 0;
+        }
+    }
+    if (appearance.itemClass != ITEM_CLASS_WEAPON)
+        return 0;
+    switch (appearance.inventoryType)
+    {
+        case INVTYPE_2HWEAPON: return BrowseTwoHand;
+        case INVTYPE_RANGED:
+        case INVTYPE_THROWN:
+        case INVTYPE_RANGEDRIGHT: return BrowseRanged;
+        case INVTYPE_WEAPONOFFHAND: return BrowseOffHand;
+        case INVTYPE_WEAPON:
+        case INVTYPE_WEAPONMAINHAND: return BrowseOneHand;
+        default: return 0;
+    }
+}
+
+std::string NormalizeSearch(std::string_view value)
+{
+    if (value.size() > MaximumItemSearch)
+        return {};
+    std::string normalized;
+    normalized.reserve(value.size());
+    for (unsigned char character : value)
+    {
+        if (character < 32 || character == 127)
+            return {};
+        normalized.push_back(static_cast<char>(std::tolower(character)));
+    }
+    return normalized;
+}
 
 std::string CleanProtocolText(std::string value, std::size_t maximum = 120)
 {
@@ -118,8 +195,39 @@ void WardrobeService::Initialize()
         std::sort(entries.begin(), entries.end());
         entries.erase(std::unique(entries.begin(), entries.end()), entries.end());
     }
+    std::unordered_map<std::uint32_t, std::vector<BrowseAppearance>> browseCatalog;
+    for (auto const& [appearance, entries] : sources)
+    {
+        std::uint32_t category = BrowseCategoryFor(appearance);
+        if (!category || entries.empty())
+            continue;
+        BrowseAppearance browse;
+        browse.appearance = appearance;
+        browse.representative = entries.front();
+        for (std::uint32_t entry : entries)
+            if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(entry))
+                browse.searchText += NormalizeSearch(itemTemplate->Name1) + '\n';
+        browseCatalog[category].push_back(std::move(browse));
+    }
+    for (auto& [category, appearances] : browseCatalog)
+    {
+        (void)category;
+        std::sort(appearances.begin(), appearances.end(), [](BrowseAppearance const& left, BrowseAppearance const& right)
+        {
+            if (left.appearance.itemClass != right.appearance.itemClass)
+                return left.appearance.itemClass < right.appearance.itemClass;
+            if (left.appearance.inventoryType != right.appearance.inventoryType)
+                return left.appearance.inventoryType < right.appearance.inventoryType;
+            if (left.appearance.itemSubclass != right.appearance.itemSubclass)
+                return left.appearance.itemSubclass < right.appearance.itemSubclass;
+            if (left.appearance.displayId != right.appearance.displayId)
+                return left.appearance.displayId < right.appearance.displayId;
+            return left.representative < right.representative;
+        });
+    }
     std::lock_guard<std::mutex> lock(_mutex);
     _canonicalSources = std::move(sources);
+    _browseCatalog = std::move(browseCatalog);
     _players.clear();
 }
 
@@ -171,9 +279,11 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
     if (!enabled)
         return true;
 
+    bool itemRequest = parts[2] == "ITEMS";
+    std::size_t numericEnd = itemRequest && parts.size() > 3 ? parts.size() - 1 : parts.size();
     std::vector<std::uint32_t> fields;
     fields.reserve(parts.size() - 3);
-    for (std::size_t index = 3; index < parts.size(); ++index)
+    for (std::size_t index = 3; index < numericEnd; ++index)
     {
         std::uint32_t value = 0;
         if (!ParseUnsigned(parts[index], value))
@@ -184,8 +294,9 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
     if (RateLimited(player))
     {
         bool readOnlySetRequest = parts[2] == "SETS" || parts[2] == "SETDETAIL";
-        std::uint32_t token = readOnlySetRequest || fields.empty() ? 0 : fields[0];
-        std::uint32_t request = readOnlySetRequest ? (fields.empty() ? 0 : fields[0]) :
+        bool readOnlyRequest = readOnlySetRequest || itemRequest;
+        std::uint32_t token = readOnlyRequest || fields.empty() ? 0 : fields[0];
+        std::uint32_t request = readOnlyRequest ? (fields.empty() ? 0 : fields[0]) :
             (fields.size() < 2 ? 0 : fields[1]);
         SendError(player, token, request, "REQUEST", "RATE_LIMITED");
         return true;
@@ -199,6 +310,8 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         HandleSets(player, fields);
     else if (parts[2] == "SETDETAIL" && fields.size() == 2)
         HandleSetDetail(player, fields);
+    else if (itemRequest && parts.size() == 8 && fields.size() == 4)
+        HandleItems(player, fields, parts.back());
     else if (parts[2] == "APPLY" && fields.size() == 4)
         HandleApply(player, fields);
     else if (parts[2] == "HIDE" && fields.size() == 3)
@@ -209,6 +322,76 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         SendError(player, fields.empty() ? 0 : fields[0], fields.size() < 2 ? 0 : fields[1],
             "REQUEST", "MALFORMED");
     return true;
+}
+
+void WardrobeService::HandleItems(Player* player, std::vector<std::uint32_t> const& fields,
+    std::string_view search)
+{
+    std::uint32_t requestId = fields[0], category = fields[1], filter = fields[2], cursor = fields[3];
+    std::string normalizedSearch = NormalizeSearch(search);
+    if (!requestId || category < BrowseHead || category >= BrowseCategoryCount || filter > 2 ||
+        cursor > MaximumCursor || (search.size() && normalizedSearch.empty()))
+    {
+        SendError(player, 0, requestId, "ITEMS", "MALFORMED");
+        return;
+    }
+
+    std::vector<AppearanceKey> keys;
+    std::vector<std::uint32_t> representatives;
+    std::vector<bool> searchMatches;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto found = _browseCatalog.find(category);
+        if (found != _browseCatalog.end())
+        {
+            keys.reserve(found->second.size());
+            representatives.reserve(found->second.size());
+            searchMatches.reserve(found->second.size());
+            for (BrowseAppearance const& appearance : found->second)
+            {
+                keys.push_back(appearance.appearance);
+                representatives.push_back(appearance.representative);
+                searchMatches.push_back(normalizedSearch.empty() ||
+                    appearance.searchText.find(normalizedSearch) != std::string::npos);
+            }
+        }
+    }
+    std::vector<bool> collected = CollectionService::Instance().CollectedStates(player, keys);
+    std::uint32_t collectedTotal = static_cast<std::uint32_t>(
+        std::count(collected.begin(), collected.end(), true));
+
+    std::vector<std::size_t> visible;
+    visible.reserve(keys.size());
+    for (std::size_t index = 0; index < keys.size(); ++index)
+    {
+        if ((filter == 1 && !collected[index]) || (filter == 2 && collected[index]))
+            continue;
+        if (!searchMatches[index])
+            continue;
+        visible.push_back(index);
+    }
+    cursor = std::min<std::uint32_t>(cursor, static_cast<std::uint32_t>(visible.size()));
+    std::uint32_t end = std::min<std::uint32_t>(cursor + ItemPageSize, visible.size());
+    Send(player, "ITEMSPAGE\t" + std::to_string(requestId) + '\t' + std::to_string(category) + '\t' +
+        std::to_string(filter) + '\t' + std::to_string(cursor) + '\t' + std::to_string(end) + '\t' +
+        std::to_string(end < visible.size() ? 1 : 0) + '\t' + std::to_string(end - cursor) + '\t' +
+        std::to_string(collectedTotal) + '\t' + std::to_string(keys.size()) + '\t' +
+        std::to_string(visible.size()));
+    for (std::uint32_t ordinal = cursor; ordinal < end; ++ordinal)
+    {
+        std::size_t index = visible[ordinal];
+        Send(player, "ITEMAPPEAR\t" + std::to_string(requestId) + '\t' +
+            std::to_string(ordinal - cursor + 1) + '\t' + std::to_string(representatives[index]) + '\t' +
+            std::to_string(collected[index] ? 1 : 0));
+    }
+    Send(player, "ITEMSEND\t" + std::to_string(requestId));
+}
+
+void WardrobeService::NotifyAppearanceUnlocked(Player* player, AppearanceKey const& appearance) const
+{
+    std::uint32_t category = BrowseCategoryFor(appearance);
+    if (category)
+        Send(player, "ITEMUPDATE\t" + std::to_string(category));
 }
 
 void WardrobeService::HandleSets(Player* player, std::vector<std::uint32_t> const& fields)
