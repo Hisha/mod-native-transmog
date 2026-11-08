@@ -135,7 +135,7 @@ class PhaseFourAContracts(unittest.TestCase):
         combined = APP + WARDROBE + LUA
         for forbidden in ("CMSG_", "SMSG_", "Interface/AddOns"):
             self.assertNotIn(forbidden, combined)
-        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "3"', LUA)
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "4"', LUA)
 
 
 class PhaseFourAModels(unittest.TestCase):

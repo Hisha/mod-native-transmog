@@ -1,5 +1,6 @@
 #include "NativeTransmogApplication.h"
 #include "NativeTransmogCollection.h"
+#include "NativeTransmogCustomSet.h"
 #include "NativeTransmogQuestCollection.h"
 #include "NativeTransmogProtocol.h"
 #include "NativeTransmogService.h"
@@ -35,6 +36,7 @@ native_transmog::ServiceConfig serviceConfig;
 native_transmog::CollectionConfig collectionConfig;
 native_transmog::ApplicationConfig applicationConfig;
 native_transmog::WardrobeConfig wardrobeConfig;
+native_transmog::CustomSetConfig customSetConfig;
 
 bool IsNativeTransmogResponse(std::string const& message)
 {
@@ -50,7 +52,12 @@ bool IsNativeTransmogResponse(std::string const& message)
         command == "ITEM" || command == "END" || command == "RESULT" || command == "SETPAGE" ||
         command == "SET" || command == "SETEND" || command == "SETINFO" || command == "SETPIECE" ||
         command == "SETDETAILEND" || command == "ITEMSPAGE" || command == "ITEMAPPEAR" ||
-        command == "ITEMSEND" || command == "ITEMUPDATE";
+        command == "ITEMSEND" || command == "ITEMUPDATE" || command == "CUSTOMPAGE" ||
+        command == "CUSTOMSET" || command == "CUSTOMEND" || command == "CUSTOMDETAILINFO" ||
+        command == "CUSTOMDETAILPIECE" || command == "CUSTOMDETAILEND" || command == "CUSTOMEDITINFO" ||
+        command == "CUSTOMEDITPIECE" || command == "CUSTOMEDITEND" || command == "CUSTOMDRAFTPIECE" ||
+        command == "CUSTOMRESULT" || command == "CUSTOMPREFLIGHTINFO" || command == "CUSTOMAPPLYPIECE" ||
+        command == "CUSTOMAPPLYEND";
 }
 
 void RefreshOnlineVisibleEquipment()
@@ -191,11 +198,18 @@ public:
             "NativeTransmog.Wardrobe.RequestCooldownMs", 250);
         wardrobeConfig.snapshotLifetimeMs = sConfigMgr->GetOption<std::uint32_t>(
             "NativeTransmog.Wardrobe.SnapshotLifetimeMs", 30000);
+        customSetConfig.enabled = wardrobeConfig.enabled &&
+            sConfigMgr->GetOption<bool>("NativeTransmog.CustomSets.Enable", true);
+        customSetConfig.maximumSets = sConfigMgr->GetOption<std::uint32_t>(
+            "NativeTransmog.CustomSets.MaximumPerCharacter", 20);
+        customSetConfig.maximumNameBytes = sConfigMgr->GetOption<std::uint32_t>(
+            "NativeTransmog.CustomSets.MaximumNameBytes", 48);
 
         native_transmog::Service::Instance().Configure(serviceConfig);
         native_transmog::CollectionService::Instance().Configure(collectionConfig);
         native_transmog::ApplicationService::Instance().Configure(applicationConfig);
         native_transmog::WardrobeService::Instance().Configure(wardrobeConfig);
+        native_transmog::CustomSetService::Instance().Configure(customSetConfig);
         native_transmog::QuestBackfillService::Instance().Configure(
             collectionConfig.enabled && collectionConfig.questBackfillEnabled);
         if (reload && collectionConfig.enabled)
@@ -206,6 +220,8 @@ public:
             native_transmog::SetCatalog::Instance().Initialize();
         if (reload && wardrobeConfig.enabled)
             native_transmog::WardrobeService::Instance().Initialize();
+        if (reload && customSetConfig.enabled)
+            native_transmog::CustomSetService::Instance().Initialize();
         if (reload)
             RefreshOnlineVisibleEquipment();
         if (reload)
@@ -237,6 +253,8 @@ public:
             native_transmog::SetCatalog::Instance().Initialize();
         if (wardrobeConfig.enabled)
             native_transmog::WardrobeService::Instance().Initialize();
+        if (customSetConfig.enabled)
+            native_transmog::CustomSetService::Instance().Initialize();
         LOG_INFO("server.loading",
             "Native Transmog Phase 2 NPC service initialized (dedicated: {}, custom: {}, spawn registrations: {}).",
             serviceConfig.defaultNpcEnabled, serviceConfig.customNpcEnabled, serviceConfig.allowSpawnRegistration);

@@ -217,12 +217,12 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
 
     def test_read_only_requests_do_not_validate_npc_session(self):
         sets = WARDROBE[WARDROBE.index("void WardrobeService::HandleSets"):WARDROBE.index("void WardrobeService::HandleSetDetail")]
-        detail = WARDROBE[WARDROBE.index("void WardrobeService::HandleSetDetail"):WARDROBE.index("void WardrobeService::SendEquipmentState")]
+        detail = WARDROBE[WARDROBE.index("void WardrobeService::HandleSetDetail"):WARDROBE.index("void WardrobeService::SendCustomDetail")]
         self.assertNotIn("ValidateSession", sets + detail)
         self.assertIn("ValidateSession", WARDROBE[WARDROBE.index("void WardrobeService::HandleCatalog"):])
 
     def test_protocol_validation_and_pagination_are_bounded(self):
-        self.assertIn("constexpr std::uint32_t Version = 3", PROTOCOL)
+        self.assertIn("constexpr std::uint32_t Version = 4", PROTOCOL)
         self.assertIn("version != protocol::Version", WARDROBE)
         self.assertIn("constexpr std::uint32_t SetPageSize = 8", WARDROBE)
         self.assertIn("constexpr std::size_t MaximumSetPieces = 32", CATALOG)
@@ -357,7 +357,7 @@ class PhaseFiveAUiTests(unittest.TestCase):
         reset = LUA[LUA.index("function NativeTransmog_ResetPreview"):LUA.index("function NativeTransmog_SelectSlot")]
         self.assertIn('model:SetUnit("player")', reset)
         self.assertIn('sendRequest("APPLY"', LUA)
-        self.assertNotIn("Apply Set", XML + LUA)
+        self.assertIn("Saved Sets...", XML + LUA)
 
     def test_long_set_names_and_piece_icons_fit_collections_layout(self):
         self.assertIn("local function truncateLabel", LUA)
@@ -374,7 +374,7 @@ class PhaseFiveAUiTests(unittest.TestCase):
             'text="Items"', 'text="Sets"',
             '<Offset x="0" y="0" />',
             '<Size x="270" y="539" />', '<Size x="412" y="539" />',
-            '<Size x="246" y="452" />',
+            '<Size x="246" y="398" />',
             'NativeTransmogCollectionsFrameSetTitle', '<Size x="392" y="398" />',
         ):
             self.assertIn(marker, collections)

@@ -1,5 +1,5 @@
 -- Native Transmog Phase 5A protected FrameXML for WoW 3.3.5a build 12340.
-local PREFIX, VERSION = "NTRANSMOG", "3"
+local PREFIX, VERSION = "NTRANSMOG", "4"
 local SLOT_ORDER = { "HEAD", "SHOULDERS", "SHIRT", "CHEST", "WAIST", "LEGS", "FEET", "WRISTS",
     "HANDS", "BACK", "MAIN_HAND", "OFF_HAND", "RANGED", "TABARD" }
 local SLOT_INVENTORY_NAMES = { "HeadSlot", "ShoulderSlot", "ShirtSlot", "ChestSlot", "WaistSlot", "LegsSlot",
@@ -26,6 +26,13 @@ local setPagePending, setDetailPending = nil, nil
 local setRows, pieceRows = {}, {}
 local setSearch, setOverallCollected, setOverallTotal = "", 0, 0
 local SET_PAGE_SIZE, MAXIMUM_SET_PIECES = 8, 32
+local setSection, customEditing, customPickingSlot = "PREDEFINED", false, nil
+local customRequestId, customDraftId, customDraftPieces = 0, 0, {}
+local customTotal, customMaximum = 0, 20
+local savedSetCatalog, savedSetIncoming, savedSetId, savedSetNonce, savedSetRequest, savedSetRefreshDue = {}, {}, nil, nil, 0, nil
+local savedSetNextCursor, savedSetHasNext = 0, false
+local savedPreflight = nil
+local CUSTOM_SLOT_CATEGORY = {1,2,5,4,9,10,11,7,8,3,12,15,14,6}
 local collectionMode = "SETS"
 local itemCategory, itemFilter, itemCursor, itemNextCursor, itemHasNext = 1, 0, 0, 0, false
 local itemSearch, itemOverallCollected, itemOverallTotal, itemMatched = "", 0, 0, 0
@@ -71,7 +78,11 @@ local RESULT_TEXT = {
  ["application database unavailable"]="The transmogrification database is unavailable.",
  ["application disabled"]="Appearance application is disabled.",
  ["no authorized Transmogrifier session"]="The Transmogrifier session expired.",
- ["target equipment item missing"]="No item is equipped in this slot."
+ ["target equipment item missing"]="No item is equipped in this slot.",
+ ["CUSTOM_NOT_FOUND"]="That custom set no longer exists.", ["CUSTOM_INVALID_NAME"]="Enter a name between 1 and 48 bytes.",
+ ["CUSTOM_DUPLICATE_NAME"]="A custom set already uses that name.", ["CUSTOM_LIMIT_REACHED"]="The custom-set limit has been reached.",
+ ["CUSTOM_NOT_COLLECTED"]="A selected appearance is no longer collected.", ["CUSTOM_SLOT_MISMATCH"]="That appearance is not valid for this slot.",
+ ["CUSTOM_HIDE_UNSUPPORTED"]="This slot cannot be hidden.", ["CUSTOM_EMPTY_SET"]="Choose at least one appearance before saving."
 }
 
 local function splitTabs(value)
@@ -174,7 +185,7 @@ local function createSetRow(index)
  row.selected=row:CreateTexture(nil,"BORDER"); row.selected:SetTexture(.55,.36,.05,.52); row.selected:SetAllPoints(row)
  row.highlight=row:CreateTexture(nil,"HIGHLIGHT"); row.highlight:SetTexture(.32,.24,.09,.28); row.highlight:SetAllPoints(row)
  row:SetScript("OnClick",function(self) requestSetDetail(self.set) end)
- row:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_LEFT"); GameTooltip:SetText(self.set.name,1,.82,0,true); GameTooltip:AddLine((self.set.expansion or "").." • "..(self.set.category or "PvE").." • "..(self.set.family or "Set"),.75,.75,.75,true); GameTooltip:Show() end)
+ row:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_LEFT"); GameTooltip:SetText(self.set.name,1,.82,0,true); GameTooltip:AddLine(self.set.custom and ((self.set.total or 0).." saved selections") or ((self.set.expansion or "").." • "..(self.set.category or "PvE").." • "..(self.set.family or "Set")),.75,.75,.75,true); GameTooltip:Show() end)
  row:SetScript("OnLeave",function() GameTooltip:Hide() end)
  setRows[index]=row; return row
 end
@@ -191,20 +202,33 @@ local function renderSets()
  end
  for index,set in ipairs(visible) do
   local row=setRows[index] or createSetRow(index); row:ClearAllPoints(); row:SetPoint("TOPLEFT",1,-1-(index-1)*47); row.set=set
-  row.name:SetText(truncateLabel(set.name,20)); row.meta:SetText(truncateLabel((set.expansion or "").." • "..(set.family or "Set"),28)); row.progress:SetText(set.collected.."/"..set.total)
+  row.name:SetText(truncateLabel(set.name,20)); row.meta:SetText(set.custom and ((set.total or 0).." saved selections") or truncateLabel((set.expansion or "").." • "..(set.family or "Set"),28)); if set.custom then row.progress:SetText("") else row.progress:SetText(set.collected.."/"..set.total) end
   row.icon:SetTexture(GetItemIcon(set.iconEntry) or "Interface\\Icons\\INV_Misc_QuestionMark")
-  local complete=set.total>0 and set.collected==set.total
+  local complete=not set.custom and set.total>0 and set.collected==set.total
   row.name:SetTextColor(complete and .25 or 1,complete and 1 or .82,.2); row.progress:SetTextColor(complete and .25 or 1,complete and 1 or 1,complete and .25 or 1); row:Show()
   setShown(row.selected,selectedSet and selectedSet.id==set.id)
  end
  for index=#visible+1,#setRows do setRows[index]:Hide() end
  NativeTransmogCollectionsFrameListScrollChild:SetHeight(math.max(420,#visible*47+2))
  NativeTransmogCollectionsFrameListScroll:SetVerticalScroll(0)
- NativeTransmogCollectionsFrameProgressBar:SetMinMaxValues(0,math.max(1,setOverallTotal)); NativeTransmogCollectionsFrameProgressBar:SetValue(setOverallCollected)
- NativeTransmogCollectionsFrameProgressText:SetText(setOverallCollected.." / "..setOverallTotal)
- refreshSetFilters()
+ NativeTransmogCollectionsFrameProgressBar:SetMinMaxValues(0,math.max(1,setSection=="CUSTOM" and customMaximum or setOverallTotal)); NativeTransmogCollectionsFrameProgressBar:SetValue(setSection=="CUSTOM" and customTotal or setOverallCollected)
+ NativeTransmogCollectionsFrameProgressText:SetText(setSection=="CUSTOM" and (customTotal.." / "..customMaximum.." Saved") or (setOverallCollected.." / "..setOverallTotal))
+ if setSection=="PREDEFINED" then refreshSetFilters() end
+ setShown(NativeTransmogCollectionsFrameListPanelFilter,setSection=="PREDEFINED"); setShown(NativeTransmogCollectionsFrameSearchHint,true)
+ setShown(NativeTransmogCollectionsFrameListPanelNew,setSection=="CUSTOM" and not customEditing); setShown(NativeTransmogCollectionsFrameListPanelEdit,setSection=="CUSTOM" and not customEditing); setShown(NativeTransmogCollectionsFrameListPanelDelete,setSection=="CUSTOM" and not customEditing)
+ setButtonEnabled(NativeTransmogCollectionsFrameListPanelEdit,selectedSet and selectedSet.custom and not customEditing); setButtonEnabled(NativeTransmogCollectionsFrameListPanelDelete,selectedSet and selectedSet.custom and not customEditing); setButtonEnabled(NativeTransmogCollectionsFrameListPanelNew,customTotal<customMaximum and not customEditing)
  setButtonEnabled(NativeTransmogCollectionsFramePrevious,#setHistory>0 and not setPagePending)
  setButtonEnabled(NativeTransmogCollectionsFrameNext,setHasNext and not setPagePending)
+end
+local function previewSet()
+ local model=getCollectionModel(); model:SetUnit("player")
+ if selectedSet and selectedSet.custom then
+  for _,piece in ipairs(setPieces) do if piece.entry and piece.entry>0 then model:TryOn(piece.entry) elseif piece.state==1 and model.UndressSlot then local inventorySlot=getInventorySlot(piece.slot); if inventorySlot then model:UndressSlot(inventorySlot) end end end
+ else
+  model:Undress()
+  for _,piece in ipairs(setPieces) do model:TryOn(piece.entry) end
+ end
+ model:SetRotation(modelRotation)
 end
 local function createPieceRow(index)
  local row=CreateFrame("Button","NativeTransmogPieceRow"..index,NativeTransmogCollectionsFramePieceBar)
@@ -214,42 +238,63 @@ local function createPieceRow(index)
  row.state=row:CreateTexture(nil,"OVERLAY"); row.state:SetWidth(26); row.state:SetHeight(3); row.state:SetPoint("BOTTOM",0,2)
  row:SetScript("OnEnter",function(self)
   GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
-  GameTooltip:SetHyperlink("item:"..self.entry)
+  if self.entry and self.entry>0 then GameTooltip:SetHyperlink("item:"..self.entry) else GameTooltip:SetText(self.itemName or "Unspecified slot",1,.82,0,true) end
   if not GetItemInfo(self.entry) and self.itemName then GameTooltip:AddLine(self.itemName,1,.82,0,true) end
   GameTooltip:AddLine(" "); GameTooltip:AddLine("Source",1,.82,0); addTooltipLines(GameTooltip,self.sourceText); GameTooltip:Show()
  end)
  row:SetScript("OnLeave",function() GameTooltip:Hide() end)
+ if row.RegisterForClicks then row:RegisterForClicks("LeftButtonUp","RightButtonUp") end
+ row:SetScript("OnClick",function(self,button)
+  if not customEditing or not self.slot then return end
+  customRequestId=customRequestId+1
+  if button=="RightButton" then sendReadOnly("CUSTOMCLEAR",customRequestId.."\t"..self.slot); customDraftPieces[self.slot]=nil; renderPieces(); previewSet(); return end
+  if IsShiftKeyDown() then sendReadOnly("CUSTOMCHOOSE",customRequestId.."\t"..self.slot.."\t1\t0"); return end
+  customPickingSlot=self.slot; itemCategory=CUSTOM_SLOT_CATEGORY[self.slot] or 1; itemFilter=1; itemHistory={}; NativeTransmog_SelectCollectionView("ITEMS"); requestItems(0,true)
+ end)
  pieceRows[index]=row; return row
 end
 renderPieces=function()
+ if customEditing then
+  for wireSlot=1,#SLOT_ORDER do
+   local piece=customDraftPieces[wireSlot]; local row=pieceRows[wireSlot] or createPieceRow(wireSlot); local column=(wireSlot-1)%7; local line=math.floor((wireSlot-1)/7)
+   row:ClearAllPoints(); row:SetPoint("TOPLEFT",NativeTransmogCollectionsFramePieceBar,"TOPLEFT",42+column*40,-line*38); row.slot=wireSlot; row.entry=piece and piece.entry or nil; row.itemName=SLOT_ORDER[wireSlot]; row.sourceText="Left-click to choose. Right-click to leave unchanged. Shift-click to hide."
+   row.icon:SetTexture(piece and piece.state==1 and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or (piece and GetItemIcon(piece.entry)) or (ITEM_CATEGORIES[CUSTOM_SLOT_CATEGORY[wireSlot]] and ITEM_CATEGORIES[CUSTOM_SLOT_CATEGORY[wireSlot]].icon) or "Interface\\Icons\\INV_Misc_QuestionMark")
+   row:SetAlpha(piece and 1 or .35); row.state:SetTexture(piece and .15 or .45,piece and .8 or .42,piece and .2 or .36,1); row:Show()
+  end
+  for index=#SLOT_ORDER+1,#pieceRows do pieceRows[index]:Hide() end
+  NativeTransmogCollectionsFrameSetTitle:SetText(customDraftId>0 and "EDIT CUSTOM SET" or "NEW CUSTOM SET")
+  NativeTransmogCollectionsFrameSetDescription:SetText("Unspecified slots keep their current appearance")
+  return
+ end
  local count=#setPieces; local width=count>0 and count*34+(count-1)*5 or 0; local start=(360-width)/2
  for index,piece in ipairs(setPieces) do
   local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("LEFT",NativeTransmogCollectionsFramePieceBar,"LEFT",start+(index-1)*39,0); row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
-  row.icon:SetTexture(GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row:SetAlpha(piece.collected and 1 or .45)
+  row.icon:SetTexture(piece.state==1 and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row:SetAlpha(piece.collected and 1 or .45)
   row.state:SetTexture(piece.collected and .15 or .65,piece.collected and .8 or .12,piece.collected and .2 or .12,1); row:Show()
  end
  for index=#setPieces+1,#pieceRows do pieceRows[index]:Hide() end
  NativeTransmogCollectionsFrameSetTitle:SetText(selectedSet and string.upper(truncateLabel(selectedSet.name or "Armor Set",32)) or "SELECT AN ARMOR SET")
- NativeTransmogCollectionsFrameSetDescription:SetText(selectedSet and ((selectedSet.expansion or "").." • "..(selectedSet.category or "PvE").." • "..(selectedSet.family or "Set").."  "..selectedSet.collected.."/"..selectedSet.total) or "")
-end
-local function previewSet()
- local model=getCollectionModel(); model:SetUnit("player"); model:Undress()
- for _,piece in ipairs(setPieces) do model:TryOn(piece.entry) end
- model:SetRotation(modelRotation)
+ NativeTransmogCollectionsFrameSetDescription:SetText(selectedSet and (selectedSet.custom and ((selectedSet.total or 0).." saved selections • unspecified slots unchanged") or ((selectedSet.expansion or "").." • "..(selectedSet.category or "PvE").." • "..(selectedSet.family or "Set").."  "..selectedSet.collected.."/"..selectedSet.total)) or "")
 end
 local function requestSets(newCursor)
  setRequestId=setRequestId+1; setCursor=newCursor or 0; incomingSets={}; incomingSetIds={}; selectedSet=nil; setPieces={}; incomingPieces={}; renderPieces()
  activeSetDetailRequest=nil; setDetailPending=nil
- activeSetPageRequest={id=setRequestId,kind="SETS",phase="PAGE",filter=setFilter,cursor=setCursor}
- if sendReadOnly("SETS",setRequestId.."\t"..setFilter.."\t"..setCursor) then setPagePending={id=setRequestId,started=GetTime()}
+ activeSetPageRequest={id=setRequestId,kind=setSection=="CUSTOM" and "CUSTOMSETS" or "SETS",phase="PAGE",filter=setFilter,cursor=setCursor}
+ local sent
+ if setSection=="CUSTOM" then sent=sendReadOnly("CUSTOMSETS",setRequestId.."\t"..setCursor)
+ else sent=sendReadOnly("SETS",setRequestId.."\t"..setFilter.."\t"..setCursor) end
+ if sent then setPagePending={id=setRequestId,started=GetTime()}
  else activeSetPageRequest=nil; setPagePending=nil end
  renderSets()
 end
 requestSetDetail=function(set)
  if not set or not set.id then return end
  setRequestId=setRequestId+1; selectedSet=set; setPieces={}; incomingPieces={}; renderPieces()
- activeSetDetailRequest={id=setRequestId,kind="SETDETAIL",phase="INFO",setId=set.id}
- if sendReadOnly("SETDETAIL",setRequestId.."\t"..set.id) then setDetailPending={id=setRequestId,started=GetTime()}
+ local kind=set.custom and "CUSTOMDETAIL" or "SETDETAIL"; activeSetDetailRequest={id=setRequestId,kind=kind,phase="INFO",setId=set.id}
+ local sent
+ if set.custom then sent=sendReadOnly("CUSTOMDETAIL",setRequestId.."\t"..set.id)
+ else sent=sendReadOnly("SETDETAIL",setRequestId.."\t"..set.id) end
+ if sent then setDetailPending={id=setRequestId,started=GetTime()}
  else activeSetDetailRequest=nil; setDetailPending=nil end
  renderSets()
 end
@@ -258,12 +303,18 @@ local function cancelSetRequest()
  setPagePending=nil; setDetailPending=nil
 end
 local function matchingSetRequest(kind,responseId)
- local request=kind=="SETS" and activeSetPageRequest or activeSetDetailRequest
+ local request=(kind=="SETS" or kind=="CUSTOMSETS") and activeSetPageRequest or activeSetDetailRequest
  if browserMode~="SETS" or not NativeTransmogCollectionsFrame:IsShown() then return nil end
  if not request or request.kind~=kind or request.id~=responseId then return nil end
  return request
 end
 function NativeTransmog_SetFilter(filter) restoreSetId=nil; setFilter=filter; setHistory={}; requestSets(0) end
+function NativeTransmog_SelectSetSection(section)
+ if section~="PREDEFINED" and section~="CUSTOM" or section==setSection then return end
+ if customEditing then NativeTransmog_CancelCustomEdit() end
+ setSection=section; setHistory={}; setSearch=""; if NativeTransmogCollectionsFrameListPanelSearch then NativeTransmogCollectionsFrameListPanelSearch:SetText("") end
+ requestSets(0)
+end
 function NativeTransmog_SetSearch(value)
  setSearch=string.lower(value or ""); setShown(NativeTransmogCollectionsFrameSearchHint,setSearch==""); renderSets()
 end
@@ -279,6 +330,29 @@ function NativeTransmog_FilterDropDown_OnLoad(frame)
 end
 function NativeTransmog_SetsNext() if setHasNext then restoreSetId=nil; table.insert(setHistory,setCursor); requestSets(setNextCursor) end end
 function NativeTransmog_SetsPrevious() if #setHistory>0 then restoreSetId=nil; requestSets(table.remove(setHistory)) end end
+
+local function setCustomEditorVisible(visible)
+ customEditing=visible; setShown(NativeTransmogCollectionsFramePreviewCustomName,visible); setShown(NativeTransmogCollectionsFramePreviewCustomSave,visible); setShown(NativeTransmogCollectionsFramePreviewCustomCancel,visible)
+ setShown(NativeTransmogCollectionsFramePreviewRotateLeft,not visible); setShown(NativeTransmogCollectionsFramePreviewRotateRight,not visible); renderSets()
+end
+local function beginCustomEdit(setId)
+ customRequestId=customRequestId+1; customDraftId=setId or 0; customDraftPieces={}; customPickingSlot=nil
+ activeSetDetailRequest={id=customRequestId,kind="CUSTOMEDIT",phase="INFO",setId=customDraftId}
+ sendReadOnly("CUSTOMEDIT",customRequestId.."\t"..customDraftId)
+end
+function NativeTransmog_NewCustomSet() if setSection=="CUSTOM" and customTotal<customMaximum then beginCustomEdit(0) end end
+function NativeTransmog_EditCustomSet() if selectedSet and selectedSet.custom then beginCustomEdit(selectedSet.id) end end
+function NativeTransmog_SaveCustomSet()
+ if not customEditing then return end
+ local name=string.gsub(NativeTransmogCollectionsFramePreviewCustomName:GetText() or "","[\t\r\n]"," ")
+ customRequestId=customRequestId+1; sendReadOnly("CUSTOMSAVE",customRequestId.."\t"..name)
+end
+function NativeTransmog_CancelCustomEdit()
+ if not customEditing and not activeSetDetailRequest then return end
+ customRequestId=customRequestId+1; sendReadOnly("CUSTOMCANCEL",customRequestId); setCustomEditorVisible(false); customDraftPieces={}; customPickingSlot=nil; requestSets(0)
+end
+StaticPopupDialogs["NATIVE_TRANSMOG_DELETE_CUSTOM_SET"]={text="Delete custom set %s?\n\nCollected appearances and equipped items are not affected.",button1=DELETE,button2=CANCEL,OnAccept=function(_,data) customRequestId=customRequestId+1; sendReadOnly("CUSTOMDELETE",customRequestId.."\t"..data) end,timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3}
+function NativeTransmog_DeleteCustomSet() if selectedSet and selectedSet.custom then StaticPopup_Show("NATIVE_TRANSMOG_DELETE_CUSTOM_SET",selectedSet.name,nil,selectedSet.id) end end
 
 local function itemCategoryIcon(category)
  local definition=ITEM_CATEGORIES[category]
@@ -302,6 +376,10 @@ local function createItemCategoryButton(category)
  button:SetScript("OnClick",function(self) NativeTransmog_SelectItemCategory(self.category) end)
  button:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_TOP"); GameTooltip:SetText(ITEM_CATEGORIES[self.category].label,1,.82,0); GameTooltip:Show() end)
  button:SetScript("OnLeave",function() GameTooltip:Hide() end)
+ button:SetScript("OnClick",function(self)
+  if not customEditing or not customPickingSlot or not self.entry or not self.collected then return end
+  customRequestId=customRequestId+1; sendReadOnly("CUSTOMCHOOSE",customRequestId.."\t"..customPickingSlot.."\t0\t"..self.entry)
+ end)
  itemCategoryButtons[category]=button; return button
 end
 local function createItemRow(index)
@@ -562,6 +640,26 @@ function NativeTransmog_Apply()
  end
 end
 function NativeTransmog_Remove() if hasPhysicalItem and snapshotNonce then sendRequest("REMOVE",requestId.."\t"..snapshotNonce) end end
+local function requestSavedSets()
+ if not authorizedToken then return end
+ savedSetRequest=savedSetRequest+1; if savedSetNextCursor==0 then savedSetIncoming={} end; sendReadOnly("CUSTOMSETS",savedSetRequest.."\t"..savedSetNextCursor)
+end
+function NativeTransmog_SavedSetDropDown_OnLoad(frame)
+ UIDropDownMenu_Initialize(frame,function()
+  if #savedSetCatalog==0 then local info=UIDropDownMenu_CreateInfo(); info.text="No custom sets saved"; info.disabled=true; UIDropDownMenu_AddButton(info); return end
+  for _,set in ipairs(savedSetCatalog) do local info=UIDropDownMenu_CreateInfo(); info.text=set.name; info.value=set.id; info.checked=savedSetId==set.id; info.func=function() savedSetId=set.id; CloseDropDownMenus(); NativeTransmog_PreflightSavedSet() end; UIDropDownMenu_AddButton(info) end
+ end)
+ UIDropDownMenu_SetWidth(frame,170); UIDropDownMenu_SetText(frame,"Saved Custom Sets")
+end
+function NativeTransmog_ToggleSavedSets(button)
+ if #savedSetCatalog==0 then setStatus("No custom sets saved. Create one in Collections.",true); return end
+ ToggleDropDownMenu(1,nil,NativeTransmogFrameSavedSetDropDown,button,0,0)
+end
+function NativeTransmog_PreflightSavedSet()
+ if not authorizedToken or not savedSetId then setStatus("Choose a saved custom set first.",true); return end
+ savedSetRequest=savedSetRequest+1; savedSetNonce=nil; sendRequest("CUSTOMPREFLIGHT",savedSetRequest.."\t"..savedSetId)
+end
+StaticPopupDialogs["NATIVE_TRANSMOG_APPLY_CUSTOM_SET"]={text="Apply %s?\n\nAll %s compatible selections will be applied. Unspecified slots remain unchanged.",button1=APPLY,button2=CANCEL,OnAccept=function() if savedSetNonce then sendRequest("CUSTOMCONFIRM",savedSetRequest.."\t"..savedSetNonce) end end,timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3}
 function NativeTransmog_NextPage() if hasNext then table.insert(cursorHistory,cursor); requestCatalog(nextCursor) end end
 function NativeTransmog_PreviousPage() if #cursorHistory>0 then requestCatalog(table.remove(cursorHistory)) end end
 function NativeTransmog_ResetPreview()
@@ -627,6 +725,7 @@ function NativeTransmog_GameTooltip_OnTooltipSetItem(tooltip)
 end
 
 function NativeTransmog_FrameUpdate()
+ if savedSetRefreshDue and GetTime()>=savedSetRefreshDue then savedSetRefreshDue=nil; requestSavedSets() end
  if itemSearchDue and GetTime()>=itemSearchDue then itemSearchDue=nil; itemHistory={}; requestItems(0,true) end
  if itemRefreshDue and GetTime()>=itemRefreshDue then itemRefreshDue=nil; itemDirty[itemCategory]=nil; requestItems(itemCursor,true) end
  if itemPending and GetTime()-itemPending.started>5 then
@@ -656,19 +755,20 @@ function NativeTransmog_OnShow()
  browserMode="APPEARANCES"
  updateEquipmentSlots(); NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
  if not slotIsUsable(selectedSlotId) or not slotHasItem(selectedSlotId) then NativeTransmog_SelectSlot(selectedSlotId)
- elseif authorizedToken then cursorHistory={}; requestCatalog(0)
+ elseif authorizedToken then cursorHistory={}; requestCatalog(0); savedSetRefreshDue=GetTime()+.35
  else hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
 end
 function NativeTransmog_OnHide()
- NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil
+ NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil; savedSetNextCursor=0; savedSetHasNext=false; savedSetRefreshDue=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
 function NativeTransmog_OpenAuthorized(token)
  browserMode="APPEARANCES"
- authorizedToken=token; updateEquipmentSlots()
+ authorizedToken=token; savedSetNextCursor=0; savedSetHasNext=false; updateEquipmentSlots()
  if NativeTransmogFrame:IsShown() then
   if browserMode=="APPEARANCES" then cursorHistory={}; requestCatalog(0) end
  else NativeTransmogFrame:Show() end
+ savedSetRefreshDue=GetTime()+.35
 end
 function NativeTransmog_HasAuthorizedSession() return authorizedToken~=nil end
 -- Collections entry point. It uses only the unauthenticated read-only set
@@ -754,6 +854,51 @@ function NativeTransmog_OnEvent(_,event,...)
    refreshEquipmentIndicator(wireSlot)
   end
   return
+ elseif command=="CUSTOMPAGE" then
+  local responseId,count=tonumber(fields[3]),tonumber(fields[7]); if not responseId or not count or count<0 or count>20 then return end
+  if NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then savedSetNextCursor=tonumber(fields[5]) or 0; savedSetHasNext=fields[6]=="1"; return end
+  local request=matchingSetRequest("CUSTOMSETS",responseId); if not request or request.phase~="PAGE" or tonumber(fields[4])~=request.cursor then return end
+  setCursor=tonumber(fields[4]) or 0; setNextCursor=tonumber(fields[5]) or 0; setHasNext=fields[6]=="1"; customTotal=tonumber(fields[8]) or 0; customMaximum=tonumber(fields[9]) or 20; incomingSets={}; request.phase="ROWS"; request.expected=count; return
+ elseif command=="CUSTOMSET" then
+  local responseId,setId=tonumber(fields[3]),tonumber(fields[4]); if not setId then return end
+  local row={id=setId,total=tonumber(fields[5]) or 0,collected=0,iconEntry=tonumber(fields[6]),name=fields[7] or "Custom Set",custom=true,family="Custom Set"}
+  if NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then table.insert(savedSetIncoming,row); return end
+  local request=matchingSetRequest("CUSTOMSETS",responseId); if request and request.phase=="ROWS" and #incomingSets<request.expected then table.insert(incomingSets,row) end; return
+ elseif command=="CUSTOMEND" then
+  local responseId=tonumber(fields[3])
+  if NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then if savedSetHasNext then savedSetRefreshDue=GetTime()+.30 else savedSetCatalog=savedSetIncoming; savedSetNextCursor=0; if savedSetId then local found=false; for _,set in ipairs(savedSetCatalog) do if set.id==savedSetId then found=true end end; if not found then savedSetId=nil end end; NativeTransmog_SavedSetDropDown_OnLoad(NativeTransmogFrameSavedSetDropDown) end; return end
+  local request=matchingSetRequest("CUSTOMSETS",responseId); if not request or request.phase~="ROWS" then return end
+  activeSetPageRequest=nil; setPagePending=nil; setCatalog=incomingSets; renderSets(); setStatus(#setCatalog>0 and "Select a custom set to preview it." or "No custom sets saved.",false); return
+ elseif command=="CUSTOMDETAILINFO" or command=="CUSTOMEDITINFO" then
+  local kind=command=="CUSTOMEDITINFO" and "CUSTOMEDIT" or "CUSTOMDETAIL"; local request=matchingSetRequest(kind,tonumber(fields[3])); local setId,total=tonumber(fields[4]),tonumber(fields[5])
+  if not request or request.phase~="INFO" or setId~=request.setId or not total or total>14 then return end
+  request.phase="PIECES"; request.expected=total; incomingPieces={}; if kind=="CUSTOMEDIT" then customDraftId=setId; NativeTransmogCollectionsFramePreviewCustomName:SetText(fields[6] or "") else selectedSet.name=fields[6] or selectedSet.name; selectedSet.total=total end; return
+ elseif command=="CUSTOMDETAILPIECE" or command=="CUSTOMEDITPIECE" then
+  local kind=command=="CUSTOMEDITPIECE" and "CUSTOMEDIT" or "CUSTOMDETAIL"; local request=matchingSetRequest(kind,tonumber(fields[3])); local index,slot,state,entry=tonumber(fields[5]),tonumber(fields[6]),tonumber(fields[7]),tonumber(fields[8])
+  if request and request.phase=="PIECES" and index and index>=1 and index<=request.expected and slot and SLOT_ORDER[slot] and state and state>=0 and state<=1 then incomingPieces[index]={slot=slot,state=state,entry=entry or 0,collected=true,source="Saved custom selection"} end; return
+ elseif command=="CUSTOMDETAILEND" or command=="CUSTOMEDITEND" then
+  local kind=command=="CUSTOMEDITEND" and "CUSTOMEDIT" or "CUSTOMDETAIL"; local request=matchingSetRequest(kind,tonumber(fields[3])); if not request or request.phase~="PIECES" then return end
+  local completed={}; for index=1,request.expected do if incomingPieces[index] then table.insert(completed,incomingPieces[index]) end end; if #completed~=request.expected then setStatus("Custom set response was incomplete.",true); return end
+  activeSetDetailRequest=nil
+  if kind=="CUSTOMEDIT" then customDraftPieces={}; for _,piece in ipairs(completed) do customDraftPieces[piece.slot]=piece end; selectedSet={id=request.setId,name=NativeTransmogCollectionsFramePreviewCustomName:GetText(),custom=true,total=#completed}; setPieces=completed; setCustomEditorVisible(true); renderPieces(); previewSet()
+  else setPieces=completed; renderPieces(); previewSet(); setStatus(selectedSet.name.." — "..#completed.." saved selections",false) end; return
+ elseif command=="CUSTOMDRAFTPIECE" then
+  local slot,state,entry=tonumber(fields[4]),tonumber(fields[5]),tonumber(fields[6]); if not customEditing or not slot or not SLOT_ORDER[slot] then return end
+  customDraftPieces[slot]={slot=slot,state=state,entry=entry or 0,collected=true,source="Draft selection"}; setPieces={}; for wire=1,#SLOT_ORDER do if customDraftPieces[wire] then table.insert(setPieces,customDraftPieces[wire]) end end; customPickingSlot=nil; NativeTransmog_SelectCollectionView("SETS"); renderPieces(); previewSet(); return
+ elseif command=="CUSTOMRESULT" then
+  local operation,result=fields[4],fields[5] or "MALFORMED"; if result~="ok" then setStatus(RESULT_TEXT[result] or ("Custom set request failed: "..result),true); return end
+  if operation=="CUSTOMSAVE" or operation=="CUSTOMDELETE" then setCustomEditorVisible(false); customDraftPieces={}; selectedSet=nil; requestSets(0); savedSetRefreshDue=authorizedToken and GetTime()+.35 or nil end; return
+ elseif command=="CUSTOMPREFLIGHTINFO" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest then
+  savedSetNonce=tonumber(fields[6]); savedPreflight={valid=fields[7]=="1",count=tonumber(fields[8]) or 0,name=fields[9] or "Custom Set",failures={}}; return
+ elseif command=="CUSTOMAPPLYPIECE" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest then
+  if savedPreflight and fields[7]~="ok" then table.insert(savedPreflight.failures,(SLOT_ORDER[tonumber(fields[5])] or "Slot")..": "..(fields[7] or "incompatible")) end; return
+ elseif command=="CUSTOMAPPLYEND" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest then
+  if savedPreflight and savedPreflight.valid and savedSetNonce then StaticPopup_Show("NATIVE_TRANSMOG_APPLY_CUSTOM_SET",savedPreflight.name,savedPreflight.count)
+  elseif savedPreflight then setStatus("Set cannot be applied: "..table.concat(savedPreflight.failures,"; "),true) end; return
+ elseif command=="RESULT" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest and (fields[5]=="CUSTOMPREFLIGHT" or fields[5]=="CUSTOMCONFIRM") then
+  pending=nil; local result=fields[6] or "MALFORMED"; if result=="ok" then setStatus("Custom set applied.",false); updateEquipmentSlots(); scheduledRefresh=GetTime()+.30 else setStatus(RESULT_TEXT[result] or ("Custom set application failed: "..result),true) end; return
+ elseif command=="RESULT" and fields[3]=="0" and tonumber(fields[4])==customRequestId then
+  setStatus(RESULT_TEXT[fields[6]] or ("Custom set request failed: "..(fields[6] or "MALFORMED")),true); return
  elseif command=="SETPAGE" then
   local responseId=tonumber(fields[3]); local request=matchingSetRequest("SETS",responseId)
   local responseFilter,responseCursor,responseCount=tonumber(fields[4]),tonumber(fields[5]),tonumber(fields[8])

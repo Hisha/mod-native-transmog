@@ -129,3 +129,27 @@ NativeTransmog.Wardrobe.RequestCooldownMs = 250
 #        Default:     30000
 
 NativeTransmog.Wardrobe.SnapshotLifetimeMs = 30000
+
+#
+#    NativeTransmog.CustomSets.Enable
+#        Description: Enables character-owned custom appearance-set persistence,
+#                     editing, preview, and NPC-gated application.
+#        Default:     1
+
+NativeTransmog.CustomSets.Enable = 1
+
+#
+#    NativeTransmog.CustomSets.MaximumPerCharacter
+#        Description: Maximum saved custom sets owned by one character.
+#        Range:       1-100 (values are clamped).
+#        Default:     20
+
+NativeTransmog.CustomSets.MaximumPerCharacter = 20
+
+#
+#    NativeTransmog.CustomSets.MaximumNameBytes
+#        Description: Maximum UTF-8 byte length after surrounding whitespace is trimmed.
+#        Range:       8-96 (values are clamped).
+#        Default:     48
+
+NativeTransmog.CustomSets.MaximumNameBytes = 48

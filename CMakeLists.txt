@@ -5,6 +5,7 @@ AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogQuestCollection.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogApplication.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogWardrobe.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogSetCatalog.cpp")
+AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogCustomSet.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/mod_native_transmog_loader.cpp")
 
-message("-- MOD NATIVE TRANSMOG CONFIGURED (phase-5b-appearance-items-browser) --")
+message("-- MOD NATIVE TRANSMOG CONFIGURED (custom-appearance-sets) --")

@@ -2,7 +2,7 @@
 
 `mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
 
-Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A adds every visually relevant slot and Hide Appearance; Phase 4B presents them as a native paper doll. Phase 4C adds persisted-unlock chat notifications and authoritative appearance details to wardrobe and CharacterFrame tooltips. Phase 5A adds read-only browsing and preview for authentic gameplay equipment sets. It does **not** grant items, apply whole sets, add saved outfits, price ordinary applications, migrate legacy `mod-transmog` records, or introduce a second transmog engine.
+Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A adds every visually relevant slot and Hide Appearance; Phase 4B presents them as a native paper doll. Phase 4C adds persisted-unlock chat notifications and authoritative appearance details to wardrobe and CharacterFrame tooltips. Phase 5A adds browsing and preview for authentic gameplay equipment sets. Player-created custom sets add character-owned named canonical appearance configurations, in-place Collections editing/preview, and atomic NPC-gated application without introducing a second transmog engine. See [custom appearance sets](docs/CUSTOM_APPEARANCE_SETS.md).
 
 ## Phase 5A equipment sets
 
@@ -36,7 +36,7 @@ Weapon-slot hiding—including shields and held-in-off-hand items because they o
 
 ## Phase 3D native wardrobe integration
 
-Protected FrameXML and the server exchange version-2 `NTRANSMOG` addon messages over a stock `LANG_ADDON` self-whisper. The client uses build-12340 `SendAddonMessage`; the Playerbot core exposes the authenticated message through `PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT`, where the module consumes only its exact protocol. Replies arrive through `CHAT_MSG_ADDON`. This requires no standalone addon, custom opcode, chat command, core patch, Content Manager change, or Portalkeeper change. See the [transport decision](docs/PHASE3D_TRANSPORT_DESIGN.md).
+Protected FrameXML and the server exchange version-4 `NTRANSMOG` addon messages over a stock `LANG_ADDON` self-whisper. The client uses build-12340 `SendAddonMessage`; the Playerbot core exposes the authenticated message through `PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT`, where the module consumes only its exact protocol. Replies arrive through `CHAT_MSG_ADDON`. This requires no standalone addon, custom opcode, chat command, core patch, Content Manager change, or Portalkeeper change. See the [transport decision](docs/PHASE3D_TRANSPORT_DESIGN.md).
 
 Catalog pages come from `CollectionService` using the configured account or character scope. The composite identity remains `(display ID, item class, item subclass, inventory type)`. A startup-built item-template index selects the lowest-entry representative that passes the shared Phase 3C validator for the current player and equipped target, so the original physical item is not required and a restricted duplicate cannot hide a legitimate representative.
 
@@ -92,7 +92,7 @@ The inspected hook order cannot safely append a new gossip option to every scrip
 
 ## Wardrobe transport and authorization
 
-The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 2, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Additive `STATE` replies carry server-confirmed per-slot original/applied/hidden state plus the canonical source entry/name. Read-only `SYNC` uses token zero and needs no NPC session. Client catalog/apply/hide/remove messages use the same prefix and still require the live server-authorized session.
+The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 4, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Additive `STATE` replies carry server-confirmed per-slot original/applied/hidden state plus the canonical source entry/name. Read-only browsing and character-owned custom-set editing need no NPC session; catalog/apply/hide/remove and custom-set preflight/confirmation still require the live server-authorized session.
 
 This uses the stock addon-message wire protocol without installing an addon, inventing an opcode, or exposing normal chat text. It is also a pattern already supported by the inspected Playerbot branch and other native FrameXML modules in this environment.
 

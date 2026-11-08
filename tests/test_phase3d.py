@@ -40,7 +40,8 @@ class PhaseThreeDContracts(unittest.TestCase):
         self.assertIn("OwnerFor(player)", COLLECTION)
         self.assertIn("GetAccountId()", COLLECTION)
         self.assertNotIn("accountId", WARDROBE)
-        self.assertNotIn("ownerGuid", WARDROBE)
+        parser = WARDROBE[WARDROBE.index("bool WardrobeService::HandleAddonWhisper"):WARDROBE.index("void WardrobeService::HandleItems")]
+        self.assertNotIn("ownerGuid", parser)
 
     def test_composite_identity_and_duplicate_index(self):
         for marker in ("displayId", "itemClass", "itemSubclass", "inventoryType"):
@@ -72,8 +73,9 @@ class PhaseThreeDContracts(unittest.TestCase):
     def test_equipment_snapshot_prevents_stale_apply(self):
         for marker in ("itemGuid", "snapshot.itemGuid", '"EQUIPMENT_CHANGED"', "EquipmentChanged"):
             self.assertIn(marker, WARDROBE + WARDROBE_H)
-        self.assertLess(WARDROBE.index("snapshot.itemGuid", WARDROBE.index("HandleApply")),
-                        WARDROBE.index("ApplicationService::Instance().Apply", WARDROBE.index("HandleApply")))
+        apply = WARDROBE.index("void WardrobeService::HandleApply")
+        self.assertLess(WARDROBE.index("snapshot.itemGuid", apply),
+                        WARDROBE.index("ApplicationService::Instance().Apply", apply))
 
     def test_pagination_is_bounded_and_deterministic(self):
         for marker in ("pageSize * 8", "std::min<std::uint32_t>(64", "MaximumCursor",

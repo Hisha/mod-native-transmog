@@ -256,6 +256,14 @@
         <Size x="145" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-20" y="47" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_Remove();</OnClick></Scripts>
       </Button>
+      <Frame name="$parentSavedSetDropDown" inherits="UIDropDownMenuTemplate" hidden="true">
+        <Anchors><Anchor point="TOPLEFT"><Offset x="20" y="-30" /></Anchor></Anchors>
+        <Scripts><OnLoad>NativeTransmog_SavedSetDropDown_OnLoad(self);</OnLoad></Scripts>
+      </Frame>
+      <Button name="$parentApplySavedSet" inherits="UIPanelButtonTemplate" text="Saved Sets...">
+        <Size x="112" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="20" y="-12" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_ToggleSavedSets(self);</OnClick></Scripts>
+      </Button>
     </Frames>
     <Scripts>
       <OnLoad>NativeTransmog_OnLoad(self);</OnLoad>
@@ -401,8 +409,16 @@
           </Layer>
         </Layers>
         <Frames>
+          <Button name="$parentPredefined" inherits="UIPanelButtonTemplate" text="Predefined">
+            <Size x="105" y="20" /><Anchors><Anchor point="TOPLEFT"><Offset x="11" y="-8" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_SelectSetSection("PREDEFINED");</OnClick></Scripts>
+          </Button>
+          <Button name="$parentCustom" inherits="UIPanelButtonTemplate" text="My Custom Sets">
+            <Size x="125" y="20" /><Anchors><Anchor point="LEFT" relativeTo="$parentPredefined" relativePoint="RIGHT"><Offset x="3" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_SelectSetSection("CUSTOM");</OnClick></Scripts>
+          </Button>
           <EditBox name="$parentSearch" inherits="InputBoxTemplate" autoFocus="false">
-            <Size x="150" y="20" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-8" /></Anchor></Anchors>
+            <Size x="150" y="20" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-34" /></Anchor></Anchors>
             <FontString inherits="GameFontHighlightSmall" />
             <Scripts>
               <OnLoad>self:SetTextInsets(18,4,0,0);</OnLoad>
@@ -412,12 +428,12 @@
             </Scripts>
           </EditBox>
           <Frame name="$parentFilter" inherits="UIDropDownMenuTemplate">
-            <Size x="100" y="24" /><Anchors><Anchor point="TOPRIGHT"><Offset x="5" y="-6" /></Anchor></Anchors>
+            <Size x="100" y="24" /><Anchors><Anchor point="TOPRIGHT"><Offset x="5" y="-32" /></Anchor></Anchors>
             <Scripts><OnLoad>NativeTransmog_FilterDropDown_OnLoad(self);</OnLoad></Scripts>
           </Frame>
           <ScrollFrame name="NativeTransmogCollectionsFrameListScroll" inherits="UIPanelScrollFrameTemplate">
-            <Size x="246" y="452" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-35" /></Anchor></Anchors>
-            <ScrollChild><Frame name="$parentChild"><Size x="246" y="452" /></Frame></ScrollChild>
+            <Size x="246" y="398" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-61" /></Anchor></Anchors>
+            <ScrollChild><Frame name="$parentChild"><Size x="246" y="398" /></Frame></ScrollChild>
           </ScrollFrame>
           <Button name="NativeTransmogCollectionsFramePrevious" inherits="UIPanelButtonTemplate" text="&lt;">
             <Size x="32" y="20" /><Anchors><Anchor point="BOTTOM"><Offset x="-24" y="10" /></Anchor></Anchors>
@@ -426,6 +442,18 @@
           <Button name="NativeTransmogCollectionsFrameNext" inherits="UIPanelButtonTemplate" text="&gt;">
             <Size x="32" y="20" /><Anchors><Anchor point="LEFT" relativeTo="NativeTransmogCollectionsFramePrevious" relativePoint="RIGHT"><Offset x="8" y="0" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_SetsNext();</OnClick></Scripts>
+          </Button>
+          <Button name="$parentNew" inherits="UIPanelButtonTemplate" text="New Set">
+            <Size x="70" y="20" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="11" y="10" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_NewCustomSet();</OnClick></Scripts>
+          </Button>
+          <Button name="$parentEdit" inherits="UIPanelButtonTemplate" text="Edit">
+            <Size x="55" y="20" /><Anchors><Anchor point="LEFT" relativeTo="$parentNew" relativePoint="RIGHT"><Offset x="3" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_EditCustomSet();</OnClick></Scripts>
+          </Button>
+          <Button name="$parentDelete" inherits="UIPanelButtonTemplate" text="Delete">
+            <Size x="58" y="20" /><Anchors><Anchor point="LEFT" relativeTo="$parentEdit" relativePoint="RIGHT"><Offset x="3" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_DeleteCustomSet();</OnClick></Scripts>
           </Button>
         </Frames>
       </Frame>
@@ -466,8 +494,21 @@
         <Frames>
           <!-- The selected set's actual item icons run across the preview top. -->
           <Frame name="NativeTransmogCollectionsFramePieceBar">
-            <Size x="360" y="36" /><Anchors><Anchor point="TOP"><Offset x="0" y="-72" /></Anchor></Anchors>
+            <Size x="360" y="76" /><Anchors><Anchor point="TOP"><Offset x="0" y="-72" /></Anchor></Anchors>
           </Frame>
+          <EditBox name="$parentCustomName" inherits="InputBoxTemplate" autoFocus="false" hidden="true" maxLetters="48">
+            <Size x="210" y="22" /><Anchors><Anchor point="BOTTOM"><Offset x="-55" y="12" /></Anchor></Anchors>
+            <FontString inherits="GameFontHighlightSmall" />
+            <Scripts><OnEscapePressed>self:ClearFocus(); NativeTransmog_CancelCustomEdit();</OnEscapePressed></Scripts>
+          </EditBox>
+          <Button name="$parentCustomSave" inherits="UIPanelButtonTemplate" text="Save" hidden="true">
+            <Size x="58" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentCustomName" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_SaveCustomSet();</OnClick></Scripts>
+          </Button>
+          <Button name="$parentCustomCancel" inherits="UIPanelButtonTemplate" text="Cancel" hidden="true">
+            <Size x="62" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentCustomSave" relativePoint="RIGHT"><Offset x="3" y="0" /></Anchor></Anchors>
+            <Scripts><OnClick>NativeTransmog_CancelCustomEdit();</OnClick></Scripts>
+          </Button>
           <DressUpModel name="$parentModel" enableMouse="true" enableMouseWheel="true">
             <Size x="392" y="398" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="16" /></Anchor></Anchors>
             <Scripts>

@@ -11,6 +11,7 @@
 #include "NativeTransmogService.h"
 
 #include <iterator>
+#include <unordered_set>
 #include <vector>
 
 namespace native_transmog
@@ -370,6 +371,118 @@ ApplicationResult ApplicationService::ValidateForTarget(Player const* player, It
         config = _config;
     }
     return CompatibilityValidator::Validate(player, target, source, config, equipmentSlot);
+}
+
+std::vector<BatchValidation> ApplicationService::ValidateBatch(Player* player,
+    std::vector<BatchAppearanceSelection> const& selections, ApplicationAuthorization authorization) const
+{
+    std::vector<BatchValidation> results;
+    results.reserve(selections.size());
+    ApplicationConfig config;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (!_config.enabled || !_databaseAvailable)
+        {
+            ApplicationResult result = !_config.enabled ? ApplicationResult::Disabled :
+                ApplicationResult::DatabaseUnavailable;
+            for (BatchAppearanceSelection const& selection : selections)
+                results.push_back({ selection.equipmentSlot, result });
+            return results;
+        }
+        config = _config;
+    }
+    if (!Authorized(player, authorization))
+    {
+        for (BatchAppearanceSelection const& selection : selections)
+            results.push_back({ selection.equipmentSlot, ApplicationResult::Unauthorized });
+        return results;
+    }
+    std::unordered_set<std::uint8_t> slots;
+    for (BatchAppearanceSelection const& selection : selections)
+    {
+        ApplicationResult result = ApplicationResult::Ok;
+        if (!IsSupportedEquipmentSlot(selection.equipmentSlot) || !slots.insert(selection.equipmentSlot).second)
+            result = ApplicationResult::InvalidSlot;
+        Item* target = result == ApplicationResult::Ok ?
+            player->GetItemByPos(INVENTORY_SLOT_BAG_0, selection.equipmentSlot) : nullptr;
+        if (result == ApplicationResult::Ok && (!target || target->GetOwnerGUID() != player->GetGUID()))
+            result = ApplicationResult::TargetMissing;
+        if (result == ApplicationResult::Ok && selection.state == OverrideState::Hidden)
+        {
+            if (IsWeaponEquipmentSlot(selection.equipmentSlot) && !config.hideWeapons)
+                result = ApplicationResult::HideWeaponsDisabled;
+        }
+        else if (result == ApplicationResult::Ok)
+        {
+            ItemTemplate const* source = sObjectMgr->GetItemTemplate(selection.appearanceItem);
+            AppearanceKey appearance;
+            if (!source)
+                result = ApplicationResult::SourceMissing;
+            else if (!CollectionService::ResolveAppearance(source, appearance))
+                result = ApplicationResult::AppearanceIneligible;
+            else if (!CollectionService::Instance().IsCollected(player, appearance))
+                result = ApplicationResult::AppearanceNotCollected;
+            else
+                result = CompatibilityValidator::Validate(player, target->GetTemplate(), source, config,
+                    selection.equipmentSlot);
+        }
+        results.push_back({ selection.equipmentSlot, result });
+    }
+    return results;
+}
+
+ApplicationResult ApplicationService::ApplyBatch(Player* player,
+    std::vector<BatchAppearanceSelection> const& selections, ApplicationAuthorization authorization)
+{
+    if (selections.empty())
+        return ApplicationResult::InvalidSlot;
+    std::vector<BatchValidation> validation = ValidateBatch(player, selections, authorization);
+    for (BatchValidation const& entry : validation)
+        if (entry.result != ApplicationResult::Ok)
+            return entry.result;
+
+    CharacterDatabaseTransaction transaction = CharacterDatabase.BeginTransaction();
+    std::vector<AppearanceOverride> overrides;
+    overrides.reserve(selections.size());
+    for (BatchAppearanceSelection const& selection : selections)
+    {
+        Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, selection.equipmentSlot);
+        AppearanceOverride appearanceOverride;
+        appearanceOverride.itemGuid = target->GetGUID().GetCounter();
+        appearanceOverride.ownerGuid = player->GetGUID().GetCounter();
+        appearanceOverride.state = selection.state;
+        appearanceOverride.appearanceItem = selection.state == OverrideState::Appearance ? selection.appearanceItem : 0;
+        if (selection.state == OverrideState::Appearance)
+            CollectionService::ResolveAppearance(sObjectMgr->GetItemTemplate(selection.appearanceItem),
+                appearanceOverride.appearance);
+        transaction->Append(
+            "INSERT INTO `native_transmog_item_override` (`item_guid`, `owner_guid`, `override_state`, "
+            "`appearance_item`, `display_id`, `item_class`, `item_subclass`, `inventory_type`, `applied_at`) "
+            "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE "
+            "`owner_guid` = VALUES(`owner_guid`), `override_state` = VALUES(`override_state`), "
+            "`appearance_item` = VALUES(`appearance_item`), `display_id` = VALUES(`display_id`), "
+            "`item_class` = VALUES(`item_class`), `item_subclass` = VALUES(`item_subclass`), "
+            "`inventory_type` = VALUES(`inventory_type`), `applied_at` = CURRENT_TIMESTAMP",
+            appearanceOverride.itemGuid, appearanceOverride.ownerGuid,
+            static_cast<std::uint32_t>(appearanceOverride.state), appearanceOverride.appearanceItem,
+            appearanceOverride.appearance.displayId,
+            static_cast<std::uint32_t>(appearanceOverride.appearance.itemClass),
+            static_cast<std::uint32_t>(appearanceOverride.appearance.itemSubclass),
+            static_cast<std::uint32_t>(appearanceOverride.appearance.inventoryType));
+        overrides.push_back(appearanceOverride);
+    }
+    CharacterDatabase.DirectCommitTransaction(transaction);
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        for (AppearanceOverride const& appearanceOverride : overrides)
+            _overrides[appearanceOverride.itemGuid] = appearanceOverride;
+    }
+    for (BatchAppearanceSelection const& selection : selections)
+        if (Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, selection.equipmentSlot))
+            player->SetVisibleItemSlot(selection.equipmentSlot, target);
+    LOG_INFO("module.native_transmog", "Atomically applied {} custom-set selections for character {}.",
+        selections.size(), player->GetGUID().GetCounter());
+    return ApplicationResult::Ok;
 }
 
 void ApplicationService::LoadPlayer(Player* player)

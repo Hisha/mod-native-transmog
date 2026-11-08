@@ -2,6 +2,8 @@
 #define MOD_NATIVE_TRANSMOG_WARDROBE_H
 
 #include "NativeTransmogCollection.h"
+#include "NativeTransmogCustomSet.h"
+#include "NativeTransmogApplication.h"
 #include "ObjectGuid.h"
 
 #include <chrono>
@@ -55,6 +57,22 @@ private:
     {
         std::chrono::steady_clock::time_point lastRequest{};
         Snapshot snapshot;
+        struct Draft
+        {
+            bool active = false;
+            std::uint32_t setId = 0;
+            std::string name;
+            std::vector<CustomSetPiece> pieces;
+        } draft;
+        struct ApplySnapshot
+        {
+            std::uint32_t nonce = 0;
+            std::uint32_t sessionToken = 0;
+            std::uint32_t requestId = 0;
+            std::uint32_t setId = 0;
+            std::vector<BatchAppearanceSelection> selections;
+            std::chrono::steady_clock::time_point expires;
+        } customApply;
     };
 
     struct BrowseAppearance
@@ -73,6 +91,18 @@ private:
         std::string_view search);
     void HandleSets(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleSetDetail(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomSets(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomDetail(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomEdit(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomChoose(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomClear(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomSave(Player* player, std::vector<std::uint32_t> const& fields, std::string_view name);
+    void HandleCustomCancel(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomDelete(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomPreflight(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomConfirm(Player* player, std::vector<std::uint32_t> const& fields);
+    void SendCustomDetail(Player* player, std::uint32_t requestId, CustomSet const& set,
+        char const* prefix) const;
     void HandleApply(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleHide(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleRemove(Player* player, std::vector<std::uint32_t> const& fields);

@@ -9,6 +9,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class Item;
 class Player;
@@ -72,6 +73,19 @@ struct AppearanceOverride
     OverrideState state = OverrideState::Appearance;
 };
 
+struct BatchAppearanceSelection
+{
+    std::uint8_t equipmentSlot = 0;
+    OverrideState state = OverrideState::Appearance;
+    std::uint32_t appearanceItem = 0;
+};
+
+struct BatchValidation
+{
+    std::uint8_t equipmentSlot = 0;
+    ApplicationResult result = ApplicationResult::Ok;
+};
+
 bool IsSupportedEquipmentSlot(std::uint8_t equipmentSlot);
 bool IsWeaponEquipmentSlot(std::uint8_t equipmentSlot);
 
@@ -101,6 +115,12 @@ public:
     bool GetOverride(Item const* item, AppearanceOverride& appearanceOverride) const;
     ApplicationResult ValidateForTarget(Player const* player, ItemTemplate const* target,
         ItemTemplate const* source, std::uint8_t equipmentSlot) const;
+    std::vector<BatchValidation> ValidateBatch(Player* player,
+        std::vector<BatchAppearanceSelection> const& selections,
+        ApplicationAuthorization authorization) const;
+    ApplicationResult ApplyBatch(Player* player,
+        std::vector<BatchAppearanceSelection> const& selections,
+        ApplicationAuthorization authorization);
 
     void LoadPlayer(Player* player);
     void ReleasePlayer(Player const* player);

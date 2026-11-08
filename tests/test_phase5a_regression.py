@@ -202,7 +202,7 @@ class PhaseFiveAProtocolRegressionTests(unittest.TestCase):
         self.assertEqual(state.visible, [9, 10])
 
     def test_protocol_version_compatibility(self):
-        self.assertEqual(protocol_version(), "3")
+        self.assertEqual(protocol_version(), "4")
         self.assertEqual(client_version(), protocol_version())
         self.assertIn("version != protocol::Version", WARDROBE)
         self.assertIn("std::to_string(protocol::Version)", SERVICE)
@@ -225,7 +225,7 @@ class PhaseFiveAProtocolRegressionTests(unittest.TestCase):
         self.assertIn("WardrobeService::Instance().SendEquipmentState(player, token)", SERVICE)
 
     def test_state_delivery_restores_tooltip_state(self):
-        state_branch = LUA[LUA.index('if command=="STATE"'):LUA.index('elseif command=="SETPAGE"')]
+        state_branch = LUA[LUA.index('if command=="STATE"'):LUA.index('elseif command=="CUSTOMPAGE"')]
         self.assertIn('fields[3]~="0"', state_branch)
         self.assertIn("overrideStates[wireSlot]", state_branch)
         tooltip = LUA[LUA.index("local function appearanceTooltipText"):LUA.index("local function updateEquipmentSlot")]
