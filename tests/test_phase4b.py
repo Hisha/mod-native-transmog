@@ -25,15 +25,15 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertEqual(templates[0].attrib.get("inherits"), "ItemButtonTemplate")
         self.assertNotIn('inherits="PaperDollItemSlotButtonTemplate"', XML)
 
-    def test_wardrobe_title_uses_native_grey_dialog_header_geometry(self):
+    def test_wardrobe_title_uses_retail_dark_metal_strip(self):
         wardrobe = XML[XML.index('<Frame name="NativeTransmogFrame"'):
                        XML.index('<Frame name="NativeTransmogCollectionsFrame"')]
-        self.assertIn('<Layer level="ARTWORK">\n        <Texture name="$parentHeader" '
-                      'file="Interface\\DialogFrame\\UI-DialogBox-Header">', wardrobe)
-        self.assertIn('<Anchor point="TOP" relativeTo="$parentHeader">'
-                      '<Offset x="0" y="-14" /></Anchor>', wardrobe)
+        self.assertIn('name="$parentTitleStrip"', wardrobe)
+        self.assertIn('text="Transmogrify"', wardrobe)
+        self.assertIn('<Anchor point="TOP"><Offset x="0" y="-12" /></Anchor>', wardrobe)
+        self.assertIn(r'bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark"', wardrobe)
         self.assertIn(r'edgeFile="Interface\DialogFrame\UI-DialogBox-Border"', wardrobe)
-        self.assertNotIn("UI-DialogBox-Gold-Border", wardrobe)
+        self.assertIn("UI-DialogBox-Gold-Border", wardrobe)
 
     def test_named_rectangular_slot_panel_is_replaced_by_fourteen_icons(self):
         self.assertNotIn("$parentSlotPanel", XML)
@@ -146,13 +146,13 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertIn("inventorySlot~=hiddenSlot", preview)
 
     def test_ui_bounds_leave_catalog_and_controls_inside_window(self):
-        self.assertIn('<Size x="900" y="540" />', XML)
-        self.assertIn('<Size x="420" y="452" />', XML)
-        self.assertIn('<Size x="408" y="292" />', XML)
-        self.assertIn('<Offset x="458" y="-140" />', XML)
-        self.assertLess(20 + 420, 458)
-        self.assertLessEqual(458 + 408, 900 - 20)
-        self.assertLessEqual(140 + 292, 540 - 47)
+        self.assertIn('<Size x="960" y="600" />', XML)
+        self.assertIn('<Size x="284" y="474" />', XML)
+        self.assertIn('<Size x="622" y="354" />', XML)
+        self.assertIn('<Offset x="323" y="-124" />', XML)
+        self.assertLess(12 + 284, 303)
+        self.assertLessEqual(323 + 622, 960 - 8)
+        self.assertLessEqual(124 + 354, 600 - 39)
 
     def test_lua_source_uses_lua_51_syntax_subset(self):
         for forbidden in ("goto ", "::", "//", "&", "|", "<const>"):

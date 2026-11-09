@@ -13,28 +13,28 @@ WARDROBE = (ROOT / "src/NativeTransmogWardrobe.cpp").read_text(encoding="utf-8")
 PROTOCOL = (ROOT / "src/NativeTransmogProtocol.h").read_text(encoding="utf-8")
 
 
-def grid_height(count: int, columns: int = 6, size: int = 48, gap: int = 8) -> int:
+def grid_height(count: int, columns: int = 6, height: int = 111, gap: int = 10) -> int:
     rows = (count + columns - 1) // columns
-    return 0 if not rows else rows * size + (rows - 1) * gap
+    return 0 if not rows else rows * height + (rows - 1) * gap
 
 
 class WardrobeVisualPolishContracts(unittest.TestCase):
-    def test_24_item_page_plus_hide_fits_without_scrolling(self):
-        self.assertIn("6, 48, 8, 365, 272", LUA)
-        self.assertEqual(grid_height(25), 272)
+    def test_reference_viewport_is_exactly_six_columns_by_three_rows(self):
+        self.assertIn("6, 84, 111, 10, 566, 353", LUA)
+        self.assertEqual(grid_height(18), 353)
         self.assertIn("math.max(CATALOG_HEIGHT,contentHeight)", LUA)
 
     def test_36_item_page_retains_oversized_scroll_extent(self):
-        self.assertEqual(grid_height(37), 384)
-        self.assertGreater(grid_height(37), 272)
+        self.assertEqual(grid_height(37), 837)
+        self.assertGreater(grid_height(37), 353)
         self.assertIn('NativeTransmogFrameBrowserPanelScrollChild:SetHeight', LUA)
 
     def test_six_column_rows_use_the_viewport_and_incomplete_rows_are_centered(self):
-        self.assertEqual(6 * 48 + 5 * 8, 328)
-        self.assertLess(328, 365)
+        self.assertEqual(6 * 84 + 5 * 10, 554)
+        self.assertLess(554, 566)
         render = LUA[LUA.index("local function renderCatalog"):LUA.index("local function clearCatalogForUnavailableSlot")]
         for marker in ("rowCount=math.min(ICONS_PER_ROW,#catalog-row*ICONS_PER_ROW)",
-                       "rowWidth=rowCount*ICON_SIZE+(rowCount-1)*ICON_GAP",
+                       "rowWidth=rowCount*ICON_WIDTH+(rowCount-1)*ICON_GAP",
                        "rowLeft=math.floor((CATALOG_WIDTH-rowWidth)/2+.5)"):
             self.assertIn(marker, render)
 
@@ -101,12 +101,31 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
             self.assertIn(f'NativeTransmog_StateLabel_OnEnter(self,"{kind}")', XML)
         self.assertIn('GameTooltip:SetHyperlink("item:"..entry)', LUA)
 
-    def test_compact_layout_remains_fixed_at_small_ui_scale(self):
-        self.assertIn('<Size x="900" y="540" />', XML)
+    def test_complete_layout_scales_uniformly_at_small_ui_sizes(self):
+        self.assertIn('<Size x="960" y="600" />', XML)
         self.assertIn('<Size x="28" y="22" />', XML)
-        self.assertIn('<Size x="365" y="272" />', XML)
-        self.assertEqual(6 * 48 + 5 * 8, 328)
-        self.assertLessEqual(458 + 408, 900 - 34)
+        self.assertIn('<Size x="586" y="353" />', XML)
+        self.assertIn("math.min(1,(width-20)/960,(height-20)/600)", LUA)
+        self.assertIn("NativeTransmogFrame:SetScale", LUA)
+        self.assertEqual(6 * 84 + 5 * 10, 554)
+        self.assertLessEqual(323 + 622, 960 - 8)
+
+    def test_retail_frame_toolbar_and_deferred_controls_are_explicit(self):
+        self.assertIn('text="Transmogrify"', XML)
+        self.assertIn('name="$parentItemsTab"', XML)
+        self.assertIn('name="$parentSetsTab"', XML)
+        self.assertIn('text="Search (Collections)"', XML)
+        self.assertIn('name="$parentSources"', XML)
+        self.assertIn('text="Progress in Collections"', XML)
+        self.assertNotIn('NativeTransmog_Search', XML)
+
+    def test_all_fourteen_equipment_slots_remain_in_non_overlapping_columns(self):
+        ids = re.findall(r'inherits="NativeTransmogEquipmentSlotTemplate" id="(\d+)"', XML)
+        self.assertEqual(sorted(map(int, ids)), list(range(1, 15)))
+        self.assertIn('id="13"', XML)
+        self.assertEqual(6 * 40 + 5 * 8, 280)
+        self.assertLessEqual(35 + 280, 474)
+        self.assertLessEqual(83 + 5 * 40 + 4 * 8, 474)
 
     def test_server_protocol_and_cursor_page_semantics_are_unchanged(self):
         self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "4"', LUA)

@@ -17,7 +17,9 @@ local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local catalogMessage = nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
-local ICONS_PER_ROW, ICON_SIZE, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 6, 48, 8, 365, 272
+-- The retail reconstruction keeps a fixed six-by-three viewport. Configured
+-- catalog pages larger than 18 continue in the existing scroll child.
+local ICONS_PER_ROW, ICON_WIDTH, ICON_HEIGHT, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 6, 84, 111, 10, 566, 353
 local browserMode, setFilter, setCursor, setNextCursor, setHasNext = "APPEARANCES", 0, 0, 0, false
 local setRequestId = 0
 local setHistory, setCatalog, incomingSets, selectedSet, setPieces = {}, {}, {}, nil, {}
@@ -168,6 +170,17 @@ local function setButtonEnabled(button, enabled)
  if enabled then button:Enable() else button:Disable() end
 end
 local function setShown(frame,shown) if shown then frame:Show() else frame:Hide() end end
+function NativeTransmog_DeferredControl_OnEnter(frame,text)
+ GameTooltip:SetOwner(frame,"ANCHOR_BOTTOM")
+ GameTooltip:SetText(text or "Available in Collections",.65,.65,.65,true)
+ GameTooltip:Show()
+end
+local function updateWardrobeScale()
+ if not NativeTransmogFrame or not UIParent then return end
+ local width,height=UIParent:GetWidth() or 960,UIParent:GetHeight() or 600
+ local scale=math.min(1,(width-20)/960,(height-20)/600)
+ NativeTransmogFrame:SetScale(math.max(.1,scale))
+end
 local function setInteractiveShown(frame,shown)
  frame:EnableMouse(shown)
  setShown(frame,shown)
@@ -685,15 +698,16 @@ local function previewItem(button)
 end
 local function createAppearanceButton(index)
  local button=CreateFrame("Button", "NativeTransmogAppearanceButton"..index, NativeTransmogFrameBrowserPanelScrollChild)
- button:SetWidth(ICON_SIZE); button:SetHeight(ICON_SIZE)
- button.background=button:CreateTexture(nil,"BACKGROUND"); button.background:SetTexture(.025,.025,.025,.88); button.background:SetAllPoints(button)
- button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetPoint("TOPLEFT",4,-4); button.icon:SetPoint("BOTTOMRIGHT",-4,4)
+ button:SetWidth(ICON_WIDTH); button:SetHeight(ICON_HEIGHT)
+ button.background=button:CreateTexture(nil,"BACKGROUND"); button.background:SetTexture(.012,.009,.007,.96); button.background:SetAllPoints(button)
+ button.recess=button:CreateTexture(nil,"BORDER"); button.recess:SetTexture(.18,.13,.08,.72); button.recess:SetPoint("TOPLEFT",1,-1); button.recess:SetPoint("BOTTOMRIGHT",-1,1)
+ button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetWidth(72); button.icon:SetHeight(72); button.icon:SetPoint("CENTER",0,1)
  button.icon:SetTexCoord(.08,.92,.08,.92)
  button.border=button:CreateTexture(nil,"BORDER"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetAllPoints(button)
  button.highlight=button:CreateTexture(nil,"HIGHLIGHT"); button.highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
  button.highlight:SetBlendMode("ADD"); button.highlight:SetPoint("TOPLEFT",2,-2); button.highlight:SetPoint("BOTTOMRIGHT",-2,2)
  button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
- button.selection:SetVertexColor(1,.82,0); button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-7,7); button.selection:SetPoint("BOTTOMRIGHT",7,-7); button.selection:Hide()
+ button.selection:SetVertexColor(.82,.18,1); button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-8,8); button.selection:SetPoint("BOTTOMRIGHT",8,-8); button.selection:Hide()
  button.appliedMark=button:CreateTexture(nil,"OVERLAY"); button.appliedMark:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
  button.appliedMark:SetWidth(16); button.appliedMark:SetHeight(16); button.appliedMark:SetPoint("BOTTOMRIGHT",-2,2); button.appliedMark:Hide()
  button.hideLabel=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); button.hideLabel:SetPoint("BOTTOM",0,4); button.hideLabel:SetTextColor(1,.82,0)
@@ -704,7 +718,7 @@ local function resetAppearanceButton(button)
  button.appearance=nil; button.entry=nil; button.selectionId=nil; button.applied=false; button.isHide=false
  button:SetAlpha(1); button:Enable(); button.icon:SetTexture(nil); button.icon:SetVertexColor(1,1,1,1)
  if button.icon.SetDesaturated then button.icon:SetDesaturated(false) end
- button.background:SetTexture(.025,.025,.025,.88); button.hideLabel:SetText("")
+ button.background:SetTexture(.012,.009,.007,.96); button.hideLabel:SetText("")
  button.selection:Hide(); button.appliedMark:Hide(); button:Hide()
 end
 local function renderCatalog()
@@ -714,16 +728,16 @@ local function renderCatalog()
   resetAppearanceButton(button)
   local column,row=(index-1)%ICONS_PER_ROW,math.floor((index-1)/ICONS_PER_ROW)
   local rowCount=math.min(ICONS_PER_ROW,#catalog-row*ICONS_PER_ROW)
-  local rowWidth=rowCount*ICON_SIZE+(rowCount-1)*ICON_GAP
+  local rowWidth=rowCount*ICON_WIDTH+(rowCount-1)*ICON_GAP
   local rowLeft=math.floor((CATALOG_WIDTH-rowWidth)/2+.5)
-  button:ClearAllPoints(); button:SetPoint("TOPLEFT",rowLeft+column*(ICON_SIZE+ICON_GAP),-row*(ICON_SIZE+ICON_GAP))
+  button:ClearAllPoints(); button:SetPoint("TOPLEFT",rowLeft+column*(ICON_WIDTH+ICON_GAP),-row*(ICON_HEIGHT+ICON_GAP))
   button.appearance,button.entry,button.selectionId,button.applied,button.isHide=appearance,appearance.entry,appearance.selection,appearance.applied,appearance.isHide
   button.icon:SetTexture(appearance.isHide and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or
       (GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"))
   button.hideLabel:SetText(appearance.isHide and "HIDE" or ""); button:Show()
  end
  local rows=math.ceil(#catalog/ICONS_PER_ROW)
- local contentHeight=rows>0 and rows*ICON_SIZE+(rows-1)*ICON_GAP or 0
+ local contentHeight=rows>0 and rows*ICON_HEIGHT+(rows-1)*ICON_GAP or 0
  NativeTransmogFrameBrowserPanelScrollChild:SetHeight(math.max(CATALOG_HEIGHT,contentHeight))
  NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(0)
  if #catalog==(canHide and 1 or 0) and not pending and hasPhysicalItem then setStatus("No compatible collected appearances for this slot.",false) end
@@ -866,13 +880,14 @@ end
 function NativeTransmog_OnLoad(frame)
  frame:RegisterForDrag("LeftButton"); frame:RegisterEvent("CHAT_MSG_ADDON")
  frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED"); frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+ frame:RegisterEvent("DISPLAY_SIZE_CHANGED"); frame:RegisterEvent("UI_SCALE_CHANGED")
  if RegisterAddonMessagePrefix then RegisterAddonMessagePrefix(PREFIX) end
  GameTooltip:HookScript("OnTooltipSetItem",NativeTransmog_GameTooltip_OnTooltipSetItem)
- UISpecialFrames[#UISpecialFrames+1]=frame:GetName(); NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot])
+ UISpecialFrames[#UISpecialFrames+1]=frame:GetName(); NativeTransmogFrameSlotTitle:SetText(SLOT_LABELS[selectedSlot]); updateWardrobeScale()
 end
 function NativeTransmog_OnShow()
  browserMode="APPEARANCES"
- updateEquipmentSlots(); NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
+ updateWardrobeScale(); updateEquipmentSlots(); NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
  if not slotIsUsable(selectedSlotId) or not slotHasItem(selectedSlotId) then NativeTransmog_SelectSlot(selectedSlotId)
  elseif authorizedToken then cursorHistory={}; requestCatalog(0); savedSetRefreshDue=GetTime()+.35
  else hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
@@ -998,7 +1013,10 @@ local function handleCustomMessage(command,fields)
  return false
 end
 function NativeTransmog_OnEvent(_,event,...)
- if event=="PLAYER_EQUIPMENT_CHANGED" then
+ if event=="DISPLAY_SIZE_CHANGED" or event=="UI_SCALE_CHANGED" then
+  updateWardrobeScale()
+  return
+ elseif event=="PLAYER_EQUIPMENT_CHANGED" then
   local changedInventorySlot=...
   for wireSlot=1,#SLOT_ORDER do
    local inventorySlot=getInventorySlot(wireSlot)
