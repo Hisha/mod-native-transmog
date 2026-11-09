@@ -455,15 +455,15 @@
             <Size x="32" y="20" /><Anchors><Anchor point="LEFT" relativeTo="NativeTransmogCollectionsFramePrevious" relativePoint="RIGHT"><Offset x="8" y="0" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_SetsNext();</OnClick></Scripts>
           </Button>
-          <Button name="$parentNew" inherits="UIPanelButtonTemplate" text="New Set">
+          <Button name="$parentNew" inherits="UIPanelButtonTemplate" text="New Set" hidden="true">
             <Size x="70" y="20" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="11" y="10" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_NewCustomSet();</OnClick></Scripts>
           </Button>
-          <Button name="$parentEdit" inherits="UIPanelButtonTemplate" text="Edit">
+          <Button name="$parentEdit" inherits="UIPanelButtonTemplate" text="Edit" hidden="true">
             <Size x="55" y="20" /><Anchors><Anchor point="LEFT" relativeTo="$parentNew" relativePoint="RIGHT"><Offset x="3" y="0" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_EditCustomSet();</OnClick></Scripts>
           </Button>
-          <Button name="$parentDelete" inherits="UIPanelButtonTemplate" text="Delete">
+          <Button name="$parentDelete" inherits="UIPanelButtonTemplate" text="Delete" hidden="true">
             <Size x="58" y="20" /><Anchors><Anchor point="LEFT" relativeTo="$parentEdit" relativePoint="RIGHT"><Offset x="3" y="0" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_DeleteCustomSet();</OnClick></Scripts>
           </Button>

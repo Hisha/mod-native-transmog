@@ -130,6 +130,25 @@ class PreviewAndUiContractTests(unittest.TestCase):
         self.assertEqual(XML.count('name="$parentModel"'), 2)  # existing NPC + Collections models only
         self.assertIn('local model=getCollectionModel(); model:SetUnit("player")', LUA)
 
+    def test_set_bottom_controls_are_mutually_exclusive_and_non_interactive_when_hidden(self):
+        helper = LUA[LUA.index("local function setInteractiveShown"):LUA.index("local function renderSets")]
+        self.assertIn("frame:EnableMouse(shown)", helper)
+        for frame in (
+            "NativeTransmogCollectionsFramePrevious",
+            "NativeTransmogCollectionsFrameNext",
+        ):
+            self.assertIn(f"setInteractiveShown({frame},predefined)", helper)
+        for frame in (
+            "NativeTransmogCollectionsFrameListPanelNew",
+            "NativeTransmogCollectionsFrameListPanelEdit",
+            "NativeTransmogCollectionsFrameListPanelDelete",
+        ):
+            self.assertIn(f"setInteractiveShown({frame},custom)", helper)
+        renderer = LUA[LUA.index("local function renderSets"):LUA.index("local function previewSet")]
+        self.assertIn("refreshSetBrowserControls()", renderer)
+        for name in ("$parentNew", "$parentEdit", "$parentDelete"):
+            self.assertRegex(XML, rf'<Button name="\{name}"[^>]* hidden="true">')
+
     def test_unspecified_slots_keep_current_preview_and_application_state(self):
         preview = LUA[LUA.index("local function previewSet"):LUA.index("local function createPieceRow")]
         self.assertIn("selectedSet.custom", preview)

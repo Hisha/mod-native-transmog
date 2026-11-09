@@ -138,6 +138,10 @@ local function setButtonEnabled(button, enabled)
  if enabled then button:Enable() else button:Disable() end
 end
 local function setShown(frame,shown) if shown then frame:Show() else frame:Hide() end end
+local function setInteractiveShown(frame,shown)
+ frame:EnableMouse(shown)
+ setShown(frame,shown)
+end
 function NativeTransmog_InitializeSingleLineEditBox(editBox)
  -- These controls are ordinary one-line InputBoxTemplate edit boxes.  A
  -- ScrollingEdit_OnUpdate handler is invalid here because it depends on the
@@ -203,6 +207,20 @@ local function refreshSetFilters()
   UIDropDownMenu_SetText(NativeTransmogCollectionsFrameListPanelFilter,({"All","Incomplete","Complete"})[setFilter+1])
  end
 end
+local function refreshSetBrowserControls()
+ local predefined=setSection=="PREDEFINED"
+ local custom=setSection=="CUSTOM" and not customEditing
+ setInteractiveShown(NativeTransmogCollectionsFramePrevious,predefined)
+ setInteractiveShown(NativeTransmogCollectionsFrameNext,predefined)
+ setInteractiveShown(NativeTransmogCollectionsFrameListPanelNew,custom)
+ setInteractiveShown(NativeTransmogCollectionsFrameListPanelEdit,custom)
+ setInteractiveShown(NativeTransmogCollectionsFrameListPanelDelete,custom)
+ setButtonEnabled(NativeTransmogCollectionsFramePrevious,predefined and #setHistory>0 and not setPagePending)
+ setButtonEnabled(NativeTransmogCollectionsFrameNext,predefined and setHasNext and not setPagePending)
+ setButtonEnabled(NativeTransmogCollectionsFrameListPanelEdit,custom and selectedSet and selectedSet.custom)
+ setButtonEnabled(NativeTransmogCollectionsFrameListPanelDelete,custom and selectedSet and selectedSet.custom)
+ setButtonEnabled(NativeTransmogCollectionsFrameListPanelNew,custom and customTotal<customMaximum)
+end
 local function renderSets()
  local visible={}
  for _,set in ipairs(setCatalog) do
@@ -223,10 +241,7 @@ local function renderSets()
  NativeTransmogCollectionsFrameProgressText:SetText(setSection=="CUSTOM" and (customTotal.." / "..customMaximum.." Saved") or (setOverallCollected.." / "..setOverallTotal))
  if setSection=="PREDEFINED" then refreshSetFilters() end
  setShown(NativeTransmogCollectionsFrameListPanelFilter,setSection=="PREDEFINED"); setShown(NativeTransmogCollectionsFrameSearchHint,true)
- setShown(NativeTransmogCollectionsFrameListPanelNew,setSection=="CUSTOM" and not customEditing); setShown(NativeTransmogCollectionsFrameListPanelEdit,setSection=="CUSTOM" and not customEditing); setShown(NativeTransmogCollectionsFrameListPanelDelete,setSection=="CUSTOM" and not customEditing)
- setButtonEnabled(NativeTransmogCollectionsFrameListPanelEdit,selectedSet and selectedSet.custom and not customEditing); setButtonEnabled(NativeTransmogCollectionsFrameListPanelDelete,selectedSet and selectedSet.custom and not customEditing); setButtonEnabled(NativeTransmogCollectionsFrameListPanelNew,customTotal<customMaximum and not customEditing)
- setButtonEnabled(NativeTransmogCollectionsFramePrevious,#setHistory>0 and not setPagePending)
- setButtonEnabled(NativeTransmogCollectionsFrameNext,setHasNext and not setPagePending)
+ refreshSetBrowserControls()
 end
 local function previewSet()
  local model=getCollectionModel(); model:SetUnit("player")
