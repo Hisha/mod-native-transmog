@@ -109,7 +109,7 @@
           <Size x="405" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="460" y="-47" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentHint" inherits="GameFontDisableSmall" justifyH="LEFT" justifyV="TOP"
-            text="Preview is local. Changes wait for server confirmation.">
+            text="Select an appearance to preview it. Apply saves it to this item.">
           <Size x="405" y="18" /><Anchors><Anchor point="TOPLEFT"><Offset x="460" y="-72" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentActual" inherits="GameFontHighlightSmall" justifyH="LEFT">
@@ -131,6 +131,18 @@
         <Anchors><Anchor point="TOPRIGHT"><Offset x="-5" y="-5" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmogFrame:Hide();</OnClick></Scripts>
       </Button>
+      <Frame name="$parentActualTooltip" enableMouse="true">
+        <Size x="405" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="460" y="-92" /></Anchor></Anchors>
+        <Scripts><OnEnter>NativeTransmog_StateLabel_OnEnter(self,"ACTUAL");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
+      </Frame>
+      <Frame name="$parentAppliedTooltip" enableMouse="true">
+        <Size x="405" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="460" y="-106" /></Anchor></Anchors>
+        <Scripts><OnEnter>NativeTransmog_StateLabel_OnEnter(self,"APPLIED");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
+      </Frame>
+      <Frame name="$parentPreviewTooltip" enableMouse="true">
+        <Size x="405" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="460" y="-120" /></Anchor></Anchors>
+        <Scripts><OnEnter>NativeTransmog_StateLabel_OnEnter(self,"PREVIEW");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
+      </Frame>
       <Frame name="$parentPreviewPanel">
         <Size x="420" y="452" />
         <Anchors><Anchor point="TOPLEFT"><Offset x="20" y="-45" /></Anchor></Anchors>
@@ -233,25 +245,63 @@
         </Backdrop>
         <Frames>
           <ScrollFrame name="$parentScroll" inherits="UIPanelScrollFrameTemplate">
-            <Size x="365" y="260" /><Anchors><Anchor point="TOPLEFT"><Offset x="10" y="-12" /></Anchor></Anchors>
-            <ScrollChild><Frame name="$parentChild"><Size x="365" y="260" /></Frame></ScrollChild>
+            <Size x="365" y="272" /><Anchors><Anchor point="TOPLEFT"><Offset x="10" y="-10" /></Anchor></Anchors>
+            <ScrollChild><Frame name="$parentChild"><Size x="365" y="272" /></Frame></ScrollChild>
           </ScrollFrame>
+          <Button name="$parentPending" hidden="true" enableMouse="true">
+            <Anchors>
+              <Anchor point="TOPLEFT"><Offset x="5" y="-5" /></Anchor>
+              <Anchor point="BOTTOMRIGHT"><Offset x="-5" y="5" /></Anchor>
+            </Anchors>
+            <Layers>
+              <Layer level="BACKGROUND">
+                <Texture name="$parentShade"><Color r="0" g="0" b="0" a="0.58" /><Anchors><Anchor point="TOPLEFT" /><Anchor point="BOTTOMRIGHT" /></Anchors></Texture>
+              </Layer>
+              <Layer level="OVERLAY">
+                <FontString name="$parentText" inherits="GameFontHighlight" text="Waiting for server...">
+                  <Anchors><Anchor point="CENTER"><Offset x="0" y="8" /></Anchor></Anchors>
+                </FontString>
+                <FontString name="$parentDetail" inherits="GameFontDisableSmall" text="Updating appearance catalog">
+                  <Anchors><Anchor point="TOP" relativeTo="$parentText" relativePoint="BOTTOM"><Offset x="0" y="-5" /></Anchor></Anchors>
+                </FontString>
+              </Layer>
+            </Layers>
+          </Button>
+          <Frame name="$parentEmpty" hidden="true">
+            <Anchors>
+              <Anchor point="TOPLEFT"><Offset x="18" y="-18" /></Anchor>
+              <Anchor point="BOTTOMRIGHT"><Offset x="-18" y="18" /></Anchor>
+            </Anchors>
+            <Layers><Layer level="ARTWORK">
+              <FontString name="$parentText" inherits="GameFontDisable" justifyH="CENTER" justifyV="MIDDLE">
+                <Size x="330" y="56" /><Anchors><Anchor point="CENTER" /></Anchors>
+              </FontString>
+            </Layer></Layers>
+          </Frame>
         </Frames>
       </Frame>
-      <Button name="$parentPrevious" inherits="UIPanelButtonTemplate" text="Previous">
-        <Size x="78" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-330" y="78" /></Anchor></Anchors>
+      <Button name="$parentPrevious" inherits="UIPanelButtonTemplate" text="&lt;">
+        <Size x="28" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-310" y="78" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_PreviousPage();</OnClick></Scripts>
       </Button>
-      <Button name="$parentNext" inherits="UIPanelButtonTemplate" text="Next">
-        <Size x="78" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-247" y="78" /></Anchor></Anchors>
+      <Frame name="$parentPage">
+        <Size x="76" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentPrevious" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
+        <Layers><Layer level="ARTWORK">
+          <FontString name="$parentText" inherits="GameFontHighlightSmall" text="Page 1">
+            <Anchors><Anchor point="CENTER" /></Anchors>
+          </FontString>
+        </Layer></Layers>
+      </Frame>
+      <Button name="$parentNext" inherits="UIPanelButtonTemplate" text="&gt;">
+        <Size x="28" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentPage" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_NextPage();</OnClick></Scripts>
       </Button>
       <Button name="$parentApply" inherits="UIPanelButtonTemplate" text="Apply Appearance">
-        <Size x="145" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-173" y="47" /></Anchor></Anchors>
+        <Size x="158" y="24" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-162" y="46" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_Apply();</OnClick></Scripts>
       </Button>
       <Button name="$parentRemove" inherits="UIPanelButtonTemplate" text="Remove Appearance">
-        <Size x="145" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-20" y="47" /></Anchor></Anchors>
+        <Size x="132" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-20" y="47" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_Remove();</OnClick></Scripts>
       </Button>
       <Frame name="$parentSavedSetDropDown" inherits="UIDropDownMenuTemplate" hidden="true">

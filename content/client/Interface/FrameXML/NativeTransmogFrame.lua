@@ -15,8 +15,11 @@ local cursorHistory, catalog, incomingCatalog, buttons = {}, {}, {}, {}
 local slotButtons, overrideStates = {}, {}
 local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
+local catalogMessage = nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
-local ICONS_PER_ROW, ICON_SIZE, ICON_GAP = 5, 52, 10
+local ICONS_PER_ROW, ICON_SIZE, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 5, 48, 8, 365, 272
+local GRID_WIDTH = ICONS_PER_ROW*ICON_SIZE+(ICONS_PER_ROW-1)*ICON_GAP
+local GRID_LEFT = math.floor((CATALOG_WIDTH-GRID_WIDTH)/2+.5)
 local browserMode, setFilter, setCursor, setNextCursor, setHasNext = "APPEARANCES", 0, 0, 0, false
 local setRequestId = 0
 local setHistory, setCatalog, incomingSets, selectedSet, setPieces = {}, {}, {}, nil, {}
@@ -123,16 +126,37 @@ local function slotHasItem(wireSlot)
  local inventorySlot = getInventorySlot(wireSlot)
  return inventorySlot and GetInventoryItemTexture("player", inventorySlot) ~= nil
 end
+local function shortItemLabel(entry, emptyText)
+ local label=itemLabel(entry,emptyText)
+ if string.len(label)<=46 then return label end
+ return string.sub(label,1,43).."..."
+end
 local function refreshStateLabels()
- NativeTransmogFrameActual:SetText("Equipped: " .. itemLabel(actualItem, "None"))
+ NativeTransmogFrameActual:SetText("Equipped: " .. shortItemLabel(actualItem, "None"))
+ NativeTransmogFrameActual:SetTextColor(.82,.82,.82)
  local applied="Original appearance"
  if hiddenApplied then applied="Hidden appearance"
  elseif overridePresent and (not appliedItem or appliedItem==0) then applied="Hidden appearance (disabled)"
- else applied=itemLabel(appliedItem,"Original appearance") end
+ else applied=shortItemLabel(appliedItem,"Original appearance") end
  NativeTransmogFrameApplied:SetText("Applied: " .. applied)
+ NativeTransmogFrameApplied:SetTextColor(.55,1,.62)
  local preview="Applied appearance"
- if selectedAppearance then preview=selectedAppearance.isHide and "Hidden appearance" or itemLabel(selectedAppearance.entry,"Applied appearance") end
+ if selectedAppearance then preview=selectedAppearance.isHide and "Hidden appearance" or shortItemLabel(selectedAppearance.entry,"Applied appearance") end
  NativeTransmogFramePreview:SetText("Preview: " .. preview)
+ if selectedAppearance then NativeTransmogFramePreview:SetTextColor(1,.82,0)
+ else NativeTransmogFramePreview:SetTextColor(.72,.72,.72) end
+end
+function NativeTransmog_StateLabel_OnEnter(frame,kind)
+ local entry=nil
+ if kind=="ACTUAL" then entry=actualItem
+ elseif kind=="APPLIED" then entry=appliedItem
+ elseif selectedAppearance and not selectedAppearance.isHide then entry=selectedAppearance.entry end
+ GameTooltip:SetOwner(frame,"ANCHOR_RIGHT")
+ if entry and entry>0 then GameTooltip:SetHyperlink("item:"..entry)
+ elseif kind=="APPLIED" and hiddenApplied then GameTooltip:SetText("Hidden appearance",.55,1,.62)
+ elseif kind=="PREVIEW" and selectedAppearance and selectedAppearance.isHide then GameTooltip:SetText("Hidden appearance",1,.82,0)
+ else GameTooltip:SetText(kind=="ACTUAL" and "No item equipped" or "Original appearance",.82,.82,.82) end
+ GameTooltip:Show()
 end
 local function setButtonEnabled(button, enabled)
  if enabled then button:Enable() else button:Disable() end
@@ -598,12 +622,28 @@ local function refreshSelection()
       button.isHide == selectedAppearance.isHide then button.selection:Show()
   else button.selection:Hide() end
   if button.applied then button.appliedMark:Show() else button.appliedMark:Hide() end
+  if pending then button:Disable() else button:Enable() end
  end
  setButtonEnabled(NativeTransmogFrameApply, authorizedToken and hasPhysicalItem and selectedAppearance and not pending)
  setButtonEnabled(NativeTransmogFrameRemove, authorizedToken and hasPhysicalItem and overridePresent and not pending)
  setButtonEnabled(NativeTransmogFramePrevious, authorizedToken and #cursorHistory > 0 and not pending)
  setButtonEnabled(NativeTransmogFrameNext, authorizedToken and hasNext and not pending)
+ setButtonEnabled(NativeTransmogFrameApplySavedSet,not pending)
+ for _,slotButton in pairs(slotButtons) do setButtonEnabled(slotButton,not pending) end
  NativeTransmogFrameApply:SetText(selectedAppearance and selectedAppearance.isHide and "Hide Appearance" or "Apply Appearance")
+ NativeTransmogFramePageText:SetText("Page "..(#cursorHistory+1))
+ NativeTransmogFrameBrowserPanelScrollChild:SetAlpha(pending and .35 or 1)
+ setShown(NativeTransmogFrameBrowserPanelPending,pending~=nil)
+ NativeTransmogFrameBrowserPanelPendingDetail:SetText(pending and pending.operation=="CAT" and
+     "Updating appearance catalog" or "Waiting for appearance change")
+ local showEmpty=not pending and catalogMessage and #catalog==0
+ NativeTransmogFrameBrowserPanelEmptyText:SetText(showEmpty and catalogMessage or "")
+ setShown(NativeTransmogFrameBrowserPanelEmpty,showEmpty and true or false)
+ local applyLabel=NativeTransmogFrameApply:GetFontString()
+ if applyLabel then
+  if NativeTransmogFrameApply:IsEnabled()==1 then applyLabel:SetTextColor(1,.82,0)
+  else applyLabel:SetTextColor(.5,.5,.5) end
+ end
  refreshStateLabels(); refreshEquipmentSelection()
 end
 
@@ -640,30 +680,42 @@ end
 local function createAppearanceButton(index)
  local button=CreateFrame("Button", "NativeTransmogAppearanceButton"..index, NativeTransmogFrameBrowserPanelScrollChild)
  button:SetWidth(ICON_SIZE); button:SetHeight(ICON_SIZE)
- button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetPoint("TOPLEFT",3,-3); button.icon:SetPoint("BOTTOMRIGHT",-3,3)
+ button.background=button:CreateTexture(nil,"BACKGROUND"); button.background:SetTexture(.025,.025,.025,.88); button.background:SetAllPoints(button)
+ button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetPoint("TOPLEFT",4,-4); button.icon:SetPoint("BOTTOMRIGHT",-4,4)
  button.icon:SetTexCoord(.08,.92,.08,.92)
+ button.border=button:CreateTexture(nil,"BORDER"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetAllPoints(button)
  button.highlight=button:CreateTexture(nil,"HIGHLIGHT"); button.highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
- button.highlight:SetBlendMode("ADD"); button.highlight:SetAllPoints(button)
- button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\CheckButtonHilight")
- button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-6,6); button.selection:SetPoint("BOTTOMRIGHT",6,-6); button.selection:Hide()
+ button.highlight:SetBlendMode("ADD"); button.highlight:SetPoint("TOPLEFT",2,-2); button.highlight:SetPoint("BOTTOMRIGHT",-2,2)
+ button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+ button.selection:SetVertexColor(1,.82,0); button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-7,7); button.selection:SetPoint("BOTTOMRIGHT",7,-7); button.selection:Hide()
  button.appliedMark=button:CreateTexture(nil,"OVERLAY"); button.appliedMark:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
- button.appliedMark:SetWidth(18); button.appliedMark:SetHeight(18); button.appliedMark:SetPoint("BOTTOMRIGHT",-2,2); button.appliedMark:Hide()
- button.hideLabel=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); button.hideLabel:SetPoint("BOTTOM",0,3)
+ button.appliedMark:SetWidth(16); button.appliedMark:SetHeight(16); button.appliedMark:SetPoint("BOTTOMRIGHT",-2,2); button.appliedMark:Hide()
+ button.hideLabel=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); button.hideLabel:SetPoint("BOTTOM",0,4); button.hideLabel:SetTextColor(1,.82,0)
  button:SetScript("OnClick",previewItem); button:SetScript("OnEnter",showAppearanceTooltip); button:SetScript("OnLeave",function() GameTooltip:Hide() end)
  buttons[index]=button; return button
 end
+local function resetAppearanceButton(button)
+ button.appearance=nil; button.entry=nil; button.selectionId=nil; button.applied=false; button.isHide=false
+ button:SetAlpha(1); button:Enable(); button.icon:SetTexture(nil); button.icon:SetVertexColor(1,1,1,1)
+ if button.icon.SetDesaturated then button.icon:SetDesaturated(false) end
+ button.background:SetTexture(.025,.025,.025,.88); button.hideLabel:SetText("")
+ button.selection:Hide(); button.appliedMark:Hide(); button:Hide()
+end
 local function renderCatalog()
+ for _,button in ipairs(buttons) do resetAppearanceButton(button) end
  for index,appearance in ipairs(catalog) do
   local button=buttons[index] or createAppearanceButton(index)
+  resetAppearanceButton(button)
   local column,row=(index-1)%ICONS_PER_ROW,math.floor((index-1)/ICONS_PER_ROW)
-  button:ClearAllPoints(); button:SetPoint("TOPLEFT",8+column*(ICON_SIZE+ICON_GAP),-8-row*(ICON_SIZE+ICON_GAP))
+  button:ClearAllPoints(); button:SetPoint("TOPLEFT",GRID_LEFT+column*(ICON_SIZE+ICON_GAP),-row*(ICON_SIZE+ICON_GAP))
   button.appearance,button.entry,button.selectionId,button.applied,button.isHide=appearance,appearance.entry,appearance.selection,appearance.applied,appearance.isHide
-  button.icon:SetTexture(appearance.isHide and "Interface\\Icons\\Spell_Shadow_EvilEye" or
+  button.icon:SetTexture(appearance.isHide and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or
       (GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"))
   button.hideLabel:SetText(appearance.isHide and "HIDE" or ""); button:Show()
  end
- for index=#catalog+1,#buttons do buttons[index].appearance=nil; buttons[index].entry=nil; buttons[index]:Hide() end
- NativeTransmogFrameBrowserPanelScrollChild:SetHeight(math.max(264,math.ceil(#catalog/ICONS_PER_ROW)*(ICON_SIZE+ICON_GAP)+8))
+ local rows=math.ceil(#catalog/ICONS_PER_ROW)
+ local contentHeight=rows>0 and rows*ICON_SIZE+(rows-1)*ICON_GAP or 0
+ NativeTransmogFrameBrowserPanelScrollChild:SetHeight(math.max(CATALOG_HEIGHT,contentHeight))
  NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(0)
  if #catalog==(canHide and 1 or 0) and not pending and hasPhysicalItem then setStatus("No compatible collected appearances for this slot.",false) end
  refreshSelection()
@@ -671,6 +723,7 @@ end
 local function clearCatalogForUnavailableSlot(message)
  snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}; cursorHistory={}
  actualItem=nil; appliedItem=nil; hiddenApplied=false; overridePresent=false; canHide=false; hasPhysicalItem=false
+ catalogMessage=message
  renderCatalog(); setStatus(message, false)
 end
 local function sendRequest(operation,tail)
@@ -684,7 +737,7 @@ end
 requestCatalog=function(newCursor)
  if not slotIsUsable(selectedSlotId) then clearCatalogForUnavailableSlot(unavailableSlotMessage(selectedSlotId)); return end
  if not slotHasItem(selectedSlotId) then clearCatalogForUnavailableSlot("Equip an item to customize this slot."); return end
- hasPhysicalItem=true; requestId=requestId+1; snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}
+ hasPhysicalItem=true; requestId=requestId+1; snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}; catalogMessage=nil
  cursor=newCursor or 0; hasNext=false; canHide=false; hiddenApplied=false; overridePresent=false; renderCatalog()
  sendRequest("CAT",requestId.."\t"..selectedSlotId.."\t"..cursor)
 end
@@ -795,7 +848,8 @@ function NativeTransmog_FrameUpdate()
  end
  if pending and GetTime()-pending.started>5 then
   local operation=pending.operation; pending=nil
-  refreshSelection()
+  if operation=="CAT" and #catalog==0 then catalogMessage="The appearance catalog did not respond. Try again."; renderCatalog()
+  else refreshSelection() end
   setStatus("Server unavailable or request timed out.",true)
  end
  if scheduledRefresh and GetTime()>=scheduledRefresh then scheduledRefresh=nil; requestCatalog(cursor) end
@@ -924,10 +978,11 @@ local function handleCustomMessage(command,fields)
  elseif command=="CUSTOMAPPLYPIECE" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest then
   if savedPreflight and fields[7]~="ok" then table.insert(savedPreflight.failures,(SLOT_ORDER[tonumber(fields[5])] or "Slot")..": "..(fields[7] or "incompatible")) end; return
  elseif command=="CUSTOMAPPLYEND" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest then
+  pending=nil; refreshSelection()
   if savedPreflight and savedPreflight.valid and savedSetNonce then StaticPopup_Show("NATIVE_TRANSMOG_APPLY_CUSTOM_SET",savedPreflight.name,savedPreflight.count)
   elseif savedPreflight then setStatus("Set cannot be applied: "..table.concat(savedPreflight.failures,"; "),true) end; return
  elseif command=="RESULT" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest and (fields[5]=="CUSTOMPREFLIGHT" or fields[5]=="CUSTOMCONFIRM") then
-  pending=nil; local result=fields[6] or "MALFORMED"; if result=="ok" then setStatus("Custom set applied.",false); updateEquipmentSlots(); scheduledRefresh=GetTime()+.30 else setStatus(RESULT_TEXT[result] or ("Custom set application failed: "..result),true) end; return true
+  pending=nil; refreshSelection(); local result=fields[6] or "MALFORMED"; if result=="ok" then setStatus("Custom set applied.",false); updateEquipmentSlots(); scheduledRefresh=GetTime()+.30 else setStatus(RESULT_TEXT[result] or ("Custom set application failed: "..result),true) end; return true
  elseif command=="RESULT" and fields[3]=="0" and tonumber(fields[4])==customRequestId then
   setStatus(RESULT_TEXT[fields[6]] or ("Custom set request failed: "..(fields[6] or "MALFORMED")),true); return true
  end
@@ -1031,6 +1086,7 @@ function NativeTransmog_OnEvent(_,event,...)
   table.insert(incomingCatalog,{selection=tonumber(fields[6]),entry=tonumber(fields[7]),applied=fields[8]=="1"})
  elseif command=="END" and tonumber(fields[4])==requestId and fields[5]==snapshotNonce then
   pending=nil; catalog=incomingCatalog; local collected=#catalog-(canHide and 1 or 0)
+  catalogMessage=#catalog==0 and "No compatible collected appearances for this slot." or nil
   setStatus(collected>0 and ("Page contains "..collected.." compatible appearances.") or "",false); renderCatalog()
  elseif command=="RESULT" and tonumber(fields[4])==requestId then
   pending=nil; local operation,result=fields[5],fields[6] or "MALFORMED"; local success=result=="ok"

@@ -29,12 +29,17 @@ local function Widget(name,parent,kind)
  local widget={name=name,parent=parent,kind=kind,textures={},scripts={},shown=true,enabled=true,normalTexture="Interface\\Buttons\\UI-Quickslot2"}
  function widget:SetWidth(v) self.width=v end
  function widget:SetHeight(v) self.height=v end
+ function widget:SetAlpha(v) self.alpha=v end
  function widget:SetPoint(...) self.point={...} end
+ function widget:ClearAllPoints() self.point=nil end
  function widget:SetAllPoints(v) self.allPoints=v or true end
  function widget:SetTexCoord(...) self.texCoord={...} end
  function widget:SetTexture(...) self.textureArgs={...}; self.texture=select(1,...) end
  function widget:SetBlendMode(v) self.blendMode=v end
  function widget:SetVertexColor(...) self.vertexColor={...} end
+ function widget:SetDesaturated(v) self.desaturated=v end
+ function widget:SetTextColor(...) self.textColor={...} end
+ function widget:SetText(v) self.text=v end
  function widget:SetJustifyH(v) self.justifyH=v end
  function widget:SetHighlightTexture(v,m) self.highlightTexture=v; self.highlightMode=m end
  function widget:SetNormalTexture(v) self.normalTexture=v; self.normalTextureCalls=(self.normalTextureCalls or 0)+1 end
@@ -43,6 +48,8 @@ local function Widget(name,parent,kind)
  function widget:CreateFontString(_,layer,template) local v=Widget(nil,self,"FontString"); v.layer=layer; v.template=template; return v end
  function widget:Hide() self.shown=false end
  function widget:Show() self.shown=true end
+ function widget:Enable() self.enabled=true end
+ function widget:Disable() self.enabled=false end
  function widget:GetID() return self.id end
  function widget:GetName() return self.name end
  return widget
@@ -62,9 +69,18 @@ NativeTransmogCollectionsFramePieceBar=Widget("PieceBar")
 NativeTransmogCollectionsFrameItemsPanelCategoryBar=Widget("CategoryBar")
 NativeTransmogCollectionsFrameItemsGridScrollChild=Widget("ItemsGrid")
 NativeTransmogFrameBrowserPanelScrollChild=Widget("AppearanceGrid")
+NativeTransmogFrameBrowserPanelScroll=Widget("AppearanceScroll")
+function NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(v) self.verticalScroll=v end
 setRows, pieceRows, itemCategoryButtons, itemRows, buttons, slotButtons = {}, {}, {}, {}, {}, {}
 ITEM_CATEGORIES={{label="Head",icon="Interface\\Icons\\INV_Helmet_03"}}
-ICONS_PER_ROW,ICON_SIZE,ICON_GAP=5,52,10
+ICONS_PER_ROW,ICON_SIZE,ICON_GAP=5,48,8
+CATALOG_WIDTH,CATALOG_HEIGHT=365,272
+GRID_WIDTH=ICONS_PER_ROW*ICON_SIZE+(ICONS_PER_ROW-1)*ICON_GAP
+GRID_LEFT=math.floor((CATALOG_WIDTH-GRID_WIDTH)/2+.5)
+catalog={}; canHide=false; pending=nil; hasPhysicalItem=true
+function GetItemIcon(entry) return "icon:"..entry end
+function refreshSelection() end
+function setStatus() end
 function requestSetDetail() end
 function NativeTransmog_SelectItemCategory() end
 function previewItem() end
@@ -101,17 +117,57 @@ function updateEquipmentSlot() end
         item = frames[3]
         self.assertIn(r"Interface\Buttons\ButtonHilight-Square", self.textures(item))
 
-    def test_application_appearance_constructor_keeps_states_without_quickslot(self):
+    def test_application_appearance_constructor_keeps_stock_visual_states(self):
         snippet = section("local function createAppearanceButton", "local function renderCatalog")
         self.lua.execute(snippet.replace("local function", "function"))
         button = self.lua.globals().createAppearanceButton(1)
         textures = self.textures(button)
-        self.assertNotIn(QUICKSLOT, textures)
+        self.assertIn(QUICKSLOT, textures)
         self.assertIn(r"Interface\Buttons\ButtonHilight-Square", textures)
-        self.assertIn(r"Interface\Buttons\CheckButtonHilight", textures)
+        self.assertIn(r"Interface\Buttons\UI-ActionButton-Border", textures)
         self.assertIn(r"Interface\RaidFrame\ReadyCheck-Ready", textures)
         self.assertIsNotNone(button.scripts["OnEnter"])
         self.assertIsNotNone(button.scripts["OnClick"])
+
+    def test_application_grid_fits_normal_page_scrolls_oversize_and_resets_recycled_state(self):
+        snippet = section("local function createAppearanceButton", "local function clearCatalogForUnavailableSlot")
+        self.lua.execute(snippet.replace("local function", "function"))
+        globals_ = self.lua.globals()
+
+        normal = self.lua.table()
+        for index in range(1, 26):
+            normal[index] = self.lua.table_from({
+                "selection": index - 1,
+                "entry": 1000 + index,
+                "applied": index == 2,
+                "isHide": index == 1,
+            })
+        globals_.catalog = normal
+        globals_.renderCatalog()
+        self.assertEqual(globals_.NativeTransmogFrameBrowserPanelScrollChild.height, 272)
+
+        first = globals_.buttons[1]
+        first.selection.Show(first.selection)
+        first.appliedMark.Show(first.appliedMark)
+        first.SetAlpha(first, 0.2)
+        first.icon.SetDesaturated(first.icon, True)
+
+        oversized = self.lua.table()
+        for index in range(1, 38):
+            oversized[index] = self.lua.table_from({
+                "selection": index,
+                "entry": 2000 + index,
+                "applied": False,
+                "isHide": False,
+            })
+        globals_.catalog = oversized
+        globals_.renderCatalog()
+        self.assertEqual(globals_.NativeTransmogFrameBrowserPanelScrollChild.height, 440)
+        self.assertFalse(first.selection.shown)
+        self.assertFalse(first.appliedMark.shown)
+        self.assertEqual(first.alpha, 1)
+        self.assertFalse(first.icon.desaturated)
+        self.assertFalse(first.isHide)
 
     def test_equipment_slot_load_clears_inherited_normal_texture(self):
         snippet = section("function NativeTransmog_EquipmentSlot_OnLoad", "function NativeTransmog_EquipmentSlot_OnClick")

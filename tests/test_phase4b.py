@@ -70,11 +70,11 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertIn("$parentSelection", template)
         self.assertNotIn("<NormalTexture", template)
 
-    def test_appearance_choices_have_clean_icons_and_keep_hover_selection_tooltips(self):
+    def test_appearance_choices_have_stock_borders_and_keep_hover_selection_tooltips(self):
         appearance = LUA[LUA.index("local function createAppearanceButton"):
                          LUA.index("local function renderCatalog")]
-        self.assertNotIn("UI-Quickslot2", appearance)
-        self.assertNotIn("button.border", appearance)
+        self.assertIn("UI-Quickslot2", appearance)
+        self.assertIn("button.border", appearance)
         self.assertIn('button.highlight=button:CreateTexture(nil,"HIGHLIGHT")', appearance)
         self.assertIn('button.selection=button:CreateTexture(nil,"OVERLAY")', appearance)
         self.assertIn('button:SetScript("OnEnter",showAppearanceTooltip)', appearance)
