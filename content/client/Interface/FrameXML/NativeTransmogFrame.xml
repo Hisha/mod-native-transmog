@@ -97,15 +97,13 @@
       <EdgeSize><AbsValue val="32" /></EdgeSize>
     </Backdrop>
     <Layers>
-      <Layer level="BORDER">
+      <Layer level="ARTWORK">
         <Texture name="$parentHeader" file="Interface\DialogFrame\UI-DialogBox-Header">
           <Size x="420" y="64" />
           <Anchors><Anchor point="TOP"><Offset x="0" y="12" /></Anchor></Anchors>
         </Texture>
-      </Layer>
-      <Layer level="ARTWORK">
         <FontString name="$parentTitle" inherits="GameFontNormal" text="WARDROBE">
-          <Anchors><Anchor point="TOP"><Offset x="0" y="-8" /></Anchor></Anchors>
+          <Anchors><Anchor point="TOP" relativeTo="$parentHeader"><Offset x="0" y="-14" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentSlotTitle" inherits="GameFontNormalLarge" justifyH="LEFT">
           <Size x="405" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="460" y="-47" /></Anchor></Anchors>

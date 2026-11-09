@@ -25,6 +25,16 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertEqual(templates[0].attrib.get("inherits"), "ItemButtonTemplate")
         self.assertNotIn('inherits="PaperDollItemSlotButtonTemplate"', XML)
 
+    def test_wardrobe_title_uses_native_grey_dialog_header_geometry(self):
+        wardrobe = XML[XML.index('<Frame name="NativeTransmogFrame"'):
+                       XML.index('<Frame name="NativeTransmogCollectionsFrame"')]
+        self.assertIn('<Layer level="ARTWORK">\n        <Texture name="$parentHeader" '
+                      'file="Interface\\DialogFrame\\UI-DialogBox-Header">', wardrobe)
+        self.assertIn('<Anchor point="TOP" relativeTo="$parentHeader">'
+                      '<Offset x="0" y="-14" /></Anchor>', wardrobe)
+        self.assertIn(r'edgeFile="Interface\DialogFrame\UI-DialogBox-Border"', wardrobe)
+        self.assertNotIn("UI-DialogBox-Gold-Border", wardrobe)
+
     def test_named_rectangular_slot_panel_is_replaced_by_fourteen_icons(self):
         self.assertNotIn("$parentSlotPanel", XML)
         self.assertNotRegex(XML, r'inherits="UIPanelButtonTemplate" id="(?:[1-9]|1[0-4])"')
