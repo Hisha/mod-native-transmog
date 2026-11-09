@@ -22,6 +22,8 @@ local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
 -- to one head tile until its camera, loading, and cost are verified on PTR.
 local portraitPrototypeEnabled = false
 local portraitPrototypeModel, portraitPrototypeButton, portraitPrototypeEntry = nil, nil, nil
+local portraitPrototypeCameraUntil = nil
+local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE, PORTRAIT_MODEL_Y = .25, 1.80, -.13
 -- The retail reconstruction keeps a fixed six-by-three viewport. Configured
 -- catalog pages larger than 18 continue in the existing scroll child.
 local ICONS_PER_ROW, ICON_WIDTH, ICON_HEIGHT, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 6, 84, 111, 10, 566, 353
@@ -739,35 +741,56 @@ local function resetAppearanceButton(button)
  button:SetAlpha(1); button:Enable(); button.icon:SetTexture(nil); button.icon:SetVertexColor(1,1,1,1)
  if button.icon.SetDesaturated then button.icon:SetDesaturated(false) end
  button.background:SetTexture(.012,.009,.007,.96); button.hideLabel:SetText("")
- if button.portraitModel then button.portraitModel:Hide() end
+ if button.portraitModel then button.portraitModel:Hide(); button.portraitModel=nil end
  button.selection:Hide(); button.appliedMark:Hide(); button:Hide()
 end
+local function resetPortraitPrototypeCamera(model)
+ -- SetUnit can finish its native model/camera initialization after the Lua
+ -- call returns. Reassert this build-12340-only preset briefly on activation.
+ model:SetCamera(0)
+ model:SetFacing(0); model:SetRotation(0)
+ model:SetModelScale(PORTRAIT_MODEL_SCALE)
+ model:SetPosition(0,PORTRAIT_MODEL_Y,0)
+end
 local function hidePortraitPrototype()
- if portraitPrototypeModel then portraitPrototypeModel:Hide() end
+ portraitPrototypeCameraUntil=nil
+ if portraitPrototypeButton then portraitPrototypeButton.portraitModel=nil end
+ if portraitPrototypeModel then portraitPrototypeModel:Hide(); portraitPrototypeModel:ClearModel() end
  portraitPrototypeButton=nil; portraitPrototypeEntry=nil
 end
 local function renderPortraitPrototype(button)
  if not portraitPrototypeEnabled or selectedSlotId~=1 or not button or button.isHide or not button.entry then return false end
  if not portraitPrototypeModel then
-  portraitPrototypeModel=CreateFrame("DressUpModel","NativeTransmogPortraitPrototypeModel",button)
-  portraitPrototypeModel:SetAllPoints(button.icon)
-  portraitPrototypeModel:EnableMouse(false)
+  portraitPrototypeModel=NativeTransmogPortraitPrototypeModel
  end
- portraitPrototypeModel:SetParent(button)
- portraitPrototypeModel:ClearAllPoints(); portraitPrototypeModel:SetAllPoints(button.icon)
+ portraitPrototypeCameraUntil=nil
+ portraitPrototypeModel:Hide(); portraitPrototypeModel:ClearModel()
+ -- The model is deliberately not parented to the button or ScrollChild. Old
+ -- clients do not reliably clip 3-D widgets in that hierarchy. Its explicit
+ -- 84x111 viewport is a BrowserPanel child anchored over exactly one tile.
+ portraitPrototypeModel:SetParent(NativeTransmogFrameBrowserPanel)
+ portraitPrototypeModel:ClearAllPoints()
+ portraitPrototypeModel:SetPoint("TOPLEFT",button,"TOPLEFT",0,0)
+ portraitPrototypeModel:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",0,0)
+ portraitPrototypeModel:SetFrameLevel(button:GetFrameLevel()+1)
  button.portraitModel=portraitPrototypeModel; portraitPrototypeButton=button; portraitPrototypeEntry=button.entry
- -- GetItemInfo initiates the normal item-cache query. TryOn is still attempted
- -- immediately because already-cached entries need no event round trip.
- GetItemInfo(button.entry)
+ -- A resolved item link is the input used by Blizzard's 3.3.5 DressUpFrame.
+ -- If it is not cached yet, the icon remains authoritative until the matching
+ -- GET_ITEM_INFO_RECEIVED event retries this complete initialization.
+ local _,itemLink=GetItemInfo(button.entry)
+ if not itemLink then return true end
  portraitPrototypeModel:SetUnit("player")
  portraitPrototypeModel:Undress()
- portraitPrototypeModel:TryOn(button.entry)
- portraitPrototypeModel:SetCamera(0)
- portraitPrototypeModel:SetFacing(0)
- portraitPrototypeModel:SetModelScale(1.80)
- portraitPrototypeModel:SetPosition(0,-0.13,0)
+ portraitPrototypeModel:TryOn(itemLink)
  portraitPrototypeModel:Show()
+ resetPortraitPrototypeCamera(portraitPrototypeModel)
+ portraitPrototypeCameraUntil=GetTime()+PORTRAIT_CAMERA_SECONDS
  return true
+end
+function NativeTransmog_PortraitPrototype_OnUpdate(model)
+ if not portraitPrototypeCameraUntil or model~=portraitPrototypeModel or not model:IsShown() then return end
+ resetPortraitPrototypeCamera(model)
+ if GetTime()>=portraitPrototypeCameraUntil then portraitPrototypeCameraUntil=nil end
 end
 local function renderCatalog()
  hidePortraitPrototype()
@@ -954,9 +977,13 @@ function NativeTransmog_OnShow()
  updateWardrobeScale(); updateEquipmentSlots(); NativeTransmog_ResetPreview(); PlaySound("igCharacterInfoOpen")
  if not slotIsUsable(selectedSlotId) or not slotHasItem(selectedSlotId) then NativeTransmog_SelectSlot(selectedSlotId)
  elseif authorizedToken then cursorHistory={}; requestCatalog(0); savedSetRefreshDue=GetTime()+.35
- else hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true) end
+ else
+  hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true)
+  if portraitPrototypeEnabled and #catalog>0 then renderCatalog() end
+ end
 end
 function NativeTransmog_OnHide()
+ hidePortraitPrototype()
  NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil; savedSetNextCursor=0; savedSetHasNext=false; savedSetRefreshDue=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end

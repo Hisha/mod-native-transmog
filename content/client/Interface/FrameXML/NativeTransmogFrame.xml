@@ -272,6 +272,15 @@
             <Size x="586" y="353" /><Anchors><Anchor point="TOPLEFT"><Offset x="0" y="0" /></Anchor></Anchors>
             <ScrollChild><Frame name="$parentChild"><Size x="566" y="353" /></Frame></ScrollChild>
           </ScrollFrame>
+          <!-- Build 12340 does not expose SetClipsChildren, and model widgets
+               are not reliable children of a ScrollFrame's clipped child.
+               Keep the single prototype viewport owned by the fixed browser
+               panel; Lua anchors it over the selected first Head tile. -->
+          <DressUpModel name="NativeTransmogPortraitPrototypeModel" hidden="true" enableMouse="false">
+            <Size x="84" y="111" />
+            <Anchors><Anchor point="TOPLEFT" /></Anchors>
+            <Scripts><OnUpdate>NativeTransmog_PortraitPrototype_OnUpdate(self, elapsed);</OnUpdate></Scripts>
+          </DressUpModel>
           <Button name="$parentPending" hidden="true" enableMouse="true">
             <Anchors>
               <Anchor point="TOPLEFT"><Offset x="5" y="-5" /></Anchor>
