@@ -249,8 +249,9 @@ bool CollectionService::Unlock(Player* player, ItemTemplate const* itemTemplate,
                 sourceEnabled = true;
                 break;
             case AcquisitionSource::DisenchantRoll:
-                // Historical provenance only. The stock PTR core has no hook
-                // that can safely produce this acquisition source.
+                // The Playerbot ServerScript packet hook observes the final,
+                // server-authored Disenchant winner notification.
+                sourceEnabled = true;
                 break;
         }
         if (!_config.enabled || !sourceEnabled || !_databaseAvailable)
@@ -312,7 +313,7 @@ std::uint32_t CollectionService::UnlockBatch(Player* player,
     CollectionOwner owner;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        bool sourceEnabled = source == AcquisitionSource::DisenchantRoll ? false :
+        bool sourceEnabled = source == AcquisitionSource::DisenchantRoll ? true :
             source == AcquisitionSource::QuestCompletion ? _config.unlockAllQuestRewards :
             source == AcquisitionSource::QuestBackfill ? _config.questBackfillEnabled :
             source == AcquisitionSource::Equipment ? true : _config.unlockOnAcquire;

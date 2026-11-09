@@ -1,6 +1,7 @@
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogModule.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogService.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogCollection.cpp")
+AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogDisenchant.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogQuestCollection.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogApplication.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/NativeTransmogWardrobe.cpp")

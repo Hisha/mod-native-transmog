@@ -1,6 +1,7 @@
 #include "NativeTransmogApplication.h"
 #include "NativeTransmogCollection.h"
 #include "NativeTransmogCustomSet.h"
+#include "NativeTransmogDisenchant.h"
 #include "NativeTransmogQuestCollection.h"
 #include "NativeTransmogProtocol.h"
 #include "NativeTransmogService.h"
@@ -714,6 +715,7 @@ void AddNativeTransmogModuleScripts()
     new NativeTransmogWorldScript();
     new NativeTransmogCreatureScript();
     new NativeTransmogPlayerScript();
+    AddNativeTransmogDisenchantScript();
     new NativeTransmogGlobalScript();
     new NativeTransmogCommandScript();
 }

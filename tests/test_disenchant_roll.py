@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PTR-compatible group-roll integration and Disenchant limitations."""
+"""Playerbot packet-hook integration for successful Disenchant rolls."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = (ROOT / "src/NativeTransmogModule.cpp").read_text(encoding="utf-8")
+DISENCHANT = (ROOT / "src/NativeTransmogDisenchant.cpp").read_text(encoding="utf-8")
 COLLECTION_H = (ROOT / "src/NativeTransmogCollection.h").read_text(encoding="utf-8")
 
 CORE_ROOT = Path(os.environ.get(
@@ -40,7 +41,11 @@ class DisenchantCoreIntegrationTests(unittest.TestCase):
         player_h = CORE_ROOT / "src/server/game/Scripting/ScriptDefines/PlayerScript.h"
         player_cpp = CORE_ROOT / "src/server/game/Scripting/ScriptDefines/PlayerScript.cpp"
         manager_h = CORE_ROOT / "src/server/game/Scripting/ScriptMgr.h"
-        if not all(path.exists() for path in (group, player_h, player_cpp, manager_h)):
+        server_h = CORE_ROOT / "src/server/game/Scripting/ScriptDefines/ServerScript.h"
+        session_cpp = CORE_ROOT / "src/server/game/Server/WorldSession.cpp"
+        if not all(path.exists() for path in (
+            group, player_h, player_cpp, manager_h, server_h, session_cpp
+        )):
             raise unittest.SkipTest(
                 "set AZEROTHCORE_SOURCE_DIR to the Playerbot source tree"
             )
@@ -48,6 +53,8 @@ class DisenchantCoreIntegrationTests(unittest.TestCase):
         cls.player_h = committed_text(player_h)
         cls.player_cpp = committed_text(player_cpp)
         cls.manager_h = committed_text(manager_h)
+        cls.server_h = committed_text(server_h)
+        cls.session_cpp = committed_text(session_cpp)
 
     def test_disenchant_branch_has_no_reward_hook(self) -> None:
         branch = self.group[self.group.index("else if (rollvote == DISENCHANT)"):]
@@ -71,15 +78,61 @@ class DisenchantCoreIntegrationTests(unittest.TestCase):
         self.assertIn("void OnPlayerStoreNewItem", MODULE)
         self.assertIn("AcquisitionSource::NewItem", MODULE)
 
+    def test_winner_packet_contains_final_disenchant_identity(self) -> None:
+        sender = self.group[
+            self.group.index("void Group::SendLootRollWon"):
+            self.group.index("void Group::SendLootAllPassed")
+        ]
+        for field in (
+            "roll.itemid", "targetGuid", "rollNumber", "rollType"
+        ):
+            self.assertIn(field, sender)
 
-class DisenchantModulePolicyTests(unittest.TestCase):
-    def test_module_has_no_unsupported_hook_dependency(self) -> None:
+        greed_resolution = self.group[
+            self.group.index("if (roll->totalNeed == 0 && roll->totalGreed > 0)"):
+            self.group.index("if (roll->totalNeed == 0 && roll->totalGreed == 0)")
+        ]
+        notification = "SendLootRollWon(roll->itemGUID, maxguid, maxresul, rollvote, *roll);"
+        self.assertIn(notification, greed_resolution)
+        self.assertLess(
+            greed_resolution.index(notification),
+            greed_resolution.index("else if (rollvote == DISENCHANT)")
+        )
+
+    def test_server_packet_hook_runs_before_socket_dispatch(self) -> None:
+        self.assertIn(
+            "virtual void OnPacketSent(WorldSession*", self.server_h
+        )
+        send = self.session_cpp[
+            self.session_cpp.index("void WorldSession::SendPacket"):
+            self.session_cpp.index("void WorldSession::QueuePacket")
+        ]
+        hook = "sScriptMgr->OnPacketSent(this, *packet);"
+        self.assertIn(hook, send)
+        self.assertLess(send.index(hook), send.index("if (!m_Socket)"))
+        self.assertLess(send.index(hook), send.index("m_Socket->SendPacket(*packet)"))
+
+
+class DisenchantModuleIntegrationTests(unittest.TestCase):
+    def test_module_uses_supported_server_hook(self) -> None:
         self.assertNotIn("PLAYERHOOK_ON_GROUP_ROLL_" + "DISENCHANT", MODULE)
         self.assertNotIn("OnPlayerGroupRoll" + "Disenchant", MODULE)
+        self.assertIn("SERVERHOOK_ON_PACKET_SENT", DISENCHANT)
+        self.assertIn("void OnPacketSent(WorldSession* session", DISENCHANT)
+        self.assertIn("AddNativeTransmogDisenchantScript()", MODULE)
 
-    def test_historical_source_value_remains_reserved(self) -> None:
+    def test_packet_is_attributed_only_to_authenticated_winner(self) -> None:
+        self.assertIn("packet.GetOpcode() != SMSG_LOOT_ROLL_WON", DISENCHANT)
+        self.assertIn("packet.size() != 34", DISENCHANT)
+        self.assertIn("winner = session->GetPlayer()", DISENCHANT)
+        self.assertIn("winnerGuid == winner->GetGUID()", DISENCHANT)
+        self.assertIn("rollType == ROLL_DISENCHANT", DISENCHANT)
+        self.assertIn("rollNumber >= 1 && rollNumber <= 100", DISENCHANT)
+
+    def test_original_item_uses_shared_collection_service(self) -> None:
         self.assertIn("DisenchantRoll = 7", COLLECTION_H)
-        self.assertNotIn("AcquisitionSource::DisenchantRoll", MODULE)
+        self.assertIn("sObjectMgr->GetItemTemplate(itemEntry)", DISENCHANT)
+        self.assertIn("AcquisitionSource::DisenchantRoll", DISENCHANT)
 
 
 if __name__ == "__main__":

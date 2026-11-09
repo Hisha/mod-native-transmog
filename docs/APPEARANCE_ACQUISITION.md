@@ -15,22 +15,22 @@ second collection store or eligibility implementation.
   quest rewards after core reward delivery, then uses the same service.
 - Need and Greed group-roll wins create and store the original item; the normal
   `STORE_NEW_ITEM` path therefore collects them.
-- Playerbot revision `8a4e76eac8c4ccebf547113afe7b51d6c3e91641` does not expose a supported
-  script callback for a successful Disenchant roll. Its
-  `PLAYERHOOK_ON_GROUP_ROLL_REWARD_ITEM` calls are confined to the Need and
-  Greed branches. The Disenchant branch knows both the winner and original item,
-  but converts the item directly into enchanting loot without invoking a public
-  hook that carries both values.
+- Playerbot revision `e7e2e288e7d9ec30e2dfe6f417178a95986fcbb2` exposes
+  `ServerScript::OnPacketSent`. The final server-authored `SMSG_LOOT_ROLL_WON`
+  packet carries the original item entry, winner GUID, winning roll, and roll
+  type. The module handles only roll type `DISENCHANT` and only on the winning
+  player's own authenticated session, then passes the original item template to
+  `CollectionService::Unlock` with `AcquisitionSource::DisenchantRoll`.
+- `PLAYERHOOK_ON_GROUP_ROLL_REWARD_ITEM` remains confined to Need and Greed.
+  Disenchant conversion does not create the original item, so the packet hook is
+  the only active Disenchant path. Material item-acquisition callbacks are not
+  used to infer the destroyed appearance.
 
-The item-acquisition hooks invoked by material generation identify only the
-enchanting materials. Inferring the destroyed appearance from those materials
-is ambiguous and is therefore intentionally not attempted. Disenchant-roll
-appearance acquisition remains pending a suitable interface in the target
-core; selecting or winning Disenchant currently produces no collection call.
-
-`AcquisitionSource::DisenchantRoll` remains reserved solely so collection rows
-created by earlier deployments with a custom core patch retain readable
-provenance. There is no active module path that writes this source on PTR.
+The winner packet is emitted synchronously after the roll winner and vote type
+are finalized, immediately before the core consumes the original item and
+generates enchanting loot. Network delivery is not acquisition authority: the
+module observes the server-authored result before socket dispatch, including for
+client-less Playerbot sessions.
 
 ## Eligibility and deduplication
 
