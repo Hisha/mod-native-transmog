@@ -11,39 +11,16 @@
 #include "Player.h"
 #include "SharedDefines.h"
 #include "ScriptMgr.h"
-#include "api/ContentResourceApiV1.h"
 
 #include <algorithm>
 #include <string>
-
 namespace native_transmog
 {
 namespace
 {
-constexpr char ContentPackage[] = "mod-native-transmog";
-constexpr char DedicatedCreatureSymbol[] = "dedicated-transmogrifier";
+constexpr std::uint32_t NativeWarpweaverEntry = 14999992;
 constexpr std::uint32_t SessionValidationIntervalMs = 500;
 constexpr std::uint32_t SessionLifetimeMs = 300000;
-
-ContentResourcesV1::Provider const* FindContentProvider(std::string& reason)
-{
-    ContentResourcesV1::Provider const* provider = nullptr;
-    for (auto const& script : ScriptRegistry<WorldScript>::ScriptPointerList)
-    {
-        auto const* candidate = dynamic_cast<ContentResourcesV1::Provider const*>(script.second);
-        if (!candidate)
-            continue;
-        if (provider)
-        {
-            reason = "multiple ContentResourceApiV1 providers are registered";
-            return nullptr;
-        }
-        provider = candidate;
-    }
-    if (!provider)
-        reason = "Content Manager resource provider is not registered";
-    return provider;
-}
 }
 
 Service& Service::Instance()
@@ -69,29 +46,7 @@ bool Service::ResolveDedicatedTemplate()
     _dedicatedCreatureEntry = 0;
     if (!_config.defaultNpcEnabled)
         return false;
-
-    std::string reason;
-    ContentResourcesV1::Provider const* provider = FindContentProvider(reason);
-    if (!provider)
-    {
-        LOG_ERROR("module.native_transmog",
-            "Dedicated Transmogrifier resource is unavailable: {}.", reason);
-        return false;
-    }
-
-    std::uint32_t entry = 0;
-    ContentResourcesV1::Result result = provider->ResolveResource(ContentPackage,
-        DedicatedCreatureSymbol, "creature-template.id", entry, reason);
-    if (result != ContentResourcesV1::Result::Ready || !entry)
-    {
-        LOG_ERROR("module.native_transmog",
-            "Dedicated Transmogrifier resource {}/{} is unavailable: {}.",
-            ContentPackage, DedicatedCreatureSymbol,
-            reason.empty() ? "Content Manager did not return Ready" : reason);
-        return false;
-    }
-
-    _dedicatedCreatureEntry = entry;
+    _dedicatedCreatureEntry = NativeWarpweaverEntry;
     return ValidateDedicatedTemplate();
 }
 
@@ -104,24 +59,26 @@ bool Service::ValidateDedicatedTemplate()
     if (!creatureTemplate)
     {
         LOG_ERROR("module.native_transmog",
-            "Managed Transmogrifier template {} is not loaded; activate/apply the EPF and restart worldserver.",
+            "Native Warpweaver template {} is not loaded; apply the module world database update and restart worldserver.",
             _dedicatedCreatureEntry);
         return false;
     }
 
-    bool const expectedTemplate = creatureTemplate->Name == "Transmogrifier" &&
-        creatureTemplate->SubName == "Wardrobe Specialist" &&
+    bool const expectedTemplate = creatureTemplate->Name == "Warpweaver" &&
+        creatureTemplate->SubName == "Transmogrifier" &&
         creatureTemplate->minlevel == 80 && creatureTemplate->maxlevel == 80 &&
         creatureTemplate->faction == 35 && creatureTemplate->npcflag == UNIT_NPC_FLAG_GOSSIP &&
         creatureTemplate->unit_flags == 0 && creatureTemplate->type_flags == 0 &&
         creatureTemplate->AIName.empty() && creatureTemplate->ScriptID == 0 &&
         creatureTemplate->Models.size() == 1 &&
-        creatureTemplate->Models.front().CreatureDisplayID == 25615;
+        creatureTemplate->Models.front().CreatureDisplayID == 19646 &&
+        creatureTemplate->Models.front().DisplayScale == 1.0f &&
+        creatureTemplate->Models.front().Probability == 1.0f;
     if (!expectedTemplate)
     {
         LOG_ERROR("module.native_transmog",
-            "Managed creature entry {} ('{}') does not match the ACTIVE/APPLIED Transmogrifier template/model; "
-            "the dedicated service is disabled until content is reapplied and worldserver restarted.",
+            "Native creature entry {} ('{}') does not match the installed Warpweaver template/model; "
+            "the dedicated service is disabled until the world database is repaired and worldserver restarted.",
             _dedicatedCreatureEntry, creatureTemplate->Name);
         return false;
     }

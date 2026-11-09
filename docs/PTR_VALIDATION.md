@@ -9,7 +9,7 @@ This procedure targets the separate PTR AzerothCore installation and databases. 
 ## Stage server, SQL, and client content
 
 1. Confirm the target core is the intended Playerbot PTR checkout and production is not active.
-2. Install this repository at `<PTR_CORE>/modules/mod-native-transmog`. Do not remove, disable, reconfigure, or migrate `mod-transmog`.
+2. Install this repository at `<PTR_CORE>/modules/mod-native-transmog`. Remove or exclude the legacy `mod-transmog` source from the PTR build if present; do not delete its database records.
 3. Run the local checks:
 
    ```bash
@@ -18,19 +18,19 @@ This procedure targets the separate PTR AzerothCore installation and databases. 
    python3 tests/verify_catalog.py <PTR_CORE>/data/sql/base/db_world/item_template.sql
    ```
 
-4. Back up the PTR world database. Apply the normal AzerothCore module updater, including `data/sql/db-world/updates/2026_10_28_00_native_transmog_npc_service.sql`. Confirm `native_transmog_npc_registration` exists and no `mod-transmog` table or character appearance row changed.
+4. Back up the PTR world database. Apply the normal AzerothCore module updater, including `data/sql/db-world/updates/2026_11_09_00_native_warpweavers.sql`. Confirm entry `14999992` and nine spawns exist and no `mod-transmog` table, entry `190010`, or legacy appearance row changed.
 5. Configure/build the PTR core normally. Confirm `-- MOD NATIVE TRANSMOG CONFIGURED (phase-2-npc-services) --`, all three module translation units compile, and worldserver links.
-6. Confirm Content Manager Milestone 2 and migration `2026_09_25_06_content_managed_server_resources.sql` are installed. Install `content/mod-native-transmog.epf`, run the cumulative build, and confirm it allocates `dedicated-transmogrifier` as `creature-template.id`, copies donor `28699` model `25615`, and composes the two protected FrameXML files without collision.
-7. Activate the build on PTR so its managed server bundle is APPLIED, then publish through the established Portalkeeper process. Record the prior build for rollback. Do not modify Portalkeeper.
-8. Restart PTR so AzerothCore loads the applied template. Confirm runtime resolution reports the allocated dedicated entry and registry row counts. Record the entry from `.content allocations` or `.nativetransmog npc list`.
+6. Install `content/mod-native-transmog.epf`, run the cumulative Content Manager build, and confirm it composes the protected FrameXML without declaring a server-side creature resource.
+7. Activate and publish the client build through the established Portalkeeper process. Record the prior build for rollback. Do not modify Portalkeeper.
+8. Restart PTR so AzerothCore loads entry `14999992`. Confirm `.nativetransmog npc list` reports the native dedicated entry and the nine database spawns load.
 
 ## Required in-game checklist
 
 - [ ] 1. The updated module builds and installs on PTR.
-- [ ] 2. Module database migrations apply twice without destructive changes or errors; they create only the registration table and never insert a creature template/model.
-- [ ] 3. Content build/activation allocates the symbol, applies the template plus model row, and restart resolves the same retained entry.
-- [ ] 4. As a GM, run `.npc add <allocated-entry>`; record its persistent spawn ID.
-- [ ] 5. Interact with the dedicated Transmogrifier.
+- [ ] 2. Migration replay leaves exactly one template/model and nine defaults, with unchanged recorded GUIDs.
+- [ ] 3. Entry `14999992` is Warpweaver/Transmogrifier with model `19646`, scale/probability `1`, and all defaults respawn in 300 seconds.
+- [ ] 4. Restart worldserver and confirm no additional creature rows appear.
+- [ ] 5. Interact with each dedicated Warpweaver.
 - [ ] 6. The wardrobe opens from the server interaction without typing `/wardrobe`.
 - [ ] 7. Character model, rotation, all five slots, icons, tooltips, multi-slot preview, and Reset Preview still work; equipment and inventory do not change.
 - [ ] 8. Select an existing interactive NPC and run `.nativetransmog npc add entry`.
@@ -41,8 +41,8 @@ This procedure targets the separate PTR AzerothCore installation and databases. 
 - [ ] 13. Run both remove commands and confirm service removal is immediate while original NPC services remain.
 - [ ] 14. Re-enable registrations, restart worldserver, and confirm persistence and resolution order with `.nativetransmog npc list/info`.
 - [ ] 15. Confirm an ordinary player cannot execute add, remove, list, or info commands.
-- [ ] 16. Confirm installed `mod-transmog` NPC/UI/application behavior still works.
-- [ ] 17. Compare existing `mod-transmog` tables and appearance records before/after; confirm unchanged.
+- [ ] 16. Confirm legacy `mod-transmog` is absent from the compiled/loaded PTR module set.
+- [ ] 17. Compare retained legacy tables, template/model `190010`, and appearance records before/after; confirm unchanged.
 - [ ] 18. Confirm the client has no standalone native-transmog addon or addon dependency.
 
 ## Authorization/session checks

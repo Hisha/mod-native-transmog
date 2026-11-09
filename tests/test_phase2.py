@@ -18,18 +18,16 @@ LUA = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.lua").read_
 )
 BASE_SQL = ROOT / "data/sql/db-world/base/001_native_transmog_npc_service.sql"
 UPDATE_SQL = ROOT / "data/sql/db-world/updates/2026_10_28_00_native_transmog_npc_service.sql"
+NPC_UPDATE_SQL = ROOT / "data/sql/db-world/updates/2026_11_09_00_native_warpweavers.sql"
 MANIFEST = json.loads((ROOT / "content/manifest.json").read_text(encoding="utf-8"))
 
 
 class PhaseTwoTests(unittest.TestCase):
     def test_registry_schema_is_idempotent_and_module_owned(self) -> None:
-        for path in (BASE_SQL, UPDATE_SQL):
+        for path in (BASE_SQL, UPDATE_SQL, NPC_UPDATE_SQL):
             sql = path.read_text(encoding="utf-8")
             self.assertIn("CREATE TABLE IF NOT EXISTS `native_transmog_npc_registration`", sql)
             self.assertIn("PRIMARY KEY (`scope`, `target_id`)", sql)
-            self.assertNotIn("creature_template", sql.lower())
-            self.assertNotIn("creature_template_model", sql.lower())
-            self.assertNotIn("900100", sql)
             self.assertNotIn("mod_transmog", sql.lower().replace("native_transmog", ""))
 
     def test_registration_scopes_and_resolution_order(self) -> None:
@@ -49,31 +47,53 @@ class PhaseTwoTests(unittest.TestCase):
         self.assertIn("LoadRegistrations", MODULE)
         self.assertIn("effective immediately", MODULE)
 
-    def test_dedicated_npc_uses_managed_symbolic_allocation(self) -> None:
-        self.assertEqual(MANIFEST["creatureTemplates"], [{
-            "symbol": "dedicated-transmogrifier",
-            "copyFrom": 28699,
-            "overrides": {
-                "name": "Transmogrifier",
-                "subname": "Wardrobe Specialist",
-                "minLevel": 80,
-                "maxLevel": 80,
-                "faction": 35,
-                "npcFlags": 1,
-                "unitFlags": 0,
-                "typeFlags": 0,
-                "aiName": "",
-                "scriptName": "",
-            },
-        }])
-        self.assertIn('"creature-template.id"', SERVICE)
-        self.assertIn("ContentResourceApiV1", SERVICE)
-        self.assertIn("ScriptRegistry<WorldScript>::ScriptPointerList", SERVICE)
-        self.assertIn('creatureTemplate->Name == "Transmogrifier"', SERVICE)
+    def test_dedicated_npc_uses_module_owned_entry(self) -> None:
+        self.assertNotIn("creatureTemplates", MANIFEST)
+        self.assertIn("NativeWarpweaverEntry = 14999992", SERVICE)
+        self.assertNotIn("ContentResourceApiV1", SERVICE)
+        self.assertIn('creatureTemplate->Name == "Warpweaver"', SERVICE)
+        self.assertIn('creatureTemplate->SubName == "Transmogrifier"', SERVICE)
         self.assertIn("creatureTemplate->Models.size() == 1", SERVICE)
-        self.assertIn("CreatureDisplayID == 25615", SERVICE)
+        self.assertIn("CreatureDisplayID == 19646", SERVICE)
+        self.assertIn("DisplayScale == 1.0f", SERVICE)
+        self.assertIn("Probability == 1.0f", SERVICE)
         self.assertIn("creature->GetEntry() == _dedicatedCreatureEntry", SERVICE)
-        self.assertNotIn("900100", SERVICE + HEADER + MODULE)
+
+    def test_native_warpweaver_install_is_one_time_and_collision_safe(self) -> None:
+        for path in (BASE_SQL, NPC_UPDATE_SQL):
+            sql = path.read_text(encoding="utf-8")
+            self.assertIn("`native_transmog_installation`", sql)
+            self.assertIn("'default-warpweavers-v1'", sql)
+            self.assertIn("SIGNAL SQLSTATE '45000'", sql)
+            self.assertIn("START TRANSACTION", sql)
+            self.assertIn("ROLLBACK", sql)
+            self.assertIn("COMMIT", sql)
+            self.assertIn("INSERT IGNORE INTO `native_transmog_installation` (`component`)", sql)
+            self.assertIn("IF ROW_COUNT() = 0 THEN", sql)
+            self.assertIn("LAST_INSERT_ID()", sql)
+            self.assertEqual(sql.count("(`id`, `map`, `spawnMask`, `phaseMask`"), 9)
+            self.assertEqual(sql.count("`orientation`, `spawntimesecs`, `curhealth`, `Comment`)"), 9)
+            self.assertEqual(sql.count("Native Transmog Warpweaver - "), 9)
+            spawn_inserts = re.findall(
+                r"INSERT INTO `creature`\s*\((.*?)\)\s*VALUES\s*\((.*?)\);",
+                sql,
+                re.DOTALL,
+            )
+            self.assertEqual(len(spawn_inserts), 9)
+            expected_columns = [
+                "`id`", "`map`", "`spawnMask`", "`phaseMask`", "`position_x`",
+                "`position_y`", "`position_z`", "`orientation`", "`spawntimesecs`",
+                "`curhealth`", "`Comment`",
+            ]
+            for columns, values in spawn_inserts:
+                self.assertEqual([column.strip() for column in columns.split(",")], expected_columns)
+                fields = [value.strip() for value in values.split(",")]
+                self.assertEqual(fields[0], "14999992")
+                self.assertEqual(fields[2:4], ["1", "1"])
+                self.assertEqual(fields[8:10], ["300", "1"])
+            self.assertIn("(14999992, 0, 19646, 1, 1, 0)", sql)
+            self.assertNotIn("190010", sql)
+        self.assertEqual(BASE_SQL.read_bytes(), NPC_UPDATE_SQL.read_bytes())
 
     def test_managed_npc_keeps_generic_registration_paths(self) -> None:
         self.assertIn("DedicatedCreatureEntry()", HEADER + SERVICE + MODULE)

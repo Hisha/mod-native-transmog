@@ -175,7 +175,6 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
             spawn_query,
             "SELECT DISTINCT `id`, `map` FROM `creature` ORDER BY `id`, `map`",
         )
-        self.assertNotIn("`id1`", spawn_query)
 
     def test_loot_reference_columns_are_treated_as_signed(self):
         self.assertGreaterEqual(CATALOG.count("fields[2].Get<std::int32_t>()"), 1)

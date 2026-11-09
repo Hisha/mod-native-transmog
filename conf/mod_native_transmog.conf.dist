@@ -11,8 +11,9 @@ NativeTransmog.Enable = 1
 #
 #    NativeTransmog.DefaultNPC.Enable
 #        Description: Enables service resolution for the module's dedicated
-#                     Content Manager resource "dedicated-transmogrifier".
-#                     Its creature entry is allocated per realm at build time.
+#                     module-owned Warpweaver entry 14999992.
+#                     Its template and nine defaults are installed once by the
+#                     normal world database updater.
 #        Default:     1
 
 NativeTransmog.DefaultNPC.Enable = 1

@@ -1,5 +1,36 @@
 # Test results
 
+## Native Warpweaver installation
+
+Test date: 2026-11-09.
+
+### Passed
+
+- Full module suite: `python3 -m unittest discover -s tests -p 'test_*.py'`
+  - 266 tests passed, including the existing Collections, saved/custom sets, acquisition, application, wardrobe,
+    tooltip, set catalog, and protocol regressions plus the native-NPC installation contracts.
+- Playerbot schema/source audit at revision `e7e2e288e`, superseded where noted by the verified PTR schema:
+  - confirmed PTR `creature.id`, auto-increment `creature.guid`, `creature_template_model` keys/columns, display `19646`
+    in `creature_model_info`, workspace reservations through `14999991`, and no inspected use of `14999992`;
+  - the inspected checkout has no `mod-transmog` module directory.
+- Changed C++ translation units passed `-fsyntax-only` with the inspected Playerbot C++20 definitions and complete
+  generated script include set.
+- Deterministic EPF build and `--check` passed with four members; SHA-256:
+  `5ebe8e0bfbb6ae415a9efbcfff6d1b87ad6d3efc105f67ffd602a8c26274c0ec`.
+- Base and update installers are byte-identical, use the verified `creature.id` column, contain all nine audited
+  coordinates with consistent mask/respawn/health fields, omit explicit spawn GUIDs, use `LAST_INSERT_ID()`, and
+  reserve a transactional one-time marker before mutation. `git diff --check` passed.
+
+### Not run or not proven
+
+No live MySQL/MariaDB server or PTR worldserver/client was available in this workspace. Therefore fresh-database and
+existing-PTR updater execution, actual spawn loading/respawn, in-game appearance/scale, one-open gossip behavior,
+restart/replay counts, administrator move/delete preservation, and verification of a previously deployed binary's
+legacy-module set remain manual PTR gates. No database, server, client publication, commit, or push was performed.
+
+Status: **implementation and local static/regression validation complete; live fresh-install and PTR upgrade
+validation pending the documented deployment checklist.**
+
 ## Phase 5A pagination and acquisition-source corrections
 
 Test date: 2026-11-05.

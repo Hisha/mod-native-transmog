@@ -74,15 +74,15 @@ Supported central acquisition paths include ordinary loot storage, quest rewards
 
 The service registry resolves an interacted creature in this order:
 
-1. dedicated Transmogrifier template resolved from Content Manager symbol `dedicated-transmogrifier`;
+1. module-owned Warpweaver template entry `14999992`;
 2. enabled creature-entry registration;
 3. enabled persistent spawn-ID registration.
 
 Entry registration also works for dynamically created creatures. Spawn registration requires AzerothCore's persistent `Creature::GetSpawnId()` and rejects temporary creatures whose spawn ID is zero. Registrations live in the module-owned world table `native_transmog_npc_registration`; `(scope, target_id)` is the primary key, scope `1` means creature entry, scope `2` means spawn ID, and `enabled` retains disabled registrations for audit/re-enablement.
 
-The Schema 3 EPF declares `creatureTemplates[]` symbol `dedicated-transmogrifier`. Content Manager retains and collision-checks its realm-local `creature-template.id`, applies the template and its model children transactionally, and exposes the active value through `ContentResourceApiV1`. The declaration copies stock entry `28699` (whose single model is display `25615`) and overrides the service-facing fields to produce the neutral, gossip-enabled **Transmogrifier — Wardrobe Specialist**. Module SQL owns only the registration table and contains no creature entry or model insert.
+The AzerothCore world updater installs entry `14999992` as neutral, gossip-enabled **Warpweaver — Transmogrifier**, model `19646`, scale/probability `1`, plus one default spawn in each of nine major cities. Installation is transactional, refuses an unrelated entry collision, allocates spawn GUIDs through the actual `creature.guid` auto-increment column, and records a durable one-time marker. Re-running the migration, restarting worldserver, or later updating the module does not duplicate NPCs or restore administrator-modified/deleted defaults.
 
-At startup the module discovers the optional Content Manager provider through the established `WorldScript` RTTI pattern and resolves `(mod-native-transmog, dedicated-transmogrifier, creature-template.id)`. Dedicated resolution is enabled only when the declaring build is ACTIVE, its server bundle is APPLIED and verified, and the allocated template is loaded with the expected name. Missing/inactive Content Manager disables only the dedicated NPC; existing entry and persistent-spawn registrations remain available. Use `.content allocations` or `.nativetransmog npc list` to obtain the allocated entry before creating ordinary persistent spawns with `.npc add <allocated-entry>`.
+At startup the existing NPC service validates the installed native template and resolves its creatures as the dedicated service before generic entry/spawn registrations. The dedicated gossip interaction is consumed after sending one native wardrobe authorization; it has no `ScriptName` and does not invoke legacy gossip. Content Manager remains the delivery path for protected FrameXML, but no longer allocates or installs the server-side NPC. See [native Warpweaver installation](docs/NATIVE_WARPWEAVER_INSTALLATION.md).
 
 ### Existing NPC services
 
@@ -150,7 +150,7 @@ Add, appearance apply, and quest-backfill execution use AzerothCore's existing N
 ## Installation and PTR deployment
 
 1. Install this repository as `modules/mod-native-transmog` in the isolated Playerbot PTR build. Confirm `mod-transmog` is excluded from that build/load; production remains unchanged.
-2. Apply the normal AzerothCore module SQL updater. Phase 3C adds `2026_11_01_00_native_transmog_item_override.sql`; Phase 4A adds `2026_11_04_00_native_transmog_hidden_state.sql`. Phases 4C and 5A add no migration. Existing override rows become collected-appearance state `0`; ownership/provenance and all legacy tables remain untouched.
+2. Apply the normal AzerothCore module SQL updater. The world update `2026_11_09_00_native_warpweavers.sql` installs entry `14999992` and the nine one-time defaults; character-schema migrations remain unchanged. Legacy entry `190010`, legacy tables, and existing appearance data remain untouched.
 3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow. Ensure AzerothCore's `worldserver.conf` contains:
 
    ```ini
@@ -165,8 +165,8 @@ Add, appearance apply, and quest-backfill execution use AzerothCore's existing N
    python3 content/build_epf.py --check
    ```
 
-5. Feed `content/mod-native-transmog.epf` through the existing FrameForge → EPF → mod-content-manager → Portalkeeper pipeline. Build and activate it so the managed server bundle is APPLIED before the validation restart. No content-manager or Portalkeeper code change is required. The existing `protected-framexml` realm requirement remains mandatory.
-6. Restart PTR so AzerothCore loads the applied template, find the allocated `creature-template.id` with `.content allocations` (also shown by `.nativetransmog npc list` after startup), run `.npc add <allocated-entry>` as a GM, and interact with the spawned creature.
+5. Feed `content/mod-native-transmog.epf` through the existing FrameForge → EPF → mod-content-manager → Portalkeeper pipeline. The package now supplies client content only; no server creature allocation is declared. No content-manager or Portalkeeper code change is required. The existing `protected-framexml` realm requirement remains mandatory.
+6. Restart PTR so AzerothCore loads entry `14999992`, confirm `.nativetransmog npc list` reports the native Warpweaver, and visit all nine installed city spawns. Follow the [deployment and verification checklist](docs/NATIVE_WARPWEAVER_INSTALLATION.md).
 
 The checked-in EPF is deterministic Schema 3 content. It adds the XML immediately after stock `DressUpFrame.xml`; it contains no addon directory, addon manifest, raw FrameXML TOC replacement, custom opcode, or executable transformation.
 

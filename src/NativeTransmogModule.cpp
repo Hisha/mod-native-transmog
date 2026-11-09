@@ -490,9 +490,9 @@ public:
                 registration.enabled ? "enabled" : "disabled");
         std::uint32_t dedicatedEntry = native_transmog::Service::Instance().DedicatedCreatureEntry();
         if (dedicatedEntry)
-            handler->PSendSysMessage("  dedicated entry {}: Content Manager symbol dedicated-transmogrifier", dedicatedEntry);
+            handler->PSendSysMessage("  dedicated entry {}: native Warpweaver", dedicatedEntry);
         else
-            handler->SendSysMessage("  dedicated entry: unavailable (managed resource is not ACTIVE/APPLIED and loaded)");
+            handler->SendSysMessage("  dedicated entry: unavailable (native Warpweaver template is not loaded or valid)");
         return true;
     }
 

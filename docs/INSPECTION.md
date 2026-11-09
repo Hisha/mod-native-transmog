@@ -37,16 +37,15 @@ The Phase 2 implementation was checked against Playerbot revision `8a4e76eac` in
 - Player hooks for update, map change, and logout support session cleanup. Re-running `GetNPCIfCanInteractWith` covers disappearance, distance, map, life/reaction, and control-state changes; Phase 2 adds combat and vehicle-passenger guards.
 - No generic hook was found for every possible direct NPC service opcode. Phase 2 covers gossip/quest hello, vendor list, and trainer list without altering flags. NPC types that bypass those paths are documented rather than silently rewritten.
 
-## Phase 2 Content Manager findings
+## Native Warpweaver installation findings (2026-11-09)
 
-- Schema 2 and 3 already accept optional `creatureTemplates[]`; older EPFs and native modules retain their existing behavior.
-- `creature-template.id` is allocated by the generic retained allocator and guarded against baseline/live/owned collisions.
-- A creature declaration copies a bounded set of stock template fields and all one-to-four `creature_template_model` children. Model rows share the allocated template identity and are checked/applied transactionally; no separate model ID API is needed.
-- Stock template `28699` (`Charles Worth`) owns the desired single display row `25615`, so it is a suitable donor. EPF overrides replace the visible/service fields and remove its SmartAI assignment.
-- Runtime consumers vendor the V1 header, discover the provider through `ScriptRegistry<WorldScript>`, and call `ResolveResource(package, symbol, "creature-template.id", ...)`. A retained lease alone is deliberately not sufficient: the resource must belong to the current ACTIVE build, be server APPLIED/parity-verified, and be loaded after restart.
-- `creatureSpawns[]` is also supported, but the module intentionally does not declare a fixed dedicated spawn. Administrators retain the existing ability to create any number of spawns, while the module's generic registration table continues to support arbitrary creature entries and persistent spawn IDs.
+- The verified PTR world schema uses `creature.id` for the template entry and an `AUTO_INCREMENT` unsigned `creature.guid` primary key. Omitting `guid` is the schema-native collision-safe allocation mechanism; each inserted GUID is captured with `LAST_INSERT_ID()`.
+- Workspace reservations occupy creature entries `14999980` through `14999991`; no inspected core/module source uses `14999992`, so Native Transmog owns that next entry. The installer still aborts before mutation if an unrelated live row occupies it.
+- The installation marker is separate from the live spawn rows. Once `default-warpweavers-v1` succeeds, migration replay does nothing; deleting or editing a default NPC later is therefore an administrator decision and is not reconciled on startup or update.
+- The inspected Playerbot checkout's `modules/` directory contains no `mod-transmog` checkout. Its source is therefore not part of a new build from that tree. A previously built/deployed binary must still be checked operationally on PTR; the native migration deliberately neither detects nor edits legacy entry `190010` or legacy tables.
+- Content Manager continues to compose and deliver the protected client FrameXML, but the EPF no longer declares a server creature template. The fixed native entry is resolved by the existing NPC service without a Content Manager runtime provider.
 
-No core, Content Manager, FrameForge, Portalkeeper, or `mod-transmog` code change is required. Deployment does require Content Manager Milestone 2 and its existing `2026_09_25_06_content_managed_server_resources.sql` schema migration. The previous fixed entry `900100` is no longer declared, inserted, or referenced by module SQL/C++; a row created by an earlier unreleased migration is inert legacy data and is not deleted automatically because the module cannot prove ownership of a world row it did not allocate.
+No AzerothCore core, Content Manager, FrameForge, Portalkeeper, or legacy Transmog data change is made.
 
 ## Phase 3D inbound transport findings
 

@@ -2,26 +2,8 @@
   "schema": 3,
   "package": "mod-native-transmog",
   "name": "Native Transmog Wardrobe",
-  "version": "6.0.0-custom-sets2",
-  "description": "Native build-12340 wardrobe with persistent player-created custom appearance sets.",
-  "creatureTemplates": [
-    {
-      "symbol": "dedicated-transmogrifier",
-      "copyFrom": 28699,
-      "overrides": {
-        "name": "Transmogrifier",
-        "subname": "Wardrobe Specialist",
-        "minLevel": 80,
-        "maxLevel": 80,
-        "faction": 35,
-        "npcFlags": 1,
-        "unitFlags": 0,
-        "typeFlags": 0,
-        "aiName": "",
-        "scriptName": ""
-      }
-    }
-  ],
+  "version": "6.1.0-native-warpweaver",
+  "description": "Native build-12340 wardrobe with module-owned city Warpweavers and persistent custom appearance sets.",
   "content": [
     {
       "type": "file",
