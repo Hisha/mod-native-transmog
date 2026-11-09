@@ -1,5 +1,22 @@
 # Test results
 
+## Native Warpweaver updater compatibility fix
+
+Test date: 2026-11-09.
+
+### Passed
+
+- Inspected Playerbot AzerothCore revision `e7e2e288e`: `UpdateFetcher` delegates each file to `ApplyFile`, which launches the configured MySQL client, and `StartProcess` connects the file directly to client standard input. The updater does not parse SQL or add stored-routine/`DELIMITER` behavior, does not pass `--force`, and records the new update hash only after a successful client exit.
+- Verified the immediate syntax failure against MySQL 8's restricted-label list: the procedure's unquoted `install: BEGIN` label is invalid. The replacement removes the procedure rather than relying on a label-only repair.
+- Replaced the procedure installer in both byte-identical base/update files with ordinary batch statements. Regression coverage lexes the complete files under that real updater contract and rejects `DELIMITER`, procedure/function creation, and `CALL` statements.
+- Full module suite: `python3 -m unittest discover -s tests -p 'test_*.py'`
+  - 268 tests passed, including exact values for all nine maps/coordinates/orientations, the updater source/stream contract, one transactional marker gate, `creature.id`, display `19646`, 300-second respawn, auto-increment GUID allocation, and absence of entry `190010`.
+- Base/update installers are byte-identical and `git diff --check` passed.
+
+### Not run or not proven
+
+No MySQL/MariaDB server or client is installed in this workspace, so the corrected file was not applied to a live database here. Fresh-schema execution, recovery from the PTR's DDL-only failed state, changed-hash replay, and live NPC loading remain PTR deployment gates.
+
 ## Native Warpweaver installation
 
 Test date: 2026-11-09.
@@ -18,8 +35,8 @@ Test date: 2026-11-09.
 - Deterministic EPF build and `--check` passed with four members; SHA-256:
   `5ebe8e0bfbb6ae415a9efbcfff6d1b87ad6d3efc105f67ffd602a8c26274c0ec`.
 - Base and update installers are byte-identical, use the verified `creature.id` column, contain all nine audited
-  coordinates with consistent mask/respawn/health fields, omit explicit spawn GUIDs, use `LAST_INSERT_ID()`, and
-  reserve a transactional one-time marker before mutation. `git diff --check` passed.
+  coordinates with consistent mask/respawn/health fields, omit explicit spawn GUIDs, join installed rows back to
+  their staged defaults, and reserve a transactional one-time marker before mutation. `git diff --check` passed.
 
 ### Not run or not proven
 

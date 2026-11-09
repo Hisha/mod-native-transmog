@@ -11,11 +11,17 @@ Native Transmog owns creature entry **14999992**. The normal AzerothCore module 
 
 The fresh-database installer is `data/sql/db-world/base/001_native_transmog_npc_service.sql`. Existing realms receive the identical transaction through `data/sql/db-world/updates/2026_11_09_00_native_warpweavers.sql`.
 
-The verified PTR schema names the template column `creature.id` and defines `creature.guid` as an unsigned `AUTO_INCREMENT` primary key. Each insert omits `guid`, reads `LAST_INSERT_ID()`, and records it. This avoids fixed-range and `MAX(guid)` collisions. Every spawn explicitly sets `spawnMask = 1`, `phaseMask = 1`, `spawntimesecs = 300`, and `curhealth = 1`. A transaction and SQL exception handler make the marker, template, model, spawns, and history atomic.
+The verified PTR schema names the template column `creature.id` and defines `creature.guid` as an unsigned `AUTO_INCREMENT` primary key. The set-based insert omits `guid`, then joins the installed rows back to the nine staged defaults and records the actual GUIDs. This avoids fixed-range and `MAX(guid)` collisions. Every spawn explicitly sets `spawnMask = 1`, `phaseMask = 1`, `spawntimesecs = 300`, and `curhealth = 1`.
 
-The installer reserves the durable `default-warpweavers-v1` marker with `INSERT IGNORE` at the start of the transaction. A replay—or a concurrent second execution after the first commits—observes that reservation and returns without inspecting or rewriting live NPC rows. A failed installation rolls the marker back with the other changes. Consequently, an administrator may move, customize, or intentionally delete any installed spawn without the module recreating it. Worldserver startup performs validation/loading only and never writes world data.
+The inspected Playerbot updater passes each SQL file unchanged to its configured `mysql` executable on standard input and adds no SQL parser or stored-routine support of its own. The installer therefore uses only ordinary semicolon-terminated statements, session variables, temporary staging/guard tables, and one transaction. It contains no `DELIMITER`, stored procedure, function, or `CALL` statement.
 
-If entry `14999992` already exists before the marker, the migration accepts it only when its complete Warpweaver identity and sole model row match. Any other occupant raises SQLSTATE `45000` and rolls back without changing creature data. Entry `190010`, its model, its spawns, and all legacy Transmog tables are intentionally untouched.
+The original file did reach the routine body, but its unquoted `install: BEGIN` label is invalid on MySQL 8 because `INSTALL` is restricted for stored-program labels. Removing only or quoting that label would still leave an avoidable dependency on client delimiter/routine behavior, so the replacement uses AzerothCore's ordinary update-file conventions instead.
+
+The installer reserves the durable `default-warpweavers-v1` marker with `INSERT IGNORE` at the start of the transaction and stores `ROW_COUNT()` as its install gate. A replay observes the existing marker, so every template/model/spawn/history insert becomes a no-op. A failed installation rolls the marker back with the other transactional changes. Consequently, an administrator may move, customize, or intentionally delete any installed spawn without the module recreating it. Worldserver startup performs validation/loading only and never writes world data.
+
+If entry `14999992` already exists before the marker, the migration accepts it only when its complete Warpweaver identity and sole model row match. Any other occupant deliberately violates the temporary collision guard's primary key; the updater stops and the open transaction rolls back without changing creature data. Matching pre-existing default spawns are adopted by coordinates instead of duplicated, which makes a manually seeded existing world safe to upgrade. Entry `190010`, its model, its spawns, and all legacy Transmog tables are intentionally untouched.
+
+The failed PTR attempt stopped while parsing the procedure body, after the three `CREATE TABLE IF NOT EXISTS` statements had autocommitted. That state needs no manual cleanup: the corrected file reuses those tables, sees no `default-warpweavers-v1` marker, and performs the installation normally.
 
 ## Existing PTR preflight
 
@@ -35,7 +41,7 @@ If entry `14999992` already exists before the marker, the migration accepts it o
 ## Deploy
 
 1. Place this repository at `<PTR_CORE>/modules/mod-native-transmog` and configure/build AzerothCore normally.
-2. Run the normal AzerothCore database updater. Do not paste the migration into a startup script and do not add an NPC-creation world hook.
+2. Run the normal AzerothCore database updater. The updater will report that the changed world update is being reapplied; this is expected. Do not delete the tracking tables, paste the migration into a startup script, or add an NPC-creation world hook.
 3. Build `content/mod-native-transmog.epf`, activate it through Content Manager, and publish it through the established Portalkeeper path. Content Manager supplies client FrameXML only; it no longer allocates the server NPC.
 4. Start worldserver and confirm the log does not report an invalid native Warpweaver template. Run `.nativetransmog npc list`; it should report dedicated entry `14999992`.
 
@@ -69,4 +75,4 @@ Expect one template, one model, nine joined live defaults on initial deployment,
 - Verify Collections, acquisition, saved/custom sets, appearance application/removal, tooltips, and `/wardrobe` preview regressions.
 - Confirm no legacy module startup banner, command surface, or entry-`190010` gossip behavior remains active.
 
-If migration fails, retain the updater error and restore the database backup only if the transaction/DDL state requires it. If runtime validation fails, restore the prior binary/client build while leaving the backed-up legacy records intact.
+If migration fails, retain the updater error and restore the database backup only if the transaction/DDL state requires it. A duplicate-key error naming `native_transmog_entry_collision_guard` means entry `14999992` is occupied by a non-matching template/model and must be investigated rather than overwritten. If runtime validation fails, restore the prior binary/client build while leaving the backed-up legacy records intact.

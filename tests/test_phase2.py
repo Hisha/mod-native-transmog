@@ -64,34 +64,35 @@ class PhaseTwoTests(unittest.TestCase):
             sql = path.read_text(encoding="utf-8")
             self.assertIn("`native_transmog_installation`", sql)
             self.assertIn("'default-warpweavers-v1'", sql)
-            self.assertIn("SIGNAL SQLSTATE '45000'", sql)
             self.assertIn("START TRANSACTION", sql)
-            self.assertIn("ROLLBACK", sql)
             self.assertIn("COMMIT", sql)
             self.assertIn("INSERT IGNORE INTO `native_transmog_installation` (`component`)", sql)
-            self.assertIn("IF ROW_COUNT() = 0 THEN", sql)
-            self.assertIn("LAST_INSERT_ID()", sql)
-            self.assertEqual(sql.count("(`id`, `map`, `spawnMask`, `phaseMask`"), 9)
-            self.assertEqual(sql.count("`orientation`, `spawntimesecs`, `curhealth`, `Comment`)"), 9)
+            self.assertIn("SET @native_transmog_install_warpweavers := ROW_COUNT()", sql)
+            self.assertIn("`native_transmog_entry_collision_guard`", sql)
+            self.assertIn("AUTO_INCREMENT", sql)
+            self.assertNotIn("`guid`, `id`", sql)
+            self.assertEqual(sql.count("(`id`, `map`, `spawnMask`, `phaseMask`"), 1)
             self.assertEqual(sql.count("Native Transmog Warpweaver - "), 9)
-            spawn_inserts = re.findall(
-                r"INSERT INTO `creature`\s*\((.*?)\)\s*VALUES\s*\((.*?)\);",
+            defaults = re.findall(
+                r"\((\d), '([^']+)', (\d+), ([^,]+), ([^,]+), ([^,]+), ([^,]+), "
+                r"'Native Transmog Warpweaver - ([^']+)'\)",
                 sql,
-                re.DOTALL,
             )
-            self.assertEqual(len(spawn_inserts), 9)
-            expected_columns = [
-                "`id`", "`map`", "`spawnMask`", "`phaseMask`", "`position_x`",
-                "`position_y`", "`position_z`", "`orientation`", "`spawntimesecs`",
-                "`curhealth`", "`Comment`",
-            ]
-            for columns, values in spawn_inserts:
-                self.assertEqual([column.strip() for column in columns.split(",")], expected_columns)
-                fields = [value.strip() for value in values.split(",")]
-                self.assertEqual(fields[0], "14999992")
-                self.assertEqual(fields[2:4], ["1", "1"])
-                self.assertEqual(fields[8:10], ["300", "1"])
-            self.assertIn("(14999992, 0, 19646, 1, 1, 0)", sql)
+            self.assertEqual(defaults, [
+                ("1", "Stormwind", "0", "-8705.37", "849.606", "98.6854", "2.15311", "Stormwind"),
+                ("2", "Ironforge", "0", "-4809.44", "-1184.81", "505.824", "0.760544", "Ironforge"),
+                ("3", "Darnassus", "1", "10143.7", "2305.74", "1333", "0.537172", "Darnassus"),
+                ("4", "Thunder Bluff", "1", "-1115.34", "41.2609", "140.92", "2.29399", "Thunder Bluff"),
+                ("5", "Orgrimmar", "1", "1919.42", "-4428.45", "24.8654", "5.09405", "Orgrimmar"),
+                ("6", "Exodar", "530", "-4166.54", "-11676", "-142.732", "3.0552", "Exodar"),
+                ("7", "Shattrath", "530", "-1824.75", "5465.27", "1.91909", "3.88611", "Shattrath"),
+                ("8", "Silvermoon", "530", "9951", "-7247", "32.0753", "0.785565", "Silvermoon"),
+                ("9", "Dalaran", "571", "5840.93", "720.659", "641.997", "1.75548", "Dalaran"),
+            ])
+            self.assertTrue(all(row[1] == row[7] for row in defaults))
+            self.assertIn("SELECT 14999992, 0, 19646, 1, 1, 0", sql)
+            self.assertIn("d.`orientation`, 300, 1, d.`comment`", sql)
+            self.assertIn("c.`id` = 14999992", sql)
             self.assertNotIn("190010", sql)
         self.assertEqual(BASE_SQL.read_bytes(), NPC_UPDATE_SQL.read_bytes())
 
