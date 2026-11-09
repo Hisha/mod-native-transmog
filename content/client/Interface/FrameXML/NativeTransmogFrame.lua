@@ -17,6 +17,11 @@ local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local catalogMessage = nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
+-- Phase 2 bounded portrait experiment.  Build 12340 has no SetPortraitZoom
+-- and no DressUpModel:UndressSlot, so this stays default-off and is limited
+-- to one head tile until its camera, loading, and cost are verified on PTR.
+local portraitPrototypeEnabled = false
+local portraitPrototypeModel, portraitPrototypeButton, portraitPrototypeEntry = nil, nil, nil
 -- The retail reconstruction keeps a fixed six-by-three viewport. Configured
 -- catalog pages larger than 18 continue in the existing scroll child.
 local ICONS_PER_ROW, ICON_WIDTH, ICON_HEIGHT, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 6, 84, 111, 10, 566, 353
@@ -734,10 +739,40 @@ local function resetAppearanceButton(button)
  button:SetAlpha(1); button:Enable(); button.icon:SetTexture(nil); button.icon:SetVertexColor(1,1,1,1)
  if button.icon.SetDesaturated then button.icon:SetDesaturated(false) end
  button.background:SetTexture(.012,.009,.007,.96); button.hideLabel:SetText("")
+ if button.portraitModel then button.portraitModel:Hide() end
  button.selection:Hide(); button.appliedMark:Hide(); button:Hide()
 end
+local function hidePortraitPrototype()
+ if portraitPrototypeModel then portraitPrototypeModel:Hide() end
+ portraitPrototypeButton=nil; portraitPrototypeEntry=nil
+end
+local function renderPortraitPrototype(button)
+ if not portraitPrototypeEnabled or selectedSlotId~=1 or not button or button.isHide or not button.entry then return false end
+ if not portraitPrototypeModel then
+  portraitPrototypeModel=CreateFrame("DressUpModel","NativeTransmogPortraitPrototypeModel",button)
+  portraitPrototypeModel:SetAllPoints(button.icon)
+  portraitPrototypeModel:EnableMouse(false)
+ end
+ portraitPrototypeModel:SetParent(button)
+ portraitPrototypeModel:ClearAllPoints(); portraitPrototypeModel:SetAllPoints(button.icon)
+ button.portraitModel=portraitPrototypeModel; portraitPrototypeButton=button; portraitPrototypeEntry=button.entry
+ -- GetItemInfo initiates the normal item-cache query. TryOn is still attempted
+ -- immediately because already-cached entries need no event round trip.
+ GetItemInfo(button.entry)
+ portraitPrototypeModel:SetUnit("player")
+ portraitPrototypeModel:Undress()
+ portraitPrototypeModel:TryOn(button.entry)
+ portraitPrototypeModel:SetCamera(0)
+ portraitPrototypeModel:SetFacing(0)
+ portraitPrototypeModel:SetModelScale(1.80)
+ portraitPrototypeModel:SetPosition(0,-0.13,0)
+ portraitPrototypeModel:Show()
+ return true
+end
 local function renderCatalog()
+ hidePortraitPrototype()
  for _,button in ipairs(buttons) do resetAppearanceButton(button) end
+ local portraitRendered=false
  for index,appearance in ipairs(catalog) do
   local button=buttons[index] or createAppearanceButton(index)
   resetAppearanceButton(button)
@@ -750,6 +785,7 @@ local function renderCatalog()
   button.icon:SetTexture(appearance.isHide and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or
       (GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"))
   button.hideLabel:SetText(appearance.isHide and "HIDE" or ""); button:Show()
+  if not portraitRendered then portraitRendered=renderPortraitPrototype(button) end
  end
  local rows=math.ceil(#catalog/ICONS_PER_ROW)
  local contentHeight=rows>0 and rows*ICON_HEIGHT+(rows-1)*ICON_GAP or 0
@@ -757,6 +793,16 @@ local function renderCatalog()
  NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(0)
  if #catalog==(canHide and 1 or 0) and not pending and hasPhysicalItem then setStatus("No compatible collected appearances for this slot.",false) end
  refreshSelection()
+end
+function NativeTransmog_SetPortraitPrototype(enabled)
+ portraitPrototypeEnabled=enabled and true or false
+ renderCatalog()
+ if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("Native Transmog portrait prototype: "..(portraitPrototypeEnabled and "enabled" or "disabled")) end
+end
+function NativeTransmog_PortraitPrototypeItemInfo(itemId,success)
+ if portraitPrototypeEnabled and success and tonumber(itemId)==portraitPrototypeEntry and portraitPrototypeButton then
+  renderPortraitPrototype(portraitPrototypeButton)
+ end
 end
 local function clearCatalogForUnavailableSlot(message)
  snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}; cursorHistory={}
@@ -897,6 +943,7 @@ end
 function NativeTransmog_OnLoad(frame)
  frame:RegisterForDrag("LeftButton"); frame:RegisterEvent("CHAT_MSG_ADDON")
  frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED"); frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+ frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
  frame:RegisterEvent("DISPLAY_SIZE_CHANGED"); frame:RegisterEvent("UI_SCALE_CHANGED")
  if RegisterAddonMessagePrefix then RegisterAddonMessagePrefix(PREFIX) end
  GameTooltip:HookScript("OnTooltipSetItem",NativeTransmog_GameTooltip_OnTooltipSetItem)
@@ -1032,6 +1079,9 @@ end
 function NativeTransmog_OnEvent(_,event,...)
  if event=="DISPLAY_SIZE_CHANGED" or event=="UI_SCALE_CHANGED" then
   updateWardrobeScale()
+  return
+ elseif event=="GET_ITEM_INFO_RECEIVED" then
+  NativeTransmog_PortraitPrototypeItemInfo(...)
   return
  elseif event=="PLAYER_EQUIPMENT_CHANGED" then
   local changedInventorySlot=...

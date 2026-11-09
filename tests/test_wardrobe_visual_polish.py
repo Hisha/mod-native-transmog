@@ -124,6 +124,18 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
         self.assertIn('left="1" right="0.72"', wardrobe)
         self.assertIn('top="1" bottom="0"', wardrobe)
 
+    def test_portrait_prototype_is_bounded_default_off_and_icon_backed(self):
+        self.assertIn("local portraitPrototypeEnabled = false", LUA)
+        self.assertIn('CreateFrame("DressUpModel","NativeTransmogPortraitPrototypeModel",button)', LUA)
+        self.assertIn("selectedSlotId~=1", LUA)
+        self.assertIn("local portraitRendered=false", LUA)
+        self.assertIn("if not portraitRendered then portraitRendered=renderPortraitPrototype(button) end", LUA)
+        self.assertLess(LUA.index("button.icon:SetTexture"), LUA.index("portraitRendered=renderPortraitPrototype(button)"))
+        self.assertIn("portraitPrototypeModel:Undress()", LUA)
+        self.assertIn("portraitPrototypeModel:TryOn(button.entry)", LUA)
+        self.assertIn("GET_ITEM_INFO_RECEIVED", LUA)
+        self.assertIn("function NativeTransmog_SetPortraitPrototype(enabled)", LUA)
+
     def test_state_readout_has_reserved_band_below_equipment_controls(self):
         self.assertIn('name="$parentStateBackground"', XML)
         self.assertIn('relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"', XML)
