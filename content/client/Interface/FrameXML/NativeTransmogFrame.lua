@@ -17,9 +17,7 @@ local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local catalogMessage = nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
-local ICONS_PER_ROW, ICON_SIZE, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 5, 48, 8, 365, 272
-local GRID_WIDTH = ICONS_PER_ROW*ICON_SIZE+(ICONS_PER_ROW-1)*ICON_GAP
-local GRID_LEFT = math.floor((CATALOG_WIDTH-GRID_WIDTH)/2+.5)
+local ICONS_PER_ROW, ICON_SIZE, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 6, 48, 8, 365, 272
 local browserMode, setFilter, setCursor, setNextCursor, setHasNext = "APPEARANCES", 0, 0, 0, false
 local setRequestId = 0
 local setHistory, setCatalog, incomingSets, selectedSet, setPieces = {}, {}, {}, nil, {}
@@ -105,6 +103,14 @@ local function setStatus(text, failure)
      (browserMode=="ITEMS" and NativeTransmogCollectionsFrameItemsStatus or NativeTransmogCollectionsFrameStatus) or NativeTransmogFrameStatus
  target:SetText(text or "")
  target:SetTextColor(failure and 1 or .25, failure and .25 or 1, .25)
+end
+function NativeTransmog_ContainSetsScrollBar(scrollFrame)
+ local scrollBar=scrollFrame and _G[scrollFrame:GetName().."ScrollBar"]
+ if not scrollBar then return end
+ -- UIPanelScrollFrameTemplate starts at -2, outside the gold panel's content edge.
+ scrollBar:ClearAllPoints()
+ scrollBar:SetPoint("TOPLEFT",scrollFrame,"TOPRIGHT",-9,-16)
+ scrollBar:SetPoint("BOTTOMLEFT",scrollFrame,"BOTTOMRIGHT",-9,16)
 end
 local function itemLabel(entry, emptyText, authoritativeName)
  if not entry or entry == 0 then return emptyText end
@@ -259,7 +265,7 @@ local function renderSets()
   setShown(row.selected,selectedSet and selectedSet.id==set.id)
  end
  for index=#visible+1,#setRows do setRows[index]:Hide() end
- NativeTransmogCollectionsFrameListScrollChild:SetHeight(math.max(420,#visible*47+2))
+ NativeTransmogCollectionsFrameListScrollChild:SetHeight(math.max(398,#visible*47+2))
  NativeTransmogCollectionsFrameListScroll:SetVerticalScroll(0)
  NativeTransmogCollectionsFrameProgressBar:SetMinMaxValues(0,math.max(1,setSection=="CUSTOM" and customMaximum or setOverallTotal)); NativeTransmogCollectionsFrameProgressBar:SetValue(setSection=="CUSTOM" and customTotal or setOverallCollected)
  NativeTransmogCollectionsFrameProgressText:SetText(setSection=="CUSTOM" and (customTotal.." / "..customMaximum.." Saved") or (setOverallCollected.." / "..setOverallTotal))
@@ -707,7 +713,10 @@ local function renderCatalog()
   local button=buttons[index] or createAppearanceButton(index)
   resetAppearanceButton(button)
   local column,row=(index-1)%ICONS_PER_ROW,math.floor((index-1)/ICONS_PER_ROW)
-  button:ClearAllPoints(); button:SetPoint("TOPLEFT",GRID_LEFT+column*(ICON_SIZE+ICON_GAP),-row*(ICON_SIZE+ICON_GAP))
+  local rowCount=math.min(ICONS_PER_ROW,#catalog-row*ICONS_PER_ROW)
+  local rowWidth=rowCount*ICON_SIZE+(rowCount-1)*ICON_GAP
+  local rowLeft=math.floor((CATALOG_WIDTH-rowWidth)/2+.5)
+  button:ClearAllPoints(); button:SetPoint("TOPLEFT",rowLeft+column*(ICON_SIZE+ICON_GAP),-row*(ICON_SIZE+ICON_GAP))
   button.appearance,button.entry,button.selectionId,button.applied,button.isHide=appearance,appearance.entry,appearance.selection,appearance.applied,appearance.isHide
   button.icon:SetTexture(appearance.isHide and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or
       (GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"))

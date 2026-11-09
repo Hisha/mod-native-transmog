@@ -13,21 +13,43 @@ WARDROBE = (ROOT / "src/NativeTransmogWardrobe.cpp").read_text(encoding="utf-8")
 PROTOCOL = (ROOT / "src/NativeTransmogProtocol.h").read_text(encoding="utf-8")
 
 
-def grid_height(count: int, columns: int = 5, size: int = 48, gap: int = 8) -> int:
+def grid_height(count: int, columns: int = 6, size: int = 48, gap: int = 8) -> int:
     rows = (count + columns - 1) // columns
     return 0 if not rows else rows * size + (rows - 1) * gap
 
 
 class WardrobeVisualPolishContracts(unittest.TestCase):
     def test_24_item_page_plus_hide_fits_without_scrolling(self):
-        self.assertIn("5, 48, 8, 365, 272", LUA)
+        self.assertIn("6, 48, 8, 365, 272", LUA)
         self.assertEqual(grid_height(25), 272)
         self.assertIn("math.max(CATALOG_HEIGHT,contentHeight)", LUA)
 
     def test_36_item_page_retains_oversized_scroll_extent(self):
-        self.assertEqual(grid_height(37), 440)
+        self.assertEqual(grid_height(37), 384)
         self.assertGreater(grid_height(37), 272)
         self.assertIn('NativeTransmogFrameBrowserPanelScrollChild:SetHeight', LUA)
+
+    def test_six_column_rows_use_the_viewport_and_incomplete_rows_are_centered(self):
+        self.assertEqual(6 * 48 + 5 * 8, 328)
+        self.assertLess(328, 365)
+        render = LUA[LUA.index("local function renderCatalog"):LUA.index("local function clearCatalogForUnavailableSlot")]
+        for marker in ("rowCount=math.min(ICONS_PER_ROW,#catalog-row*ICONS_PER_ROW)",
+                       "rowWidth=rowCount*ICON_SIZE+(rowCount-1)*ICON_GAP",
+                       "rowLeft=math.floor((CATALOG_WIDTH-rowWidth)/2+.5)"):
+            self.assertIn(marker, render)
+
+    def test_sets_scrollbar_is_contained_and_only_real_overflow_scrolls(self):
+        self.assertIn("NativeTransmog_ContainSetsScrollBar(self)", XML)
+        contain = LUA[LUA.index("function NativeTransmog_ContainSetsScrollBar"):LUA.index("local function itemLabel")]
+        self.assertIn('"TOPRIGHT",-9,-16', contain)
+        self.assertIn('"BOTTOMRIGHT",-9,16', contain)
+        self.assertIn("math.max(398,#visible*47+2)", LUA)
+        self.assertEqual(max(398, 8 * 47 + 2), 398)
+        self.assertGreater(max(398, 9 * 47 + 2), 398)
+        # The stock 32px arrow is centered on the 16px slider. After the shift,
+        # its right edge is x=269 inside the panel's x=270 outer boundary.
+        slider_left = 8 + 246 - 9
+        self.assertLessEqual(slider_left + 8 + 16, 270)
 
     def test_cursor_navigation_and_recycled_buttons_reset_every_visual_state(self):
         self.assertIn('NativeTransmogFramePageText:SetText("Page "..(#cursorHistory+1))', LUA)
@@ -83,7 +105,8 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
         self.assertIn('<Size x="900" y="540" />', XML)
         self.assertIn('<Size x="28" y="22" />', XML)
         self.assertIn('<Size x="365" y="272" />', XML)
-        self.assertEqual(5 * 48 + 4 * 8, 272)
+        self.assertEqual(6 * 48 + 5 * 8, 328)
+        self.assertLessEqual(458 + 408, 900 - 34)
 
     def test_server_protocol_and_cursor_page_semantics_are_unchanged(self):
         self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "4"', LUA)

@@ -73,10 +73,8 @@ NativeTransmogFrameBrowserPanelScroll=Widget("AppearanceScroll")
 function NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(v) self.verticalScroll=v end
 setRows, pieceRows, itemCategoryButtons, itemRows, buttons, slotButtons = {}, {}, {}, {}, {}, {}
 ITEM_CATEGORIES={{label="Head",icon="Interface\\Icons\\INV_Helmet_03"}}
-ICONS_PER_ROW,ICON_SIZE,ICON_GAP=5,48,8
+ICONS_PER_ROW,ICON_SIZE,ICON_GAP=6,48,8
 CATALOG_WIDTH,CATALOG_HEIGHT=365,272
-GRID_WIDTH=ICONS_PER_ROW*ICON_SIZE+(ICONS_PER_ROW-1)*ICON_GAP
-GRID_LEFT=math.floor((CATALOG_WIDTH-GRID_WIDTH)/2+.5)
 catalog={}; canHide=false; pending=nil; hasPhysicalItem=true
 function GetItemIcon(entry) return "icon:"..entry end
 function refreshSelection() end
@@ -145,6 +143,8 @@ function updateEquipmentSlot() end
         globals_.catalog = normal
         globals_.renderCatalog()
         self.assertEqual(globals_.NativeTransmogFrameBrowserPanelScrollChild.height, 272)
+        self.assertEqual(globals_.buttons[1].point[2], 19)
+        self.assertEqual(globals_.buttons[25].point[2], 159)
 
         first = globals_.buttons[1]
         first.selection.Show(first.selection)
@@ -162,12 +162,30 @@ function updateEquipmentSlot() end
             })
         globals_.catalog = oversized
         globals_.renderCatalog()
-        self.assertEqual(globals_.NativeTransmogFrameBrowserPanelScrollChild.height, 440)
+        self.assertEqual(globals_.NativeTransmogFrameBrowserPanelScrollChild.height, 384)
         self.assertFalse(first.selection.shown)
         self.assertFalse(first.appliedMark.shown)
         self.assertEqual(first.alpha, 1)
         self.assertFalse(first.icon.desaturated)
         self.assertFalse(first.isHide)
+
+    def test_small_application_collection_centers_its_only_row(self):
+        snippet = section("local function createAppearanceButton", "local function clearCatalogForUnavailableSlot")
+        self.lua.execute(snippet.replace("local function", "function"))
+        globals_ = self.lua.globals()
+        small = self.lua.table()
+        for index in range(1, 4):
+            small[index] = self.lua.table_from({
+                "selection": index,
+                "entry": 3000 + index,
+                "applied": False,
+                "isHide": index == 1,
+            })
+        globals_.catalog = small
+        globals_.renderCatalog()
+        self.assertEqual(globals_.buttons[1].point[2], 103)
+        self.assertEqual(globals_.buttons[3].point[2], 215)
+        self.assertEqual(globals_.NativeTransmogFrameBrowserPanelScrollChild.height, 272)
 
     def test_equipment_slot_load_clears_inherited_normal_texture(self):
         snippet = section("function NativeTransmog_EquipmentSlot_OnLoad", "function NativeTransmog_EquipmentSlot_OnClick")

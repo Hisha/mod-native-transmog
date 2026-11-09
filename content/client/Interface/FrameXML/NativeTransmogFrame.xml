@@ -122,7 +122,7 @@
           <Size x="405" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="460" y="-120" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentStatus" inherits="GameFontNormalSmall" justifyH="CENTER">
-          <Size x="410" y="18" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-20" y="16" /></Anchor></Anchors>
+          <Size x="408" y="18" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-34" y="16" /></Anchor></Anchors>
         </FontString>
       </Layer>
     </Layers>
@@ -281,7 +281,7 @@
         </Frames>
       </Frame>
       <Button name="$parentPrevious" inherits="UIPanelButtonTemplate" text="&lt;">
-        <Size x="28" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-310" y="78" /></Anchor></Anchors>
+        <Size x="28" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-280" y="78" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_PreviousPage();</OnClick></Scripts>
       </Button>
       <Frame name="$parentPage">
@@ -297,11 +297,11 @@
         <Scripts><OnClick>NativeTransmog_NextPage();</OnClick></Scripts>
       </Button>
       <Button name="$parentApply" inherits="UIPanelButtonTemplate" text="Apply Appearance">
-        <Size x="158" y="24" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-162" y="46" /></Anchor></Anchors>
+        <Size x="158" y="24" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-230" y="46" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_Apply();</OnClick></Scripts>
       </Button>
       <Button name="$parentRemove" inherits="UIPanelButtonTemplate" text="Remove Appearance">
-        <Size x="132" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-20" y="47" /></Anchor></Anchors>
+        <Size x="132" y="22" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-88" y="47" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_Remove();</OnClick></Scripts>
       </Button>
       <Frame name="$parentSavedSetDropDown" inherits="UIDropDownMenuTemplate" hidden="true">
@@ -494,6 +494,7 @@
           <ScrollFrame name="NativeTransmogCollectionsFrameListScroll" inherits="UIPanelScrollFrameTemplate">
             <Size x="246" y="398" /><Anchors><Anchor point="TOPLEFT"><Offset x="8" y="-61" /></Anchor></Anchors>
             <ScrollChild><Frame name="$parentChild"><Size x="246" y="398" /></Frame></ScrollChild>
+            <Scripts><OnLoad>NativeTransmog_ContainSetsScrollBar(self);</OnLoad></Scripts>
           </ScrollFrame>
           <Button name="NativeTransmogCollectionsFramePrevious" inherits="UIPanelButtonTemplate" text="&lt;">
             <Size x="32" y="20" /><Anchors><Anchor point="BOTTOM"><Offset x="-24" y="10" /></Anchor></Anchors>
