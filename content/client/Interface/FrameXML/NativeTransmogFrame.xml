@@ -122,23 +122,25 @@
           <Size x="290" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="318" y="-98" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentActual" inherits="GameFontHighlightSmall" justifyH="LEFT">
-          <Size x="276" y="12" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="69" /></Anchor></Anchors>
+          <Size x="264" y="12" /><Anchors><Anchor point="BOTTOMLEFT" relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"><Offset x="10" y="43" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentApplied" inherits="GameFontHighlightSmall" justifyH="LEFT">
-          <Size x="276" y="12" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="56" /></Anchor></Anchors>
+          <Size x="264" y="12" /><Anchors><Anchor point="BOTTOMLEFT" relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"><Offset x="10" y="28" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentPreview" inherits="GameFontHighlightSmall" justifyH="LEFT">
-          <Size x="276" y="12" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="43" /></Anchor></Anchors>
+          <Size x="264" y="12" /><Anchors><Anchor point="BOTTOMLEFT" relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"><Offset x="10" y="13" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentStatus" inherits="GameFontNormalSmall" justifyH="CENTER">
           <Size x="410" y="16" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-18" y="15" /></Anchor></Anchors>
         </FontString>
       </Layer>
       <Layer level="OVERLAY">
-        <Texture name="$parentBrowserCornerTL" file="Interface\DialogFrame\UI-DialogBox-Gold-Border"><Size x="38" y="38" /><Anchors><Anchor point="TOPLEFT"><Offset x="307" y="-70" /></Anchor></Anchors><TexCoords left="0" right="0.25" top="0" bottom="0.25" /></Texture>
-        <Texture name="$parentBrowserCornerTR" file="Interface\DialogFrame\UI-DialogBox-Gold-Border"><Size x="38" y="38" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-10" y="-70" /></Anchor></Anchors><TexCoords left="0.75" right="1" top="0" bottom="0.25" /></Texture>
-        <Texture name="$parentBrowserCornerBL" file="Interface\DialogFrame\UI-DialogBox-Gold-Border"><Size x="38" y="38" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="307" y="10" /></Anchor></Anchors><TexCoords left="0" right="0.25" top="0.75" bottom="1" /></Texture>
-        <Texture name="$parentBrowserCornerBR" file="Interface\DialogFrame\UI-DialogBox-Gold-Border"><Size x="38" y="38" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-10" y="10" /></Anchor></Anchors><TexCoords left="0.75" right="1" top="0.75" bottom="1" /></Texture>
+        <!-- UI-DialogBox-Gold-Border is a nine-slice edge atlas, not four corner
+             quadrants. Header end-caps provide complete 3.3.5a gold flourishes. -->
+        <Texture name="$parentBrowserCornerTL" file="Interface\DialogFrame\UI-DialogBox-Header" alpha="0.72"><Size x="90" y="44" /><Anchors><Anchor point="TOPLEFT"><Offset x="307" y="-70" /></Anchor></Anchors><TexCoords left="0" right="0.28" top="0" bottom="1" /></Texture>
+        <Texture name="$parentBrowserCornerTR" file="Interface\DialogFrame\UI-DialogBox-Header" alpha="0.72"><Size x="90" y="44" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-10" y="-70" /></Anchor></Anchors><TexCoords left="1" right="0.72" top="0" bottom="1" /></Texture>
+        <Texture name="$parentBrowserCornerBL" file="Interface\DialogFrame\UI-DialogBox-Header" alpha="0.72"><Size x="90" y="44" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="307" y="10" /></Anchor></Anchors><TexCoords left="0" right="0.28" top="1" bottom="0" /></Texture>
+        <Texture name="$parentBrowserCornerBR" file="Interface\DialogFrame\UI-DialogBox-Header" alpha="0.72"><Size x="90" y="44" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-10" y="10" /></Anchor></Anchors><TexCoords left="1" right="0.72" top="1" bottom="0" /></Texture>
       </Layer>
     </Layers>
     <Frames>
@@ -147,15 +149,15 @@
         <Scripts><OnClick>NativeTransmogFrame:Hide();</OnClick></Scripts>
       </Button>
       <Frame name="$parentActualTooltip" enableMouse="true">
-        <Size x="276" y="12" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="69" /></Anchor></Anchors>
+        <Size x="264" y="12" /><Anchors><Anchor point="BOTTOMLEFT" relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"><Offset x="10" y="43" /></Anchor></Anchors>
         <Scripts><OnEnter>NativeTransmog_StateLabel_OnEnter(self,"ACTUAL");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
       </Frame>
       <Frame name="$parentAppliedTooltip" enableMouse="true">
-        <Size x="276" y="12" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="56" /></Anchor></Anchors>
+        <Size x="264" y="12" /><Anchors><Anchor point="BOTTOMLEFT" relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"><Offset x="10" y="28" /></Anchor></Anchors>
         <Scripts><OnEnter>NativeTransmog_StateLabel_OnEnter(self,"APPLIED");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
       </Frame>
       <Frame name="$parentPreviewTooltip" enableMouse="true">
-        <Size x="276" y="12" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="43" /></Anchor></Anchors>
+        <Size x="264" y="12" /><Anchors><Anchor point="BOTTOMLEFT" relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"><Offset x="10" y="13" /></Anchor></Anchors>
         <Scripts><OnEnter>NativeTransmog_StateLabel_OnEnter(self,"PREVIEW");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
       </Frame>
       <Frame name="$parentPreviewPanel">
@@ -167,6 +169,18 @@
           <TileSize><AbsValue val="16" /></TileSize>
           <EdgeSize><AbsValue val="16" /></EdgeSize>
         </Backdrop>
+        <Layers>
+          <Layer level="BACKGROUND">
+            <!-- Four stock WotLK dressing-room pieces are assigned for the
+                 player's race by NativeTransmog_PreviewPanel_OnLoad. -->
+            <Texture name="$parentBackgroundTopLeft"><Size x="222" y="273" /><Anchors><Anchor point="TOPLEFT"><Offset x="4" y="-4" /></Anchor></Anchors></Texture>
+            <Texture name="$parentBackgroundTopRight"><Size x="54" y="273" /><Anchors><Anchor point="TOPLEFT" relativeTo="$parentBackgroundTopLeft" relativePoint="TOPRIGHT" /></Anchors></Texture>
+            <Texture name="$parentBackgroundBotLeft"><Size x="222" y="137" /><Anchors><Anchor point="TOPLEFT" relativeTo="$parentBackgroundTopLeft" relativePoint="BOTTOMLEFT" /></Anchors></Texture>
+            <Texture name="$parentBackgroundBotRight"><Size x="54" y="137" /><Anchors><Anchor point="TOPLEFT" relativeTo="$parentBackgroundTopRight" relativePoint="BOTTOMLEFT" /></Anchors></Texture>
+            <Texture name="$parentBackgroundShade"><Color r="0.015" g="0.018" b="0.026" a="0.30" /><Anchors><Anchor point="TOPLEFT"><Offset x="4" y="-4" /></Anchor><Anchor point="BOTTOMRIGHT"><Offset x="-4" y="4" /></Anchor></Anchors></Texture>
+            <Texture name="$parentStateBackground"><Color r="0.018" g="0.020" b="0.027" a="0.90" /><Size x="274" y="54" /><Anchors><Anchor point="BOTTOM"><Offset x="0" y="5" /></Anchor></Anchors></Texture>
+          </Layer>
+        </Layers>
         <Frames>
           <DressUpModel name="$parentModel" enableMouse="true" enableMouseWheel="true">
             <Size x="196" y="382" />
@@ -219,7 +233,7 @@
 
           <!-- Weapons follow Blizzard's horizontal main/off/ranged treatment. -->
           <Button name="$parentMainHandSlot" inherits="NativeTransmogEquipmentSlotTemplate" id="11">
-            <Anchors><Anchor point="BOTTOM"><Offset x="-48" y="48" /></Anchor></Anchors>
+            <Anchors><Anchor point="BOTTOM"><Offset x="-48" y="104" /></Anchor></Anchors>
           </Button>
           <Button name="$parentSecondaryHandSlot" inherits="NativeTransmogEquipmentSlotTemplate" id="12">
             <Anchors><Anchor point="LEFT" relativeTo="$parentMainHandSlot" relativePoint="RIGHT"><Offset x="7" y="0" /></Anchor></Anchors>
@@ -229,7 +243,7 @@
           </Button>
 
           <Button name="$parentRotateLeft">
-            <Size x="32" y="32" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="9" /></Anchor></Anchors>
+            <Size x="32" y="32" /><Anchors><Anchor point="BOTTOMLEFT"><Offset x="14" y="66" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_Rotate(-0.20);</OnClick></Scripts>
             <NormalTexture file="Interface\Buttons\UI-RotationLeft-Button-Up" />
             <PushedTexture file="Interface\Buttons\UI-RotationLeft-Button-Down" />
@@ -240,13 +254,14 @@
             <Scripts><OnClick>NativeTransmog_ResetPreview();</OnClick></Scripts>
           </Button>
           <Button name="$parentRotateRight">
-            <Size x="32" y="32" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-14" y="9" /></Anchor></Anchors>
+            <Size x="32" y="32" /><Anchors><Anchor point="BOTTOMRIGHT"><Offset x="-14" y="66" /></Anchor></Anchors>
             <Scripts><OnClick>NativeTransmog_Rotate(0.20);</OnClick></Scripts>
             <NormalTexture file="Interface\Buttons\UI-RotationRight-Button-Up" />
             <PushedTexture file="Interface\Buttons\UI-RotationRight-Button-Down" />
             <HighlightTexture file="Interface\Buttons\ButtonHilight-Round" alphaMode="ADD" />
           </Button>
         </Frames>
+        <Scripts><OnLoad>NativeTransmog_PreviewPanel_OnLoad(self);</OnLoad></Scripts>
       </Frame>
 
       <Frame name="$parentBrowserPanel">
@@ -313,16 +328,16 @@
         <Size x="132" y="24" /><Anchors><Anchor point="LEFT" relativeTo="$parentApply" relativePoint="RIGHT"><Offset x="6" y="0" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_Remove();</OnClick></Scripts>
       </Button>
-      <Frame name="$parentSavedSetDropDown" inherits="UIDropDownMenuTemplate" hidden="true">
-        <Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-48" /></Anchor></Anchors>
+      <Frame name="$parentSavedSetDropDown" inherits="UIDropDownMenuTemplate">
+        <Anchors><Anchor point="TOPLEFT"><Offset x="0" y="-40" /></Anchor></Anchors>
         <Scripts><OnLoad>NativeTransmog_SavedSetDropDown_OnLoad(self);</OnLoad></Scripts>
       </Frame>
-      <Button name="$parentApplySavedSet" inherits="UIPanelButtonTemplate" text="Saved Sets...">
+      <Button name="$parentApplySavedSet" inherits="UIPanelButtonTemplate" text="Saved Sets..." hidden="true">
         <Size x="184" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-43" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_ToggleSavedSets(self);</OnClick></Scripts>
       </Button>
       <Button name="$parentSaveOutfit" inherits="UIPanelButtonTemplate" text="Save">
-        <Size x="88" y="22" /><Anchors><Anchor point="LEFT" relativeTo="$parentApplySavedSet" relativePoint="RIGHT"><Offset x="5" y="0" /></Anchor></Anchors>
+        <Size x="84" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="208" y="-43" /></Anchor></Anchors>
         <Scripts><OnLoad>self:Disable();</OnLoad><OnEnter>NativeTransmog_DeferredControl_OnEnter(self,"Save outfits in the gold Collections window.");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
       </Button>
       <Button name="$parentItemsTab" inherits="UIPanelButtonTemplate" text="Items">

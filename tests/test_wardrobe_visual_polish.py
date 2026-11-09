@@ -110,6 +110,46 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
         self.assertEqual(6 * 84 + 5 * 10, 554)
         self.assertLessEqual(323 + 622, 960 - 8)
 
+    def test_preview_uses_stock_race_background_instead_of_flat_fill(self):
+        for piece in ("BackgroundTopLeft", "BackgroundTopRight", "BackgroundBotLeft", "BackgroundBotRight"):
+            self.assertIn(piece, XML + LUA)
+        self.assertIn('Interface\\\\DressUpFrame\\\\DressUpBackground-', LUA)
+        self.assertIn('race="Dwarf"', LUA)
+        self.assertIn('race="Orc"', LUA)
+
+    def test_browser_ornaments_use_complete_mirrored_header_end_caps(self):
+        wardrobe = XML[XML.index('<Frame name="NativeTransmogFrame"'):
+                       XML.index('<Frame name="NativeTransmogCollectionsFrame"')]
+        self.assertEqual(wardrobe.count(r'file="Interface\DialogFrame\UI-DialogBox-Header"'), 4)
+        self.assertIn('left="1" right="0.72"', wardrobe)
+        self.assertIn('top="1" bottom="0"', wardrobe)
+
+    def test_state_readout_has_reserved_band_below_equipment_controls(self):
+        self.assertIn('name="$parentStateBackground"', XML)
+        self.assertIn('relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"', XML)
+        self.assertIn('<Offset x="-48" y="104" />', XML)
+        self.assertIn('<Offset x="14" y="66" />', XML)
+        # Absolute top-down bounds inside the 600px frame. The model/equipment
+        # area ends before the state band, which in turn ends before Apply.
+        preview_top, preview_height = 91, 474
+        model_bottom = preview_top + 12 + 382
+        weapon_bottom = preview_top + preview_height - 104 + 20
+        rotation_bottom = preview_top + preview_height - 66
+        state_top = preview_top + preview_height - 5 - 54
+        state_bottom = preview_top + preview_height - 5
+        apply_top = 600 - 7 - 24
+        self.assertLessEqual(max(model_bottom, weapon_bottom, rotation_bottom), state_top)
+        self.assertLessEqual(state_bottom, apply_top)
+
+    def test_outfit_selector_and_save_are_integrated_as_top_toolbar(self):
+        selector = XML[XML.index('name="$parentSavedSetDropDown"'):
+                       XML.index('name="$parentItemsTab"')]
+        self.assertNotIn('inherits="UIDropDownMenuTemplate" hidden="true"', selector)
+        self.assertIn('<Offset x="208" y="-43" />', selector)
+        self.assertIn('UIDropDownMenu_SetWidth(frame,190)', LUA)
+        self.assertIn('selectedName or "No Outfit"', LUA)
+        self.assertLessEqual(208 + 84, 303)
+
     def test_retail_frame_toolbar_and_deferred_controls_are_explicit(self):
         self.assertIn('text="Transmogrify"', XML)
         self.assertIn('name="$parentItemsTab"', XML)

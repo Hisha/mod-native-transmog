@@ -58,6 +58,19 @@ local ITEM_CATEGORIES = {
 }
 local requestCatalog, renderPieces, requestSetDetail, requestItems, renderItems
 
+function NativeTransmog_PreviewPanel_OnLoad(frame)
+ local _,race=UnitRace("player")
+ race=race or "Orc"
+ if string.upper(race)=="GNOME" then race="Dwarf"
+ elseif string.upper(race)=="TROLL" then race="Orc" end
+ local texture="Interface\\DressUpFrame\\DressUpBackground-"..race
+ local prefix=frame:GetName()
+ _G[prefix.."BackgroundTopLeft"]:SetTexture(texture..1)
+ _G[prefix.."BackgroundTopRight"]:SetTexture(texture..2)
+ _G[prefix.."BackgroundBotLeft"]:SetTexture(texture..3)
+ _G[prefix.."BackgroundBotRight"]:SetTexture(texture..4)
+end
+
 local RESULT_TEXT = {
  ["appearance is not collected"]="Appearance not collected.",
  ["appearance is restricted from this class"]="Your class cannot use that appearance.",
@@ -648,6 +661,8 @@ local function refreshSelection()
  setButtonEnabled(NativeTransmogFramePrevious, authorizedToken and #cursorHistory > 0 and not pending)
  setButtonEnabled(NativeTransmogFrameNext, authorizedToken and hasNext and not pending)
  setButtonEnabled(NativeTransmogFrameApplySavedSet,not pending)
+ local savedSetDropDownButton=_G[NativeTransmogFrameSavedSetDropDown:GetName().."Button"]
+ if savedSetDropDownButton then setButtonEnabled(savedSetDropDownButton,not pending) end
  for _,slotButton in pairs(slotButtons) do setButtonEnabled(slotButton,not pending) end
  NativeTransmogFrameApply:SetText(selectedAppearance and selectedAppearance.isHide and "Hide Appearance" or "Apply Appearance")
  NativeTransmogFramePageText:SetText("Page "..(#cursorHistory+1))
@@ -779,9 +794,11 @@ end
 function NativeTransmog_SavedSetDropDown_OnLoad(frame)
  UIDropDownMenu_Initialize(frame,function()
   if #savedSetCatalog==0 then local info=UIDropDownMenu_CreateInfo(); info.text="No custom sets saved"; info.disabled=true; UIDropDownMenu_AddButton(info); return end
-  for _,set in ipairs(savedSetCatalog) do local info=UIDropDownMenu_CreateInfo(); info.text=set.name; info.value=set.id; info.checked=savedSetId==set.id; info.func=function() savedSetId=set.id; CloseDropDownMenus(); NativeTransmog_PreflightSavedSet() end; UIDropDownMenu_AddButton(info) end
+  for _,set in ipairs(savedSetCatalog) do local info=UIDropDownMenu_CreateInfo(); info.text=set.name; info.value=set.id; info.checked=savedSetId==set.id; info.func=function() savedSetId=set.id; UIDropDownMenu_SetText(NativeTransmogFrameSavedSetDropDown,set.name); CloseDropDownMenus(); NativeTransmog_PreflightSavedSet() end; UIDropDownMenu_AddButton(info) end
  end)
- UIDropDownMenu_SetWidth(frame,170); UIDropDownMenu_SetText(frame,"Saved Custom Sets")
+ local selectedName=nil
+ for _,set in ipairs(savedSetCatalog) do if set.id==savedSetId then selectedName=set.name; break end end
+ UIDropDownMenu_SetWidth(frame,190); UIDropDownMenu_SetText(frame,selectedName or "No Outfit")
 end
 function NativeTransmog_ToggleSavedSets(button)
  if #savedSetCatalog==0 then setStatus("No custom sets saved. Create one in Collections.",true); return end
