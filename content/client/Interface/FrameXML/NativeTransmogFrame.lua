@@ -260,11 +260,15 @@ local function createPieceRow(index)
  end)
  pieceRows[index]=row; return row
 end
+local function positionCustomPieceRow(row,index)
+ local column=(index-1)%7; local line=math.floor((index-1)/7)
+ row:ClearAllPoints(); row:SetPoint("TOPLEFT",NativeTransmogCollectionsFramePieceBar,"TOPLEFT",42+column*40,-line*38)
+end
 renderPieces=function()
  if customEditing then
   for wireSlot=1,#SLOT_ORDER do
-   local piece=customDraftPieces[wireSlot]; local row=pieceRows[wireSlot] or createPieceRow(wireSlot); local column=(wireSlot-1)%7; local line=math.floor((wireSlot-1)/7)
-   row:ClearAllPoints(); row:SetPoint("TOPLEFT",NativeTransmogCollectionsFramePieceBar,"TOPLEFT",42+column*40,-line*38); row.slot=wireSlot; row.entry=piece and piece.entry or nil; row.itemName=SLOT_ORDER[wireSlot]; row.sourceText="Left-click to choose. Right-click to leave unchanged. Shift-click to hide."
+   local piece=customDraftPieces[wireSlot]; local row=pieceRows[wireSlot] or createPieceRow(wireSlot)
+   positionCustomPieceRow(row,wireSlot); row.slot=wireSlot; row.entry=piece and piece.entry or nil; row.itemName=SLOT_ORDER[wireSlot]; row.sourceText="Left-click to choose. Right-click to leave unchanged. Shift-click to hide."
    row.icon:SetTexture(piece and piece.state==1 and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or (piece and GetItemIcon(piece.entry)) or (ITEM_CATEGORIES[CUSTOM_SLOT_CATEGORY[wireSlot]] and ITEM_CATEGORIES[CUSTOM_SLOT_CATEGORY[wireSlot]].icon) or "Interface\\Icons\\INV_Misc_QuestionMark")
    row:SetAlpha(piece and 1 or .35); row.state:SetTexture(piece and .15 or .45,piece and .8 or .42,piece and .2 or .36,1); row:Show()
   end
@@ -275,7 +279,10 @@ renderPieces=function()
  end
  local count=#setPieces; local width=count>0 and count*34+(count-1)*5 or 0; local start=(360-width)/2
  for index,piece in ipairs(setPieces) do
-  local row=pieceRows[index] or createPieceRow(index); row:ClearAllPoints(); row:SetPoint("LEFT",NativeTransmogCollectionsFramePieceBar,"LEFT",start+(index-1)*39,0); row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
+  local row=pieceRows[index] or createPieceRow(index)
+  if selectedSet and selectedSet.custom then positionCustomPieceRow(row,index)
+  else row:ClearAllPoints(); row:SetPoint("LEFT",NativeTransmogCollectionsFramePieceBar,"LEFT",start+(index-1)*39,0) end
+  row.slot=nil; row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
   row.icon:SetTexture(piece.state==1 and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row:SetAlpha(piece.collected and 1 or .45)
   row.state:SetTexture(piece.collected and .15 or .65,piece.collected and .8 or .12,piece.collected and .2 or .12,1); row:Show()
  end

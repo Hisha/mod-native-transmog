@@ -2,6 +2,7 @@
 """Custom appearance-set persistence, authority, UI, and atomic-application contracts."""
 
 from pathlib import Path
+import re
 import sqlite3
 import unittest
 
@@ -159,6 +160,28 @@ class PreviewAndUiContractTests(unittest.TestCase):
         detail_end = LUA[LUA.index('elseif command=="CUSTOMDETAILEND"'):LUA.index('elseif command=="CUSTOMDRAFTPIECE"')]
         self.assertIn('setDetailPending=nil', detail_end)
         self.assertIn('self.entry and self.entry>0 and not GetItemInfo(self.entry)', LUA)
+
+    def test_saved_custom_sets_share_the_bounded_editor_icon_grid(self):
+        layout = LUA[LUA.index("local function positionCustomPieceRow"):LUA.index("renderPieces=function()")]
+        renderer = LUA[LUA.index("renderPieces=function()"):LUA.index("local function requestSets")]
+        self.assertIn("positionCustomPieceRow(row,wireSlot)", renderer)
+        self.assertIn("selectedSet.custom then positionCustomPieceRow(row,index)", renderer)
+        values = re.search(
+            r"column=\(index-1\)%(\d+).*?42\+column\*(\d+),-line\*(\d+)",
+            layout,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(values)
+        columns, horizontal_step, vertical_step = map(int, values.groups())
+        for count in range(1, 15):
+            with self.subTest(selection_count=count):
+                positions = [
+                    (42 + ((index - 1) % columns) * horizontal_step,
+                     -((index - 1) // columns) * vertical_step)
+                    for index in range(1, count + 1)
+                ]
+                self.assertLessEqual(max(x + 34 for x, _ in positions), 360)
+                self.assertLessEqual(abs(min(y for _, y in positions)) + 34, 76)
 
     def test_single_line_inputs_do_not_run_scrolling_edit_updates(self):
         self.assertEqual(XML.count('inherits="InputBoxTemplate"'), 3)
