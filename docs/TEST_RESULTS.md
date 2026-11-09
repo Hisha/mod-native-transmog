@@ -1,5 +1,36 @@
 # Test results
 
+## Single-tile portrait framing correction
+
+Test date: 2026-11-09.
+
+### Passed
+
+- Reduced the one-model portrait preset from scale `1.80` to `1.30`, retained camera 0 and centered X/Z offsets,
+  and retained the verified `-0.13` camera depth. The preset remains reasserted during the bounded native-load
+  window.
+- Source contracts cover one XML-owned `84x111` model, icon fallback, `SetUnit`/`Undress`/`TryOn` isolation,
+  clear-before-reuse lifecycle, camera reset, and three consecutive enable/disable lifecycle checks.
+- Full suite: `python3 -m unittest discover -s tests`
+  - 297 tests passed.
+- Lua/FrameXML validation:
+  - `NativeTransmogFrame.lua` parsed successfully through the installed LuaJIT 5.1-compatible runtime.
+  - `NativeTransmogFrame.xml` parsed successfully with Python `xml.etree.ElementTree`.
+- Deterministic EPF verification:
+  - Four members; two consecutive builds were byte-for-byte identical and `python3 content/build_epf.py --check`
+    passed.
+  - SHA-256: `e3c836315d9721182b2ce7f6938a5fbcf23085ef1d79217413fcb6337b8ee618`.
+- `git diff --check` passed.
+
+### Not run or not proven
+
+No build-12340 client or PTR deployment is available in this workspace. The Judgement helmet's final pixel margins,
+three live enable/disable pairs, stale/floating-model absence, and the race/sex geometry matrix therefore remain
+manual PTR checks. Build 12340 exposes no supported child-clipping control or model-bounds API; the observed overflow
+shows that frame-edge clipping cannot be assumed. Tauren horns, Troll/Night Elf ears, Draenei horns/crests, hair, and
+unusually tall or wide helm geosets can still require a more conservative shared scale. No Collections window,
+Warpweaver, server protocol, or other Wardrobe behavior was changed. No deployment, commit, or push was performed.
+
 ## Native Warpweaver updater compatibility fix
 
 Test date: 2026-11-09.

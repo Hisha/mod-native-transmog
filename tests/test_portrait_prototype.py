@@ -51,13 +51,35 @@ class PortraitPrototypeContracts(unittest.TestCase):
         self.assertIn("GET_ITEM_INFO_RECEIVED", LUA)
 
     def test_camera_preset_is_complete_and_reasserted_during_native_load(self):
+        self.assertIn("local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE = .25, 1.30", LUA)
+        self.assertIn("local PORTRAIT_MODEL_X, PORTRAIT_MODEL_Y, PORTRAIT_MODEL_Z = 0, -.13, 0", LUA)
         camera = section("local function resetPortraitPrototypeCamera", "local function hidePortraitPrototype")
         for call in ("SetCamera(0)", "SetFacing(0)", "SetRotation(0)",
-                     "SetModelScale(PORTRAIT_MODEL_SCALE)", "SetPosition(0,PORTRAIT_MODEL_Y,0)"):
+                     "SetModelScale(PORTRAIT_MODEL_SCALE)",
+                     "SetPosition(PORTRAIT_MODEL_X,PORTRAIT_MODEL_Y,PORTRAIT_MODEL_Z)"):
             self.assertIn(call, camera)
         update = section("function NativeTransmog_PortraitPrototype_OnUpdate", "local function renderCatalog")
         self.assertIn("resetPortraitPrototypeCamera(model)", update)
         self.assertIn("GetTime()>=portraitPrototypeCameraUntil", update)
+
+    def test_three_enable_disable_cycles_use_the_same_reset_paths(self):
+        setter = section("function NativeTransmog_SetPortraitPrototype", "function NativeTransmog_PortraitPrototypeItemInfo")
+        render = section("local function renderCatalog", "function NativeTransmog_SetPortraitPrototype")
+        hide = section("local function hidePortraitPrototype", "local function renderPortraitPrototype")
+        # Every toggle rerenders. Each rerender clears native state before the
+        # same single activation path, so three consecutive pairs cannot
+        # accumulate camera, dress, or stale-model state.
+        for _ in range(3):
+            self.assertIn("portraitPrototypeEnabled=enabled and true or false", setter)
+            self.assertIn("renderCatalog()", setter)
+            self.assertLess(render.index("hidePortraitPrototype()"), render.index("renderPortraitPrototype(button)"))
+            self.assertIn("portraitPrototypeCameraUntil=nil", hide)
+            self.assertIn("portraitPrototypeModel:Hide(); portraitPrototypeModel:ClearModel()", hide)
+
+    def test_unclipped_client_uses_camera_space_safety_margin(self):
+        declarations = LUA[LUA.index("-- PTR showed that 1.80"):LUA.index("-- The retail reconstruction")]
+        self.assertIn("does not\n-- reliably clip model geometry", declarations)
+        self.assertLess(1.30, 1.80)
 
     def test_prototype_remains_one_head_tile_and_icon_fallback_survives(self):
         render = section("local function renderCatalog", "function NativeTransmog_SetPortraitPrototype")

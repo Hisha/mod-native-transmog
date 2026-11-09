@@ -23,7 +23,12 @@ local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
 local portraitPrototypeEnabled = false
 local portraitPrototypeModel, portraitPrototypeButton, portraitPrototypeEntry = nil, nil, nil
 local portraitPrototypeCameraUntil = nil
-local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE, PORTRAIT_MODEL_Y = .25, 1.80, -.13
+-- PTR showed that 1.80 overfilled the 84x111 viewport. Build 12340 does not
+-- reliably clip model geometry, so keep a conservative camera-space margin
+-- for tall helms instead of depending on the widget boundary. Zero X/Z keeps
+-- the head centered; Y retains the verified camera-0 depth.
+local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE = .25, 1.30
+local PORTRAIT_MODEL_X, PORTRAIT_MODEL_Y, PORTRAIT_MODEL_Z = 0, -.13, 0
 -- The retail reconstruction keeps a fixed six-by-three viewport. Configured
 -- catalog pages larger than 18 continue in the existing scroll child.
 local ICONS_PER_ROW, ICON_WIDTH, ICON_HEIGHT, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 6, 84, 111, 10, 566, 353
@@ -750,7 +755,7 @@ local function resetPortraitPrototypeCamera(model)
  model:SetCamera(0)
  model:SetFacing(0); model:SetRotation(0)
  model:SetModelScale(PORTRAIT_MODEL_SCALE)
- model:SetPosition(0,PORTRAIT_MODEL_Y,0)
+ model:SetPosition(PORTRAIT_MODEL_X,PORTRAIT_MODEL_Y,PORTRAIT_MODEL_Z)
 end
 local function hidePortraitPrototype()
  portraitPrototypeCameraUntil=nil
