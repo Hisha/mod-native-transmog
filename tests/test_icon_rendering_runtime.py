@@ -76,6 +76,8 @@ ITEM_CATEGORIES={{label="Head",icon="Interface\\Icons\\INV_Helmet_03"}}
 ICONS_PER_ROW,ICON_WIDTH,ICON_HEIGHT,ICON_GAP=6,84,111,10
 CATALOG_WIDTH,CATALOG_HEIGHT=566,353
 catalog={}; canHide=false; pending=nil; hasPhysicalItem=true
+PORTRAIT_PROTOTYPE_MAX=3; portraitPrototypeEnabled=false
+portraitPrototypeModels={}; portraitPrototypeButtons={}; portraitPrototypeEntries={}; portraitPrototypeCameraUntil={}
 function GetItemIcon(entry) return "icon:"..entry end
 function refreshSelection() end
 function setStatus() end

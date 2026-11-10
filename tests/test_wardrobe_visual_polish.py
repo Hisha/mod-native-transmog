@@ -126,14 +126,16 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
 
     def test_portrait_prototype_is_bounded_default_off_and_icon_backed(self):
         self.assertIn("local portraitPrototypeEnabled = false", LUA)
-        self.assertEqual(XML.count('name="NativeTransmogPortraitPrototypeModel"'), 1)
-        self.assertNotIn('CreateFrame("DressUpModel","NativeTransmogPortraitPrototypeModel"', LUA)
+        self.assertIn("local PORTRAIT_PROTOTYPE_MAX = 3", LUA)
+        self.assertEqual(XML.count('<DressUpModel name="NativeTransmogPortraitPrototypeModel'), 3)
+        self.assertNotIn('CreateFrame("DressUpModel"', LUA)
         self.assertIn("selectedSlotId~=1", LUA)
-        self.assertIn("local portraitRendered=false", LUA)
-        self.assertIn("if not portraitRendered then portraitRendered=renderPortraitPrototype(button) end", LUA)
-        self.assertLess(LUA.index("button.icon:SetTexture"), LUA.index("portraitRendered=renderPortraitPrototype(button)"))
-        self.assertIn("portraitPrototypeModel:Undress()", LUA)
-        self.assertIn("portraitPrototypeModel:TryOn(itemLink)", LUA)
+        self.assertIn("local portraitCount, portraitEntries=0, {}", LUA)
+        self.assertIn("not portraitEntries[appearance.entry]", LUA)
+        self.assertIn("renderPortraitPrototype(button,portraitCount+1)", LUA)
+        self.assertLess(LUA.index("button.icon:SetTexture"), LUA.index("renderPortraitPrototype(button,portraitCount+1)"))
+        self.assertIn("model:Undress()", LUA)
+        self.assertIn("model:TryOn(itemLink)", LUA)
         self.assertIn("GET_ITEM_INFO_RECEIVED", LUA)
         self.assertIn("function NativeTransmog_SetPortraitPrototype(enabled)", LUA)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused contracts for the build-12340 single-tile model prototype."""
+"""Focused contracts for the build-12340 three-portrait experiment."""
 
 from pathlib import Path
 import unittest
@@ -11,82 +11,104 @@ XML = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.xml").read_
 
 
 def section(start: str, end: str) -> str:
-    return LUA[LUA.index(start):LUA.index(end, LUA.index(start))]
+    begin = LUA.index(start)
+    return LUA[begin:LUA.index(end, begin)]
 
 
 class PortraitPrototypeContracts(unittest.TestCase):
-    def test_exactly_one_fixed_browser_owned_model_exists(self):
+    def test_01_pool_is_fixed_at_three_xml_owned_models(self):
         browser = XML[XML.index('<Frame name="$parentBrowserPanel">'):
                       XML.index('<Button name="$parentPending"', XML.index('<Frame name="$parentBrowserPanel">'))]
-        self.assertEqual(XML.count('name="NativeTransmogPortraitPrototypeModel"'), 1)
-        self.assertIn('<Size x="84" y="111" />', browser)
-        self.assertNotIn('CreateFrame("DressUpModel","NativeTransmogPortraitPrototypeModel"', LUA)
-        render = section("local function renderPortraitPrototype", "local function renderCatalog")
-        self.assertIn("SetParent(NativeTransmogFrameBrowserPanel)", render)
-        self.assertIn('SetPoint("TOPLEFT",button,"TOPLEFT",0,0)', render)
-        self.assertIn('SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",0,0)', render)
+        self.assertIn("local PORTRAIT_PROTOTYPE_MAX = 3", LUA)
+        self.assertEqual(browser.count("<DressUpModel"), 3)
+        self.assertEqual(browser.count('<Size x="84" y="111" />'), 3)
+        self.assertNotIn('CreateFrame("DressUpModel"', LUA)
 
-    def test_disable_close_and_rerender_hide_and_clear_the_model(self):
-        hide = section("local function hidePortraitPrototype", "local function renderPortraitPrototype")
-        self.assertIn("portraitPrototypeCameraUntil=nil", hide)
-        self.assertIn("portraitPrototypeModel:Hide()", hide)
-        self.assertIn("portraitPrototypeModel:ClearModel()", hide)
-        self.assertIn("hidePortraitPrototype()\n for _,button in ipairs(buttons)", LUA)
-        on_hide = section("function NativeTransmog_OnHide", "function NativeTransmog_OpenAuthorized")
-        self.assertIn("hidePortraitPrototype()", on_hide)
+    def test_02_first_three_eligible_entries_are_unique_and_ordered(self):
+        render = section("local function renderCatalog", "function NativeTransmog_SetPortraitPrototype")
+        self.assertIn("for index,appearance in ipairs(catalog) do", render)
+        self.assertIn("portraitCount<PORTRAIT_PROTOTYPE_MAX", render)
+        self.assertIn("not appearance.isHide", render)
+        self.assertIn("not portraitEntries[appearance.entry]", render)
+        self.assertIn("renderPortraitPrototype(button,portraitCount+1)", render)
+        self.assertIn("portraitEntries[appearance.entry]=true", render)
 
-    def test_every_activation_rebuilds_isolated_appearance_from_item_link(self):
+    def test_03_each_model_is_anchored_to_exactly_its_tile(self):
         render = section("local function renderPortraitPrototype", "function NativeTransmog_PortraitPrototype_OnUpdate")
-        ordered = [
-            'GetItemInfo(button.entry)',
-            'SetUnit("player")',
-            "Undress()",
-            "TryOn(itemLink)",
-            "resetPortraitPrototypeCamera(portraitPrototypeModel)",
-        ]
-        positions = [render.index(token) for token in ordered]
-        self.assertEqual(positions, sorted(positions))
-        self.assertIn("if not itemLink then return true end", render)
-        self.assertLess(render.index("ClearModel()"), render.index('SetUnit("player")'))
-        self.assertIn("GET_ITEM_INFO_RECEIVED", LUA)
+        self.assertIn("model:SetParent(NativeTransmogFrameBrowserPanel)", render)
+        self.assertIn('model:SetPoint("TOPLEFT",button,"TOPLEFT",0,0)', render)
+        self.assertIn('model:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",0,0)', render)
+        self.assertIn("model:SetFrameLevel(button:GetFrameLevel()+1)", render)
+        self.assertNotIn("SetClipsChildren", render)
 
-    def test_camera_preset_is_complete_and_reasserted_during_native_load(self):
-        self.assertIn("local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE = .25, 1.30", LUA)
-        self.assertIn("local PORTRAIT_MODEL_X, PORTRAIT_MODEL_Y, PORTRAIT_MODEL_Z = 0, -.13, 0", LUA)
-        camera = section("local function resetPortraitPrototypeCamera", "local function hidePortraitPrototype")
+    def test_04_repeated_toggles_clear_but_reuse_the_pool(self):
+        setter = section("function NativeTransmog_SetPortraitPrototype", "function NativeTransmog_PortraitPrototypeItemInfo")
+        hide = section("local function hidePortraitPrototype", "local function renderPortraitPrototype")
+        allocator = section("local function portraitPrototypeModelAt", "local function hidePortraitPrototype")
+        self.assertIn("portraitPrototypeEnabled=enabled and true or false", setter)
+        self.assertIn("renderCatalog()", setter)
+        self.assertIn("for index=1,PORTRAIT_PROTOTYPE_MAX do", hide)
+        self.assertIn("model:Hide(); model:ClearModel()", hide)
+        self.assertIn("if model then return model end", allocator)
+        self.assertNotIn("portraitPrototypeModels[index]=nil", hide)
+
+    def test_05_catalog_updates_and_page_changes_take_the_cleanup_path(self):
+        render = section("local function renderCatalog", "function NativeTransmog_SetPortraitPrototype")
+        self.assertTrue(render.startswith("local function renderCatalog()\n hidePortraitPrototype()"))
+        self.assertIn("function NativeTransmog_NextPage() if hasNext", LUA)
+        self.assertIn("function NativeTransmog_PreviousPage()", LUA)
+        catalog_end = section('elseif command=="END"', 'elseif command=="RESULT"')
+        self.assertIn("catalog=incomingCatalog", catalog_end)
+        self.assertIn("renderCatalog()", catalog_end)
+
+    def test_06_category_changes_render_models_only_for_head(self):
+        portrait = section("local function renderPortraitPrototype", "function NativeTransmog_PortraitPrototype_OnUpdate")
+        select_slot = section("function NativeTransmog_SelectSlot", "function NativeTransmog_Rotate")
+        self.assertIn("selectedSlotId~=1", portrait)
+        self.assertIn("selectedSlotId=slotId", select_slot)
+        self.assertTrue("requestCatalog(0)" in select_slot or "renderCatalog()" in select_slot)
+
+    def test_07_fewer_than_three_appearances_show_only_available_models(self):
+        render = section("local function renderCatalog", "function NativeTransmog_SetPortraitPrototype")
+        portrait = section("local function renderPortraitPrototype", "function NativeTransmog_PortraitPrototype_OnUpdate")
+        self.assertIn("for index,appearance in ipairs(catalog) do", render)
+        self.assertNotIn("for index=1,PORTRAIT_PROTOTYPE_MAX", render)
+        self.assertEqual(portrait.count("model:Show()"), 1)
+        self.assertLess(portrait.index("if not itemLink then return true end"), portrait.index("model:Show()"))
+
+    def test_08_item_icons_remain_the_async_and_disable_fallback(self):
+        render = section("local function renderCatalog", "function NativeTransmog_SetPortraitPrototype")
+        portrait = section("local function renderPortraitPrototype", "function NativeTransmog_PortraitPrototype_OnUpdate")
+        self.assertLess(render.index("button.icon:SetTexture"), render.index("renderPortraitPrototype(button"))
+        self.assertIn("if not itemLink then return true end", portrait)
+        self.assertIn("GET_ITEM_INFO_RECEIVED", LUA)
+        self.assertNotIn("button.icon:Hide", LUA)
+
+    def test_09_models_have_independent_dress_and_camera_state(self):
+        portrait = section("local function renderPortraitPrototype", "function NativeTransmog_PortraitPrototype_OnUpdate")
+        ordered = ['GetItemInfo(button.entry)', 'model:SetUnit("player")', "model:Undress()",
+                   "model:TryOn(itemLink)", "resetPortraitPrototypeCamera(model)"]
+        positions = [portrait.index(token) for token in ordered]
+        self.assertEqual(positions, sorted(positions))
+        update = section("function NativeTransmog_PortraitPrototype_OnUpdate", "local function renderCatalog")
+        self.assertIn("portraitPrototypeCameraUntil[index]", update)
+        self.assertIn("model~=portraitPrototypeModels[index]", update)
+        self.assertIn("if GetTime()>=cameraUntil then portraitPrototypeCameraUntil[index]=nil end", update)
+        camera = section("local function resetPortraitPrototypeCamera", "local function portraitPrototypeModelAt")
         for call in ("SetCamera(0)", "SetFacing(0)", "SetRotation(0)",
                      "SetModelScale(PORTRAIT_MODEL_SCALE)",
                      "SetPosition(PORTRAIT_MODEL_X,PORTRAIT_MODEL_Y,PORTRAIT_MODEL_Z)"):
             self.assertIn(call, camera)
-        update = section("function NativeTransmog_PortraitPrototype_OnUpdate", "local function renderCatalog")
-        self.assertIn("resetPortraitPrototypeCamera(model)", update)
-        self.assertIn("GetTime()>=portraitPrototypeCameraUntil", update)
+        self.assertIn("local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE = .25, 1.30", LUA)
 
-    def test_three_enable_disable_cycles_use_the_same_reset_paths(self):
-        setter = section("function NativeTransmog_SetPortraitPrototype", "function NativeTransmog_PortraitPrototypeItemInfo")
-        render = section("local function renderCatalog", "function NativeTransmog_SetPortraitPrototype")
-        hide = section("local function hidePortraitPrototype", "local function renderPortraitPrototype")
-        # Every toggle rerenders. Each rerender clears native state before the
-        # same single activation path, so three consecutive pairs cannot
-        # accumulate camera, dress, or stale-model state.
-        for _ in range(3):
-            self.assertIn("portraitPrototypeEnabled=enabled and true or false", setter)
-            self.assertIn("renderCatalog()", setter)
-            self.assertLess(render.index("hidePortraitPrototype()"), render.index("renderPortraitPrototype(button)"))
-            self.assertIn("portraitPrototypeCameraUntil=nil", hide)
-            self.assertIn("portraitPrototypeModel:Hide(); portraitPrototypeModel:ClearModel()", hide)
-
-    def test_unclipped_client_uses_camera_space_safety_margin(self):
-        declarations = LUA[LUA.index("-- PTR showed that 1.80"):LUA.index("-- The retail reconstruction")]
-        self.assertIn("does not\n-- reliably clip model geometry", declarations)
-        self.assertLess(1.30, 1.80)
-
-    def test_prototype_remains_one_head_tile_and_icon_fallback_survives(self):
-        render = section("local function renderCatalog", "function NativeTransmog_SetPortraitPrototype")
-        self.assertIn("local portraitRendered=false", render)
-        self.assertIn("if not portraitRendered then portraitRendered=renderPortraitPrototype(button) end", render)
-        self.assertIn("selectedSlotId~=1", LUA)
-        self.assertLess(render.index("button.icon:SetTexture"), render.index("renderPortraitPrototype(button)"))
+    def test_10_cleanup_covers_close_and_collections_ui_is_untouched(self):
+        on_hide = section("function NativeTransmog_OnHide", "function NativeTransmog_OpenAuthorized")
+        self.assertIn("hidePortraitPrototype()", on_hide)
+        collections = XML[XML.index('<Frame name="NativeTransmogCollectionsFrame"'):]
+        self.assertNotIn("NativeTransmogPortraitPrototype", collections)
+        self.assertEqual(collections.count('<DressUpModel name="$parentModel"'), 1)
+        prototype = section("local function portraitPrototypeModelAt", "local function clearCatalogForUnavailableSlot")
+        self.assertNotIn("NativeTransmogCollectionsFrame", prototype)
 
 
 if __name__ == "__main__":

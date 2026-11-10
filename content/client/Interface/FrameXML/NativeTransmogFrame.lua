@@ -17,12 +17,13 @@ local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local catalogMessage = nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
--- Phase 2 bounded portrait experiment.  Build 12340 has no SetPortraitZoom
+-- Phase 2 bounded portrait experiment. Build 12340 has no SetPortraitZoom
 -- and no DressUpModel:UndressSlot, so this stays default-off and is limited
--- to one head tile until its camera, loading, and cost are verified on PTR.
+-- to three head tiles while their camera, loading, and cost are verified on PTR.
 local portraitPrototypeEnabled = false
-local portraitPrototypeModel, portraitPrototypeButton, portraitPrototypeEntry = nil, nil, nil
-local portraitPrototypeCameraUntil = nil
+local PORTRAIT_PROTOTYPE_MAX = 3
+local portraitPrototypeModels, portraitPrototypeButtons = {}, {}
+local portraitPrototypeEntries, portraitPrototypeCameraUntil = {}, {}
 -- PTR showed that 1.80 overfilled the 84x111 viewport. Build 12340 does not
 -- reliably clip model geometry, so keep a conservative camera-space margin
 -- for tall helms instead of depending on the widget boundary. Zero X/Z keeps
@@ -757,50 +758,64 @@ local function resetPortraitPrototypeCamera(model)
  model:SetModelScale(PORTRAIT_MODEL_SCALE)
  model:SetPosition(PORTRAIT_MODEL_X,PORTRAIT_MODEL_Y,PORTRAIT_MODEL_Z)
 end
-local function hidePortraitPrototype()
- portraitPrototypeCameraUntil=nil
- if portraitPrototypeButton then portraitPrototypeButton.portraitModel=nil end
- if portraitPrototypeModel then portraitPrototypeModel:Hide(); portraitPrototypeModel:ClearModel() end
- portraitPrototypeButton=nil; portraitPrototypeEntry=nil
+local function portraitPrototypeModelAt(index)
+ local model=portraitPrototypeModels[index]
+ if model then return model end
+ if index==1 then model=NativeTransmogPortraitPrototypeModel
+ elseif index==2 then model=NativeTransmogPortraitPrototypeModel2
+ elseif index==3 then model=NativeTransmogPortraitPrototypeModel3 end
+ if model then model.portraitPrototypeIndex=index; portraitPrototypeModels[index]=model end
+ return model
 end
-local function renderPortraitPrototype(button)
- if not portraitPrototypeEnabled or selectedSlotId~=1 or not button or button.isHide or not button.entry then return false end
- if not portraitPrototypeModel then
-  portraitPrototypeModel=NativeTransmogPortraitPrototypeModel
+local function hidePortraitPrototype()
+ for index=1,PORTRAIT_PROTOTYPE_MAX do
+  portraitPrototypeCameraUntil[index]=nil
+  local button=portraitPrototypeButtons[index]
+  local model=portraitPrototypeModels[index]
+  if button and button.portraitModel==model then button.portraitModel=nil end
+  if model then model:Hide(); model:ClearModel() end
+  portraitPrototypeButtons[index]=nil; portraitPrototypeEntries[index]=nil
  end
- portraitPrototypeCameraUntil=nil
- portraitPrototypeModel:Hide(); portraitPrototypeModel:ClearModel()
- -- The model is deliberately not parented to the button or ScrollChild. Old
- -- clients do not reliably clip 3-D widgets in that hierarchy. Its explicit
+end
+local function renderPortraitPrototype(button,index)
+ if not portraitPrototypeEnabled or selectedSlotId~=1 or not button or button.isHide or not button.entry or index<1 or index>PORTRAIT_PROTOTYPE_MAX then return false end
+ local model=portraitPrototypeModelAt(index)
+ if not model then return false end
+ portraitPrototypeCameraUntil[index]=nil
+ model:Hide(); model:ClearModel()
+ -- Models are deliberately not parented to the buttons or ScrollChild. Old
+ -- clients do not reliably clip 3-D widgets in that hierarchy. Each explicit
  -- 84x111 viewport is a BrowserPanel child anchored over exactly one tile.
- portraitPrototypeModel:SetParent(NativeTransmogFrameBrowserPanel)
- portraitPrototypeModel:ClearAllPoints()
- portraitPrototypeModel:SetPoint("TOPLEFT",button,"TOPLEFT",0,0)
- portraitPrototypeModel:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",0,0)
- portraitPrototypeModel:SetFrameLevel(button:GetFrameLevel()+1)
- button.portraitModel=portraitPrototypeModel; portraitPrototypeButton=button; portraitPrototypeEntry=button.entry
+ model:SetParent(NativeTransmogFrameBrowserPanel)
+ model:ClearAllPoints()
+ model:SetPoint("TOPLEFT",button,"TOPLEFT",0,0)
+ model:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",0,0)
+ model:SetFrameLevel(button:GetFrameLevel()+1)
+ button.portraitModel=model; portraitPrototypeButtons[index]=button; portraitPrototypeEntries[index]=button.entry
  -- A resolved item link is the input used by Blizzard's 3.3.5 DressUpFrame.
  -- If it is not cached yet, the icon remains authoritative until the matching
  -- GET_ITEM_INFO_RECEIVED event retries this complete initialization.
  local _,itemLink=GetItemInfo(button.entry)
  if not itemLink then return true end
- portraitPrototypeModel:SetUnit("player")
- portraitPrototypeModel:Undress()
- portraitPrototypeModel:TryOn(itemLink)
- portraitPrototypeModel:Show()
- resetPortraitPrototypeCamera(portraitPrototypeModel)
- portraitPrototypeCameraUntil=GetTime()+PORTRAIT_CAMERA_SECONDS
+ model:SetUnit("player")
+ model:Undress()
+ model:TryOn(itemLink)
+ model:Show()
+ resetPortraitPrototypeCamera(model)
+ portraitPrototypeCameraUntil[index]=GetTime()+PORTRAIT_CAMERA_SECONDS
  return true
 end
 function NativeTransmog_PortraitPrototype_OnUpdate(model)
- if not portraitPrototypeCameraUntil or model~=portraitPrototypeModel or not model:IsShown() then return end
+ local index=model.portraitPrototypeIndex
+ local cameraUntil=index and portraitPrototypeCameraUntil[index]
+ if not cameraUntil or model~=portraitPrototypeModels[index] or not model:IsShown() then return end
  resetPortraitPrototypeCamera(model)
- if GetTime()>=portraitPrototypeCameraUntil then portraitPrototypeCameraUntil=nil end
+ if GetTime()>=cameraUntil then portraitPrototypeCameraUntil[index]=nil end
 end
 local function renderCatalog()
  hidePortraitPrototype()
  for _,button in ipairs(buttons) do resetAppearanceButton(button) end
- local portraitRendered=false
+ local portraitCount, portraitEntries=0, {}
  for index,appearance in ipairs(catalog) do
   local button=buttons[index] or createAppearanceButton(index)
   resetAppearanceButton(button)
@@ -813,7 +828,11 @@ local function renderCatalog()
   button.icon:SetTexture(appearance.isHide and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or
       (GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"))
   button.hideLabel:SetText(appearance.isHide and "HIDE" or ""); button:Show()
-  if not portraitRendered then portraitRendered=renderPortraitPrototype(button) end
+  if portraitCount<PORTRAIT_PROTOTYPE_MAX and not appearance.isHide and appearance.entry and not portraitEntries[appearance.entry] then
+   if renderPortraitPrototype(button,portraitCount+1) then
+    portraitCount=portraitCount+1; portraitEntries[appearance.entry]=true
+   end
+  end
  end
  local rows=math.ceil(#catalog/ICONS_PER_ROW)
  local contentHeight=rows>0 and rows*ICON_HEIGHT+(rows-1)*ICON_GAP or 0
@@ -828,8 +847,12 @@ function NativeTransmog_SetPortraitPrototype(enabled)
  if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("Native Transmog portrait prototype: "..(portraitPrototypeEnabled and "enabled" or "disabled")) end
 end
 function NativeTransmog_PortraitPrototypeItemInfo(itemId,success)
- if portraitPrototypeEnabled and success and tonumber(itemId)==portraitPrototypeEntry and portraitPrototypeButton then
-  renderPortraitPrototype(portraitPrototypeButton)
+ if not portraitPrototypeEnabled or not success then return end
+ itemId=tonumber(itemId)
+ for index=1,PORTRAIT_PROTOTYPE_MAX do
+  if itemId==portraitPrototypeEntries[index] and portraitPrototypeButtons[index] then
+   renderPortraitPrototype(portraitPrototypeButtons[index],index)
+  end
  end
 end
 local function clearCatalogForUnavailableSlot(message)
