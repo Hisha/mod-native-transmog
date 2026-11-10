@@ -70,7 +70,8 @@ Tabard, equip a real compatible item and record the character race/gender and so
 
 - [ ] The slot control selects the correct AzerothCore equipment slot and reports the correct equipped item.
 - [ ] The catalog contains only collected entries accepted by the Phase 3C validator. Verify armor subclass,
-  chest/robe interchange, main/off-hand placement, ranged types, and the two handedness settings.
+  chest/robe interchange, grouped one- and two-handed melee weapons, strict handedness, main/off-hand placement,
+  and ranged types.
 - [ ] Hide Appearance is first, is visibly distinct, has a tooltip, and does not change Next/Previous cursors or
   the configured number of collected entries. It remains present when the compatible collection is empty.
 - [ ] Selecting Hide changes only the local preview. Note that build-12340 exposes no single-slot undress method;

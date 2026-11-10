@@ -56,6 +56,12 @@ unique per character. The default maximum is 20 sets; `NativeTransmog.CustomSets
 1–100. Set ownership, appearance ownership, slot validity, hide policy, compatibility, and NPC authorization never rely
 on client claims.
 
+Protocol version 5 routes `CUSTOMPREVIEWINFO`, `CUSTOMPREVIEWPIECE`, and `CUSTOMPREVIEWEND` through the protected
+self-whisper response allowlist. `CUSTOMPREVIEWPIECE` now appends the server eligibility result after the representative
+entry. FrameXML restores every `ok` piece by wire-slot ID, reports each unavailable piece with its slot and reason, and
+clears both pending and saved-load state on completion, explicit failure, or timeout. This is an additive version-5
+response field; stored custom-set rows and request shapes are unchanged.
+
 Native Transmog currently has no price or charging subsystem for ordinary single-slot applications. Custom-set
 application therefore preserves the existing free policy: there is no insufficient-funds branch and no opportunity for
 double charging. Add a shared application pricing service before introducing prices for either single-slot or batch

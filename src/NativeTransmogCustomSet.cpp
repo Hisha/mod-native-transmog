@@ -116,6 +116,8 @@ std::uint32_t CustomSetService::ResolveRepresentative(Player const* player, Cust
 {
     if (piece.state == CustomSetSelectionState::Hidden)
         return 0;
+    if (!CollectionService::Instance().IsCollected(player, piece.appearance))
+        return 0;
     std::uint32_t best = 0;
     for (auto const& [entry, itemTemplate] : *sObjectMgr->GetItemTemplateStore())
     {

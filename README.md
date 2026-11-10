@@ -26,7 +26,7 @@ The server sends additive version-2 `STATE` replies for equipped item instances 
 
 ## Phase 4A full slots and Hide Appearance
 
-The supported AzerothCore equipment slots are Head, Shoulders, Shirt (`EQUIPMENT_SLOT_BODY`), Chest, Waist, Legs, Feet, Wrists, Hands, Back, Main Hand, Off Hand, Ranged, and Tabard. Neck, fingers, and trinkets are excluded. Catalog filtering and application continue through the Phase 3C compatibility validator, including exact armor subclass rules, chest/robe interchange, weapon families, handedness settings, and player eligibility.
+The supported AzerothCore equipment slots are Head, Shoulders, Shirt (`EQUIPMENT_SLOT_BODY`), Chest, Waist, Legs, Feet, Wrists, Hands, Back, Main Hand, Off Hand, Ranged, and Tabard. Neck, fingers, and trinkets are excluded. Catalog filtering and application continue through the Phase 3C compatibility validator, including exact armor subclass rules, chest/robe interchange, grouped melee weapons, strict handedness, and player eligibility.
 
 Every supported catalog begins with a special **Hide Appearance** tile when hiding is permitted. It is independent of collection ownership, remains available for an empty collection, and does not consume a collected-appearance page position. Hide is a separate authenticated `HIDE` request using the same NPC session and item-GUID-bound snapshot as Apply and Remove. Hide and Restore Original are free; ordinary application pricing remains unchanged for this phase.
 
@@ -46,7 +46,7 @@ Each bounded page is tied to a server-issued nonce, NPC session, equipment slot,
 
 The application service resolves the equipped target and source template entirely on the server. It requires either an immediately revalidated Phase 2 NPC session or an RBAC-protected GM diagnostic operation, verifies ownership in the authenticated account/character collection, and checks class, race, required skill/spell, armor/weapon proficiency, subclass, and inventory-slot compatibility before writing anything.
 
-Armor requires the same subclass and visual slot, with chest/robe interchange. Weapons require the same weapon family and valid main/off-hand or ranged placement. One-hand/two-hand axe, mace, and sword family crossings are controlled by two independent, default-off settings. Persistence is keyed to the real item-instance GUID in `native_transmog_item_override`; the item's stats and gameplay identity never change.
+Armor requires the same subclass and visual slot, with chest/robe interchange. One-handed axes, maces, and swords form one compatibility group; two-handed axes, maces, swords, and polearms form another. The groups never cross handedness. Shields remain shields, while other weapon and ranged categories retain their exact-subclass and placement behavior. The legacy handedness settings remain parsed for configuration compatibility but no longer broaden eligibility. Persistence is keyed to the real item-instance GUID in `native_transmog_item_override`; the item's stats and gameplay identity never change.
 
 Login restoration, ordinary visible-slot refreshes, ownership transfers, permanent item deletion, removal, nearby object-field synchronization, and mirror images use existing Playerbot hooks. No core patch was needed. See [Phase 3C architecture](docs/PHASE3C_ARCHITECTURE.md).
 
@@ -178,10 +178,10 @@ The checked-in EPF is deterministic Schema 3 content. It adds the XML immediatel
 
 ```bash
 python3 content/build_epf.py --check
-python3 -m unittest discover -s tests -p 'test_phase*.py'
+python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-The checks cover all earlier regressions plus gameplay-set discovery, class/race filtering, appearance-identity grouping, source resolution, read-only pagination/detail validation, full-set preview contracts, notifications, tooltips, the 14-slot paper doll and weapon navigation, Head-only single-model portraits with icon fallback elsewhere, hidden state, authorization, and EPF determinism. See [test results](docs/TEST_RESULTS.md), the [equipment portrait PTR checklist](docs/EQUIPMENT_PORTRAITS_PTR_VALIDATION.md), and the [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
+The checks cover all earlier regressions plus gameplay-set discovery, class/race filtering, grouped weapon compatibility, appearance-identity grouping, source resolution, read-only pagination/detail validation, saved-outfit preview routing, full-set preview contracts, notifications, tooltips, the 14-slot paper doll and weapon navigation, Head-only single-model portraits with icon fallback elsewhere, hidden state, authorization, and EPF determinism. See [test results](docs/TEST_RESULTS.md), the [weapon and saved-outfit PTR checklist](docs/WEAPON_COMPATIBILITY_SAVED_OUTFIT_PTR_VALIDATION.md), the [equipment portrait PTR checklist](docs/EQUIPMENT_PORTRAITS_PTR_VALIDATION.md), and the [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
 
 ## Known limitations and future mobile NPCs
 
@@ -193,7 +193,7 @@ The checks cover all earlier regressions plus gameplay-set discovery, class/race
 - Vehicle-passenger creatures are explicitly rejected in Phase 2. Entry resolution itself is location- and spawn-independent, so the registry is suitable for a future mobile Transmogrifier, but passenger interaction and moving-distance/session semantics require dedicated validation before removing this guard.
 - Addon transport requires AzerothCore's addon channel to be enabled and has build-12340's 255-byte message limit; pages are therefore multipart.
 - Backfill can prove only active persisted rewarded rows and uses current quest definitions; it cannot reconstruct missing repeat history, old choices, or historical reward definitions. Offline targets are intentionally unsupported.
-- No saved outfit, search, favorites, cost system, legacy integration, or migration from `mod-transmog` exists.
+- No favorites, cost system, legacy integration, or migration from `mod-transmog` exists.
 
 No code change outside this repository is required. The target Content Manager must already include managed server resources and `ContentResourceApiV1` (Milestone 2), and its `2026_09_25_06_content_managed_server_resources.sql` migration must be present before building/activating this EPF.
 

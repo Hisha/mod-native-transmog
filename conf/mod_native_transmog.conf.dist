@@ -85,16 +85,16 @@ NativeTransmog.Application.Enable = 1
 
 #
 #    NativeTransmog.AllowTwoHandAppearanceOnOneHand
-#        Description: Permits a collected two-handed axe/mace/sword appearance
-#                     on the corresponding one-handed weapon family.
+#        Description: Legacy setting retained for configuration compatibility.
+#                     Handedness crossing is no longer permitted.
 #        Default:     0
 
 NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
 
 #
 #    NativeTransmog.AllowOneHandAppearanceOnTwoHand
-#        Description: Permits a collected one-handed axe/mace/sword appearance
-#                     on the corresponding two-handed weapon family.
+#        Description: Legacy setting retained for configuration compatibility.
+#                     Handedness crossing is no longer permitted.
 #        Default:     0
 
 NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0

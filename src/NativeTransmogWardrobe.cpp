@@ -146,23 +146,6 @@ std::vector<std::string_view> Split(std::string const& message)
     return fields;
 }
 
-std::vector<std::uint8_t> WeaponFamily(std::uint32_t subclass)
-{
-    switch (subclass)
-    {
-        case ITEM_SUBCLASS_WEAPON_AXE:
-        case ITEM_SUBCLASS_WEAPON_AXE2:
-            return { ITEM_SUBCLASS_WEAPON_AXE, ITEM_SUBCLASS_WEAPON_AXE2 };
-        case ITEM_SUBCLASS_WEAPON_MACE:
-        case ITEM_SUBCLASS_WEAPON_MACE2:
-            return { ITEM_SUBCLASS_WEAPON_MACE, ITEM_SUBCLASS_WEAPON_MACE2 };
-        case ITEM_SUBCLASS_WEAPON_SWORD:
-        case ITEM_SUBCLASS_WEAPON_SWORD2:
-            return { ITEM_SUBCLASS_WEAPON_SWORD, ITEM_SUBCLASS_WEAPON_SWORD2 };
-        default:
-            return { static_cast<std::uint8_t>(subclass) };
-    }
-}
 }
 
 WardrobeService& WardrobeService::Instance()
@@ -769,7 +752,36 @@ void WardrobeService::HandleCustomPreview(Player* player, std::vector<std::uint3
         SendError(player, token, requestId, "CUSTOMPREVIEW", "CUSTOM_NOT_FOUND");
         return;
     }
-    SendCustomDetail(player, requestId, set, "CUSTOMPREVIEW");
+    Send(player, "CUSTOMPREVIEWINFO\t" + std::to_string(requestId) + '\t' +
+        std::to_string(set.id) + '\t' + std::to_string(set.pieces.size()) + '\t' +
+        CleanProtocolText(set.name, CustomSetService::Instance().MaximumNameBytes()));
+    std::uint32_t index = 0;
+    for (CustomSetPiece const& piece : set.pieces)
+    {
+        std::uint32_t representative = CustomSetService::Instance().ResolveRepresentative(player, piece);
+        ApplicationResult result = ApplicationResult::Ok;
+        Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, piece.equipmentSlot);
+        if (!target)
+            result = ApplicationResult::TargetMissing;
+        else if (piece.state == CustomSetSelectionState::Hidden)
+        {
+            if (!ApplicationService::Instance().CanHide(piece.equipmentSlot))
+                result = ApplicationResult::HideWeaponsDisabled;
+        }
+        else if (!representative)
+            result = ApplicationResult::AppearanceNotCollected;
+        else
+            result = ApplicationService::Instance().ValidateForTarget(player, target->GetTemplate(),
+                sObjectMgr->GetItemTemplate(representative), piece.equipmentSlot);
+        if (result != ApplicationResult::Ok)
+            representative = 0;
+        Send(player, "CUSTOMPREVIEWPIECE\t" + std::to_string(requestId) + '\t' +
+            std::to_string(set.id) + '\t' + std::to_string(++index) + '\t' +
+            std::to_string(ResolveWireSlot(piece.equipmentSlot)) + '\t' +
+            std::to_string(static_cast<std::uint32_t>(piece.state)) + '\t' +
+            std::to_string(representative) + '\t' + ApplicationService::ResultName(result));
+    }
+    Send(player, "CUSTOMPREVIEWEND\t" + std::to_string(requestId) + '\t' + std::to_string(set.id));
 }
 
 void WardrobeService::HandleCustomSaveOutfit(Player* player, std::vector<std::uint32_t> const& fields,
@@ -903,7 +915,8 @@ CollectionFilter WardrobeService::FilterFor(Item const* target) const
     ItemTemplate const* itemTemplate = target->GetTemplate();
     filter.itemClass = static_cast<std::int16_t>(itemTemplate->Class);
     filter.itemSubclasses = itemTemplate->Class == ITEM_CLASS_WEAPON ?
-        WeaponFamily(itemTemplate->SubClass) : std::vector<std::uint8_t>{ static_cast<std::uint8_t>(itemTemplate->SubClass) };
+        CompatibleWeaponSubclasses(itemTemplate) :
+        std::vector<std::uint8_t>{ static_cast<std::uint8_t>(itemTemplate->SubClass) };
     if (itemTemplate->Class == ITEM_CLASS_ARMOR &&
         (itemTemplate->InventoryType == INVTYPE_CHEST || itemTemplate->InventoryType == INVTYPE_ROBE))
         filter.inventoryTypes = { INVTYPE_CHEST, INVTYPE_ROBE };

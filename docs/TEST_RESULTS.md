@@ -1,5 +1,29 @@
 # Test results
 
+## Grouped weapon compatibility and saved-outfit preview routing
+
+Test date: 2026-11-10.
+
+### Passed
+
+- Added focused executable/contracts for one-handed axe/mace/sword and two-handed axe/mace/sword/polearm grouping,
+  strict handedness, ownership/proficiency rejection, full-group search-before-pagination, final application authority,
+  saved mace-and-shield slot mapping, multi-slot restoration, response routing, failure reporting, and timeout cleanup.
+- Full automated suite: `python3 -m unittest discover -s tests -p 'test_*.py'` — 342 tests passed.
+- Playerbot AzerothCore revision `e7e2e288e`, GCC 15.2, C++20, `MODULES=static`, `SCRIPTS=none`:
+  all module translation units compiled, `libmodules.a` linked, and `worldserver` linked at 100%.
+  Build artifact SHA-256: `0293f8ba140fe155460e3dd290d947b76e653335ee310e2ba23ff6046977ce30`.
+- Deterministic EPF verification: four members; two consecutive builds were byte-identical.
+  SHA-256: `d1a8cfe9e34d38d5b4ddcecdc0eba54a7b06e748b471db74ab5b7aa0122aed44`.
+- `git diff --check` passed. No SQL or saved-set persistence-format change was made.
+
+### Not run or not proven
+
+No PTR worldserver/client deployment or live character database was used. Actual paladin proficiency data, catalog
+contents, rendering of `TempJudge`, live timeout behavior, application, Collections, and Head portrait acceptance must
+follow [`WEAPON_COMPATIBILITY_SAVED_OUTFIT_PTR_VALIDATION.md`](WEAPON_COMPATIBILITY_SAVED_OUTFIT_PTR_VALIDATION.md).
+No database mutation, deployment, commit, or push was performed.
+
 ## Wardrobe appearance-browser usability
 
 Test date: 2026-11-10.

@@ -172,7 +172,7 @@ class TransmogrifySavedOutfitTests(unittest.TestCase):
         self.assertIn('"Custom outfit load failed: "', LUA)
         self.assertIn('fields[5]=="REQUEST"', LUA)
         self.assertIn('savedSetRefreshDue=GetTime()+.35', LUA)
-        self.assertIn('unavailable selection(s) skipped', LUA)
+        self.assertIn('"; unavailable: "', LUA)
         self.assertIn('NativeTransmogCollectionsFrame', XML)
 
 

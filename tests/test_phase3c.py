@@ -34,26 +34,26 @@ class ItemKind:
     inventory: int
 
 
-def compatible(target: ItemKind, source: ItemKind, two_on_one: bool = False,
-               one_on_two: bool = False) -> bool:
+def compatible(target: ItemKind, source: ItemKind) -> bool:
     if target.item_class != source.item_class:
         return False
     if target.item_class == 4:
         return target.subclass == source.subclass and (
             target.inventory == source.inventory or {target.inventory, source.inventory} == {5, 20}
         )
-    families = ({0, 1}, {4, 5}, {7, 8})
-    if target.subclass != source.subclass and not any(
-        target.subclass in family and source.subclass in family for family in families
-    ):
-        return False
     target_one, source_one = target.inventory in {13, 21, 22}, source.inventory in {13, 21, 22}
     target_two, source_two = target.inventory == 17, source.inventory == 17
     if target_one and source_two:
-        return two_on_one
+        return False
     if target_two and source_one:
-        return one_on_two and source.inventory != 22
-    return target.inventory == source.inventory or (target_one and source_one)
+        return False
+    if target_one and source_one:
+        return ((target.subclass in {0, 4, 7} and source.subclass in {0, 4, 7}) or
+                target.subclass == source.subclass)
+    if target_two and source_two:
+        return ((target.subclass in {1, 5, 6, 8} and source.subclass in {1, 5, 6, 8}) or
+                target.subclass == source.subclass)
+    return target.subclass == source.subclass and target.inventory == source.inventory
 
 
 class PhaseThreeCContractTests(unittest.TestCase):
@@ -80,7 +80,7 @@ class PhaseThreeCContractTests(unittest.TestCase):
         for contract in ("AllowableClass", "AllowableRace", "RequiredSkill", "RequiredSpell",
                          "GetArmorProficiency", "GetWeaponProficiency",
                          "ArmorSubclassMismatch", "WeaponSubclassMismatch",
-                         "allowTwoHandAppearanceOnOneHand", "allowOneHandAppearanceOnTwoHand"):
+                         "IsOneHandMeleeSubclass", "IsTwoHandMeleeSubclass"):
             self.assertIn(contract, validate if contract != "AllowableClass" else APP_CPP)
 
     def test_lifecycle_and_visible_synchronization_hooks(self) -> None:
@@ -149,14 +149,17 @@ class PhaseThreeCModelTests(unittest.TestCase):
         self.assertFalse(compatible(ItemKind(4, 1, 5), ItemKind(4, 2, 5)))
         self.assertFalse(compatible(ItemKind(4, 1, 3), ItemKind(4, 1, 5)))
 
-    def test_weapon_direction_flags_are_independent(self) -> None:
+    def test_weapon_groups_cross_subclass_but_never_handedness(self) -> None:
         one = ItemKind(2, 0, 13)
         two = ItemKind(2, 1, 17)
         self.assertFalse(compatible(one, two))
-        self.assertTrue(compatible(one, two, two_on_one=True))
-        self.assertFalse(compatible(two, one, two_on_one=True))
-        self.assertTrue(compatible(two, one, one_on_two=True))
-        self.assertFalse(compatible(two, ItemKind(2, 0, 22), one_on_two=True))
+        self.assertFalse(compatible(two, one))
+        self.assertTrue(compatible(one, ItemKind(2, 4, 13)))
+        self.assertTrue(compatible(one, ItemKind(2, 7, 13)))
+        self.assertTrue(compatible(two, ItemKind(2, 5, 17)))
+        self.assertTrue(compatible(two, ItemKind(2, 6, 17)))
+        self.assertTrue(compatible(two, ItemKind(2, 8, 17)))
+        self.assertFalse(compatible(one, ItemKind(2, 15, 13)))
 
 
 if __name__ == "__main__":

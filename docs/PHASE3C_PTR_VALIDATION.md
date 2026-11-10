@@ -24,9 +24,10 @@ This is a manual plan for the isolated Playerbot PTR. It does not authorize depl
 - [ ] Race-restricted and required-skill/rank/spell sources are rejected when requirements are not met.
 - [ ] Cloth, leather, mail, plate, and shield proficiency restrictions are correct for representative classes.
 - [ ] Armor subclass and inventory-slot mismatches are rejected; chest/robe interchange works.
-- [ ] Weapon family, main-hand/off-hand, ranged, thrown, wand, and fishing-pole cases obey policy.
-- [ ] With both handedness flags false, both cross-direction cases fail.
-- [ ] Enable only two-hand-on-one-hand and confirm the reverse still fails; repeat with only one-hand-on-two-hand.
+- [ ] A one-handed sword target accepts collected one-handed axe and mace appearances.
+- [ ] A two-handed sword target accepts collected two-handed axe, mace, and polearm appearances.
+- [ ] Main-hand/off-hand, ranged, thrown, wand, and fishing-pole cases retain their existing policy.
+- [ ] Both handedness-crossing directions fail regardless of the two retained legacy configuration values.
 
 ## Persistence, lifecycle, and synchronization
 

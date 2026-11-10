@@ -61,7 +61,7 @@ class PhaseThreeDContracts(unittest.TestCase):
         self.assertIn("ApplicationService::Instance().ValidateForTarget", WARDROBE)
         for rule in ("AllowableClass", "AllowableRace", "RequiredSkill", "RequiredSpell",
                      "GetArmorProficiency", "GetWeaponProficiency", "IsChest",
-                     "allowTwoHandAppearanceOnOneHand", "allowOneHandAppearanceOnTwoHand"):
+                     "IsOneHandMeleeSubclass", "IsTwoHandMeleeSubclass"):
             self.assertIn(rule, APPLICATION)
 
     def test_supported_slots_and_empty_equipment(self):

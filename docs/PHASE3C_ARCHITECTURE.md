@@ -19,12 +19,14 @@ Collection remains intentionally broad. Every application independently checks:
 - source and target are both armor or both weapons;
 - armor subclasses match exactly and the player has the source armor proficiency;
 - armor inventory types match, with chest and robe treated as one visual slot;
-- weapon family/subclass matches and the player has the source weapon proficiency;
+- the player has the source weapon proficiency;
 - one-hand main-hand/off-hand restrictions are preserved;
 - other weapon inventory types match exactly;
-- axe/two-hand axe, mace/two-hand mace, and sword/two-hand sword may cross the handedness boundary only in the independently configured direction.
+- one-handed axes, maces, and swords are mutually compatible;
+- two-handed axes, maces, swords, and polearms are mutually compatible;
+- all other weapon subclasses retain exact-subclass behavior, and handedness never crosses.
 
-`NativeTransmog.AllowTwoHandAppearanceOnOneHand` and `NativeTransmog.AllowOneHandAppearanceOnTwoHand` default to false and do not imply one another. They do not permit cross-family weapons, bypass class/proficiency, or relax armor rules.
+`NativeTransmog.AllowTwoHandAppearanceOnOneHand` and `NativeTransmog.AllowOneHandAppearanceOnTwoHand` remain parsed as legacy settings so existing realm configuration does not break, but they no longer broaden eligibility. This supersedes the earlier Phase 3C family-crossing policy because PTR acceptance requires handedness to remain strict while axe/mace/sword subclasses cross within a handedness group.
 
 ## Persistence and rendering
 

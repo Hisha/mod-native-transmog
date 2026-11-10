@@ -41,7 +41,7 @@ class PhaseFourAContracts(unittest.TestCase):
     def test_catalog_filter_reuses_phase3c_validator(self):
         self.assertIn("ApplicationService::Instance().ValidateForTarget", WARDROBE)
         self.assertIn("CompatibilityValidator::Validate", APP)
-        for rule in ("source->SubClass != target->SubClass", "WeaponFamily", "OneHandSlotCompatible"):
+        for rule in ("IsOneHandMeleeSubclass", "IsTwoHandMeleeSubclass", "OneHandSlotCompatible"):
             self.assertIn(rule, APP)
 
     def test_all_mutations_use_supported_slot_allowlist(self):

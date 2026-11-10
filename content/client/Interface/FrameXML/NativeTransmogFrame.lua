@@ -1148,6 +1148,7 @@ function NativeTransmog_FrameUpdate()
  end
  if pending and GetTime()-pending.started>5 then
   local operation=pending.operation; pending=nil
+  if operation=="CUSTOMPREVIEW" then NativeTransmogWardrobeState.load=nil end
   if operation=="CAT" and #catalog==0 then catalogMessage="The appearance catalog did not respond. Try again."; renderCatalog()
   else refreshSelection() end
   setStatus("Server unavailable or request timed out.",true)
@@ -1250,20 +1251,24 @@ local function handleCustomMessage(command,fields)
   local request,setId,index,slot,state,entry=tonumber(fields[3]),tonumber(fields[4]),tonumber(fields[5]),tonumber(fields[6]),tonumber(fields[7]),tonumber(fields[8])
   local load=NativeTransmogWardrobeState.load
   if load and request==load.request and setId==load.setId and load.phase=="PIECES" and index and index>=1 and index<=load.expected and slot and SLOT_ORDER[slot] and state and state>=0 and state<=1 then
-   load.pieces[index]={slot=slot,isHide=state==1,entry=entry or 0}
+   load.pieces[index]={slot=slot,isHide=state==1,entry=entry or 0,result=fields[9] or "unknown result"}
   end
   return
  elseif command=="CUSTOMPREVIEWEND" then
   local request,setId=tonumber(fields[3]),tonumber(fields[4]); local load=NativeTransmogWardrobeState.load; if not load or request~=load.request or setId~=load.setId or load.phase~="PIECES" then return end
-  local loaded,missing={},0
+  local loaded,failures={},{}
   for index=1,load.expected do
    local piece=load.pieces[index]
-   if piece and (piece.isHide or piece.entry>0) then loaded[piece.slot]={entry=piece.entry,isHide=piece.isHide}
-   else missing=missing+1 end
+   if piece and piece.result=="ok" and (piece.isHide or piece.entry>0) then loaded[piece.slot]={entry=piece.entry,isHide=piece.isHide}
+   else
+    local slot=piece and piece.slot
+    local reason=piece and (RESULT_TEXT[piece.result] or piece.result) or "response missing"
+    table.insert(failures,(slot and SLOT_LABELS[SLOT_ORDER[slot]] or "Unknown slot")..": "..reason)
+   end
   end
   local name=load.name; NativeTransmogWardrobeState.load=nil; pending=nil; NativeTransmogWardrobeState.selections=loaded; selectedAppearance=NativeTransmogWardrobeState.selections[selectedSlotId]
   rebuildOutfitPreview(); refreshSelection()
-  setStatus(name.." loaded for preview"..(missing>0 and ("; "..missing.." unavailable selection(s) skipped.") or "."),missing>0)
+  setStatus(name.." loaded for preview"..(#failures>0 and ("; unavailable: "..table.concat(failures,"; ")) or "."),#failures>0)
   return
  elseif command=="CUSTOMPAGE" then
   local responseId,count=tonumber(fields[3]),tonumber(fields[7]); if not responseId or not count or count<0 or count>20 then return end

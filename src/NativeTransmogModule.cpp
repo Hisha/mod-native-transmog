@@ -58,7 +58,8 @@ bool IsNativeTransmogResponse(std::string const& message)
         command == "CUSTOMDETAILPIECE" || command == "CUSTOMDETAILEND" || command == "CUSTOMEDITINFO" ||
         command == "CUSTOMEDITPIECE" || command == "CUSTOMEDITEND" || command == "CUSTOMDRAFTPIECE" ||
         command == "CUSTOMDRAFTCLEAR" || command == "CUSTOMRESULT" ||
-        command == "CUSTOMPREFLIGHTINFO" || command == "CUSTOMAPPLYPIECE" || command == "CUSTOMAPPLYEND";
+        command == "CUSTOMPREFLIGHTINFO" || command == "CUSTOMAPPLYPIECE" || command == "CUSTOMAPPLYEND" ||
+        command == "CUSTOMPREVIEWINFO" || command == "CUSTOMPREVIEWPIECE" || command == "CUSTOMPREVIEWEND";
 }
 
 void RefreshOnlineVisibleEquipment()

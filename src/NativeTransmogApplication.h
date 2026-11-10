@@ -88,6 +88,7 @@ struct BatchValidation
 
 bool IsSupportedEquipmentSlot(std::uint8_t equipmentSlot);
 bool IsWeaponEquipmentSlot(std::uint8_t equipmentSlot);
+std::vector<std::uint8_t> CompatibleWeaponSubclasses(ItemTemplate const* target);
 
 class CompatibilityValidator final
 {

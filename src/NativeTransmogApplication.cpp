@@ -87,23 +87,48 @@ bool OneHandSlotCompatible(std::uint32_t targetType, std::uint32_t sourceType, s
     return targetType == INVTYPE_WEAPON && IsOneHand(sourceType);
 }
 
-std::uint32_t WeaponFamily(std::uint32_t subclass)
+bool IsOneHandMeleeSubclass(std::uint32_t subclass)
 {
     switch (subclass)
     {
         case ITEM_SUBCLASS_WEAPON_AXE:
-        case ITEM_SUBCLASS_WEAPON_AXE2: return ITEM_SUBCLASS_WEAPON_AXE;
         case ITEM_SUBCLASS_WEAPON_MACE:
-        case ITEM_SUBCLASS_WEAPON_MACE2: return ITEM_SUBCLASS_WEAPON_MACE;
         case ITEM_SUBCLASS_WEAPON_SWORD:
-        case ITEM_SUBCLASS_WEAPON_SWORD2: return ITEM_SUBCLASS_WEAPON_SWORD;
-        default: return subclass + 100U;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsTwoHandMeleeSubclass(std::uint32_t subclass)
+{
+    switch (subclass)
+    {
+        case ITEM_SUBCLASS_WEAPON_AXE2:
+        case ITEM_SUBCLASS_WEAPON_MACE2:
+        case ITEM_SUBCLASS_WEAPON_SWORD2:
+        case ITEM_SUBCLASS_WEAPON_POLEARM:
+            return true;
+        default:
+            return false;
     }
 }
 }
 
+std::vector<std::uint8_t> CompatibleWeaponSubclasses(ItemTemplate const* target)
+{
+    if (!target)
+        return {};
+    if (IsOneHand(target->InventoryType) && IsOneHandMeleeSubclass(target->SubClass))
+        return { ITEM_SUBCLASS_WEAPON_AXE, ITEM_SUBCLASS_WEAPON_MACE, ITEM_SUBCLASS_WEAPON_SWORD };
+    if (IsTwoHand(target->InventoryType) && IsTwoHandMeleeSubclass(target->SubClass))
+        return { ITEM_SUBCLASS_WEAPON_AXE2, ITEM_SUBCLASS_WEAPON_MACE2,
+            ITEM_SUBCLASS_WEAPON_SWORD2, ITEM_SUBCLASS_WEAPON_POLEARM };
+    return { static_cast<std::uint8_t>(target->SubClass) };
+}
+
 ApplicationResult CompatibilityValidator::Validate(Player const* player, ItemTemplate const* target,
-    ItemTemplate const* source, ApplicationConfig const& config, std::uint8_t equipmentSlot)
+    ItemTemplate const* source, ApplicationConfig const&, std::uint8_t equipmentSlot)
 {
     AppearanceKey targetAppearance;
     AppearanceKey sourceAppearance;
@@ -142,26 +167,33 @@ ApplicationResult CompatibilityValidator::Validate(Player const* player, ItemTem
     std::uint32_t skill = source->GetSkill();
     if (skill && !HasSubclassProficiency(player->GetWeaponProficiency(), source->SubClass))
         return ApplicationResult::WeaponProficiencyRestricted;
-    if (WeaponFamily(source->SubClass) != WeaponFamily(target->SubClass))
-        return ApplicationResult::WeaponSubclassMismatch;
-
     bool targetOneHand = IsOneHand(target->InventoryType);
     bool sourceOneHand = IsOneHand(source->InventoryType);
     bool targetTwoHand = IsTwoHand(target->InventoryType);
     bool sourceTwoHand = IsTwoHand(source->InventoryType);
     if (targetOneHand && sourceTwoHand)
-        return config.allowTwoHandAppearanceOnOneHand ? ApplicationResult::Ok :
-            ApplicationResult::TwoHandOnOneHandDisabled;
+        return ApplicationResult::TwoHandOnOneHandDisabled;
     if (targetTwoHand && sourceOneHand)
-    {
-        if (source->InventoryType == INVTYPE_WEAPONOFFHAND)
-            return ApplicationResult::InventoryTypeMismatch;
-        return config.allowOneHandAppearanceOnTwoHand ? ApplicationResult::Ok :
-            ApplicationResult::OneHandOnTwoHandDisabled;
-    }
+        return ApplicationResult::OneHandOnTwoHandDisabled;
     if (targetOneHand && sourceOneHand)
+    {
+        if (!IsOneHandMeleeSubclass(target->SubClass) || !IsOneHandMeleeSubclass(source->SubClass))
+        {
+            if (source->SubClass != target->SubClass)
+                return ApplicationResult::WeaponSubclassMismatch;
+        }
         return OneHandSlotCompatible(target->InventoryType, source->InventoryType, equipmentSlot) ?
             ApplicationResult::Ok : ApplicationResult::InventoryTypeMismatch;
+    }
+    if (targetTwoHand && sourceTwoHand)
+    {
+        if ((!IsTwoHandMeleeSubclass(target->SubClass) || !IsTwoHandMeleeSubclass(source->SubClass)) &&
+            source->SubClass != target->SubClass)
+            return ApplicationResult::WeaponSubclassMismatch;
+        return ApplicationResult::Ok;
+    }
+    if (source->SubClass != target->SubClass)
+        return ApplicationResult::WeaponSubclassMismatch;
     if (target->InventoryType != source->InventoryType)
         return ApplicationResult::InventoryTypeMismatch;
     return ApplicationResult::Ok;
