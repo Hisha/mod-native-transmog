@@ -21,6 +21,7 @@ namespace native_transmog
 namespace
 {
 constexpr std::size_t MaximumRequestLength = 160;
+constexpr std::size_t MaximumOutfitRequestLength = 384;
 constexpr std::uint32_t MaximumCursor = 1000000;
 constexpr std::uint32_t SetPageSize = 8;
 constexpr std::uint32_t ItemPageSize = 18;
@@ -185,6 +186,7 @@ void WardrobeService::Configure(WardrobeConfig const& config)
 void WardrobeService::Initialize()
 {
     std::unordered_map<AppearanceKey, std::vector<std::uint32_t>, AppearanceKeyHash> sources;
+    std::unordered_map<AppearanceKey, std::string, AppearanceKeyHash> appearanceSearch;
     for (auto const& [entry, itemTemplate] : *sObjectMgr->GetItemTemplateStore())
     {
         AppearanceKey appearance;
@@ -195,6 +197,9 @@ void WardrobeService::Initialize()
     {
         std::sort(entries.begin(), entries.end());
         entries.erase(std::unique(entries.begin(), entries.end()), entries.end());
+        for (std::uint32_t entry : entries)
+            if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(entry))
+                appearanceSearch[appearance] += NormalizeSearch(itemTemplate->Name1) + '\n';
     }
     std::unordered_map<std::uint32_t, std::vector<BrowseAppearance>> browseCatalog;
     for (auto const& [appearance, entries] : sources)
@@ -228,6 +233,7 @@ void WardrobeService::Initialize()
     }
     std::lock_guard<std::mutex> lock(_mutex);
     _canonicalSources = std::move(sources);
+    _appearanceSearch = std::move(appearanceSearch);
     _browseCatalog = std::move(browseCatalog);
     _players.clear();
 }
@@ -265,7 +271,9 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         return false;
 
     std::vector<std::string_view> parts = Split(message);
-    if (!player || message.size() > MaximumRequestLength || parts.size() < 3)
+    bool const outfitSaveRequest = parts.size() >= 3 && parts[2] == "CUSTOMSAVEOUTFIT";
+    std::size_t const maximumLength = outfitSaveRequest ? MaximumOutfitRequestLength : MaximumRequestLength;
+    if (!player || message.size() > maximumLength || parts.size() < 3)
         return true;
 
     std::uint32_t version = 0;
@@ -281,8 +289,10 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         return true;
 
     bool itemRequest = parts[2] == "ITEMS";
+    bool catalogRequest = parts[2] == "CAT";
     bool customSaveRequest = parts[2] == "CUSTOMSAVE";
-    std::size_t numericEnd = (itemRequest || customSaveRequest) && parts.size() > 3 ? parts.size() - 1 : parts.size();
+    std::size_t stringFields = outfitSaveRequest ? 2 : ((itemRequest || catalogRequest || customSaveRequest) ? 1 : 0);
+    std::size_t numericEnd = parts.size() >= 3 + stringFields ? parts.size() - stringFields : parts.size();
     std::vector<std::uint32_t> fields;
     fields.reserve(parts.size() - 3);
     for (std::size_t index = 3; index < numericEnd; ++index)
@@ -309,8 +319,8 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
 
     if (parts[2] == "SYNC" && fields.empty())
         SendEquipmentState(player, 0);
-    else if (parts[2] == "CAT" && fields.size() == 4)
-        HandleCatalog(player, fields);
+    else if (catalogRequest && parts.size() == 8 && fields.size() == 4)
+        HandleCatalog(player, fields, parts.back());
     else if (parts[2] == "SETS" && fields.size() == 3)
         HandleSets(player, fields);
     else if (parts[2] == "SETDETAIL" && fields.size() == 2)
@@ -335,6 +345,10 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         HandleCustomPreflight(player, fields);
     else if (parts[2] == "CUSTOMCONFIRM" && fields.size() == 3)
         HandleCustomConfirm(player, fields);
+    else if (parts[2] == "CUSTOMPREVIEW" && fields.size() == 3)
+        HandleCustomPreview(player, fields);
+    else if (outfitSaveRequest && parts.size() == 8 && fields.size() == 3)
+        HandleCustomSaveOutfit(player, fields, parts[6], parts[7]);
     else if (itemRequest && parts.size() == 8 && fields.size() == 4)
         HandleItems(player, fields, parts.back());
     else if (parts[2] == "APPLY" && fields.size() == 4)
@@ -741,6 +755,78 @@ void WardrobeService::HandleCustomConfirm(Player* player, std::vector<std::uint3
     SendError(player, token, requestId, "CUSTOMCONFIRM", ApplicationService::ResultName(result));
 }
 
+void WardrobeService::HandleCustomPreview(Player* player, std::vector<std::uint32_t> const& fields)
+{
+    std::uint32_t token = fields[0], requestId = fields[1], setId = fields[2];
+    if (!Service::Instance().ValidateSession(player, token))
+    {
+        SendError(player, token, requestId, "CUSTOMPREVIEW", "SESSION_EXPIRED");
+        return;
+    }
+    CustomSet set;
+    if (!CustomSetService::Instance().Load(player, setId, set))
+    {
+        SendError(player, token, requestId, "CUSTOMPREVIEW", "CUSTOM_NOT_FOUND");
+        return;
+    }
+    SendCustomDetail(player, requestId, set, "CUSTOMPREVIEW");
+}
+
+void WardrobeService::HandleCustomSaveOutfit(Player* player, std::vector<std::uint32_t> const& fields,
+    std::string_view name, std::string_view selections)
+{
+    std::uint32_t token = fields[0], requestId = fields[1], setId = fields[2];
+    if (!Service::Instance().ValidateSession(player, token))
+    {
+        SendError(player, token, requestId, "CUSTOMSAVEOUTFIT", "SESSION_EXPIRED");
+        return;
+    }
+
+    std::vector<CustomSetPiece> pieces;
+    std::string_view remaining = selections;
+    bool malformed = remaining.empty();
+    while (!malformed && !remaining.empty() && pieces.size() <= 14)
+    {
+        std::size_t comma = remaining.find(',');
+        std::string_view encoded = remaining.substr(0, comma);
+        std::size_t first = encoded.find(':'), second = first == std::string_view::npos ? first : encoded.find(':', first + 1);
+        std::uint32_t wireSlot = 0, state = 0, entry = 0;
+        malformed = first == std::string_view::npos || second == std::string_view::npos ||
+            !ParseUnsigned(encoded.substr(0, first), wireSlot) ||
+            !ParseUnsigned(encoded.substr(first + 1, second - first - 1), state) ||
+            !ParseUnsigned(encoded.substr(second + 1), entry);
+        std::uint8_t equipmentSlot = ResolveSlot(wireSlot);
+        CustomSetPiece piece;
+        if (!malformed && equipmentSlot != NULL_SLOT && state == 0)
+            malformed = !CustomSetService::Instance().ResolveSelection(player, equipmentSlot, entry, piece);
+        else if (!malformed && equipmentSlot != NULL_SLOT && state == 1 &&
+            ApplicationService::Instance().CanHide(equipmentSlot))
+            piece = { equipmentSlot, CustomSetSelectionState::Hidden, {} };
+        else if (!malformed)
+            malformed = true;
+        if (!malformed)
+            pieces.push_back(piece);
+        if (comma == std::string_view::npos)
+            remaining = {};
+        else
+            remaining.remove_prefix(comma + 1);
+    }
+    if (pieces.size() > 14)
+        malformed = true;
+    if (malformed)
+    {
+        SendError(player, token, requestId, "CUSTOMSAVEOUTFIT", "MALFORMED");
+        return;
+    }
+
+    std::uint32_t savedId = setId;
+    CustomSetResult result = setId ?
+        CustomSetService::Instance().Update(player, setId, std::string(name), pieces) :
+        CustomSetService::Instance().Create(player, std::string(name), pieces, savedId);
+    Send(player, "RESULT\t" + std::to_string(token) + '\t' + std::to_string(requestId) +
+        "\tCUSTOMSAVEOUTFIT\t" + CustomSetService::ResultName(result) + '\t' + std::to_string(savedId));
+}
+
 void WardrobeService::SendEquipmentState(Player* player, std::uint32_t token) const
 {
     if (!player)
@@ -850,7 +936,8 @@ std::uint32_t WardrobeService::ResolveCanonical(Player const* player, Item const
     return 0;
 }
 
-void WardrobeService::HandleCatalog(Player* player, std::vector<std::uint32_t> const& fields)
+void WardrobeService::HandleCatalog(Player* player, std::vector<std::uint32_t> const& fields,
+    std::string_view search)
 {
     std::uint32_t token = fields[0], requestId = fields[1], wireSlot = fields[2], cursor = fields[3];
     if (!Service::Instance().ValidateSession(player, token))
@@ -859,7 +946,8 @@ void WardrobeService::HandleCatalog(Player* player, std::vector<std::uint32_t> c
         return;
     }
     std::uint8_t equipmentSlot = ResolveSlot(wireSlot);
-    if (equipmentSlot == NULL_SLOT || cursor > MaximumCursor)
+    std::string normalizedSearch = NormalizeSearch(search);
+    if (equipmentSlot == NULL_SLOT || cursor > MaximumCursor || (search.size() && normalizedSearch.empty()))
     {
         SendError(player, token, requestId, "CAT", "MALFORMED");
         return;
@@ -881,52 +969,46 @@ void WardrobeService::HandleCatalog(Player* player, std::vector<std::uint32_t> c
     CollectionFilter filter = FilterFor(target);
     std::vector<std::uint32_t> sources;
     std::vector<bool> appliedFlags;
-    std::uint32_t scanned = 0;
-    std::uint32_t maximumScan = pageSize * 8;
-    bool exhausted = false;
+    std::uint32_t scanned = 0, matched = 0;
     AppearanceOverride appearanceOverride;
     bool hasOverride = ApplicationService::Instance().GetOverride(target, appearanceOverride);
     bool canHide = ApplicationService::Instance().CanHide(equipmentSlot);
     bool hidden = hasOverride && appearanceOverride.state == OverrideState::Hidden && canHide;
-    while (sources.size() <= pageSize && scanned < maximumScan)
+    while (true)
     {
-        std::uint32_t chunk = std::min<std::uint32_t>(64, maximumScan - scanned);
+        constexpr std::uint32_t chunk = 128;
         std::vector<AppearanceRecord> records = CollectionService::Instance().List(
-            player, filter, cursor + scanned, chunk);
+            player, filter, scanned, chunk);
         if (records.empty())
-        {
-            exhausted = true;
             break;
-        }
         for (AppearanceRecord const& record : records)
         {
             ++scanned;
             std::uint32_t source = ResolveCanonical(player, target, record, equipmentSlot);
-            if (source)
+            bool searchMatch = normalizedSearch.empty();
+            if (!searchMatch)
             {
-                sources.push_back(source);
-                appliedFlags.push_back(hasOverride && appearanceOverride.state == OverrideState::Appearance &&
-                    appearanceOverride.appearance == record.appearance);
-                if (sources.size() > pageSize)
-                    break;
+                std::lock_guard<std::mutex> lock(_mutex);
+                auto found = _appearanceSearch.find(record.appearance);
+                searchMatch = found != _appearanceSearch.end() &&
+                    found->second.find(normalizedSearch) != std::string::npos;
+            }
+            if (source && searchMatch)
+            {
+                if (matched >= cursor && sources.size() < pageSize)
+                {
+                    sources.push_back(source);
+                    appliedFlags.push_back(hasOverride && appearanceOverride.state == OverrideState::Appearance &&
+                        appearanceOverride.appearance == record.appearance);
+                }
+                ++matched;
             }
         }
-        if (sources.size() > pageSize)
-            break;
         if (records.size() < chunk)
-        {
-            exhausted = true;
             break;
-        }
     }
 
-    bool hasNext = sources.size() > pageSize || !exhausted;
-    if (sources.size() > pageSize)
-    {
-        sources.resize(pageSize);
-        appliedFlags.resize(pageSize);
-        --scanned; // the extra compatible record is the first record of the next page
-    }
+    bool hasNext = cursor + sources.size() < matched;
     std::uint32_t nonce;
     {
         std::lock_guard<std::mutex> lock(_mutex);
@@ -942,10 +1024,11 @@ void WardrobeService::HandleCatalog(Player* player, std::vector<std::uint32_t> c
         appearanceOverride.appearanceItem : 0;
     Send(player, "PAGE\t" + std::to_string(token) + '\t' + std::to_string(requestId) + '\t' +
         std::to_string(nonce) + '\t' + std::to_string(wireSlot) + '\t' + std::to_string(cursor) + '\t' +
-        std::to_string(cursor + scanned) + '\t' + std::to_string(hasNext ? 1 : 0) + '\t' +
+        std::to_string(cursor + sources.size()) + '\t' + std::to_string(hasNext ? 1 : 0) + '\t' +
         std::to_string(target->GetEntry()) + '\t' + std::to_string(appliedEntry) + '\t' +
         std::to_string(canHide ? 1 : 0) + '\t' + std::to_string(hidden ? 1 : 0) + '\t' +
-        std::to_string(hasOverride ? 1 : 0) + '\t' + std::to_string(sources.size()));
+        std::to_string(hasOverride ? 1 : 0) + '\t' + std::to_string(sources.size()) + '\t' +
+        std::to_string(matched) + '\t' + std::to_string(pageSize));
     for (std::size_t index = 0; index < sources.size(); ++index)
         Send(player, "ITEM\t" + std::to_string(token) + '\t' + std::to_string(requestId) + '\t' +
             std::to_string(nonce) + '\t' + std::to_string(index + 1) + '\t' +

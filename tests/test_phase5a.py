@@ -221,7 +221,7 @@ class PhaseFiveASourceAndTransportTests(unittest.TestCase):
         self.assertIn("ValidateSession", WARDROBE[WARDROBE.index("void WardrobeService::HandleCatalog"):])
 
     def test_protocol_validation_and_pagination_are_bounded(self):
-        self.assertIn("constexpr std::uint32_t Version = 4", PROTOCOL)
+        self.assertIn("constexpr std::uint32_t Version = 5", PROTOCOL)
         self.assertIn("version != protocol::Version", WARDROBE)
         self.assertIn("constexpr std::uint32_t SetPageSize = 8", WARDROBE)
         self.assertIn("constexpr std::size_t MaximumSetPieces = 32", CATALOG)

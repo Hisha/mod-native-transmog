@@ -127,9 +127,9 @@ class PhaseTwoTests(unittest.TestCase):
     def test_authorized_transport_and_debug_separation(self) -> None:
         self.assertIn('player->Whisper(std::string(protocol::AddonPrefix)', SERVICE)
         self.assertIn("std::to_string(protocol::Version)", SERVICE)
-        self.assertIn('constexpr std::uint32_t Version = 4', PROTOCOL)
+        self.assertIn('constexpr std::uint32_t Version = 5', PROTOCOL)
         self.assertIn("LANG_ADDON", SERVICE)
-        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "4"', LUA)
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "5"', LUA)
         self.assertIn('frame:RegisterEvent("CHAT_MSG_ADDON")', LUA)
         self.assertIn('channel~="WHISPER"', LUA)
         self.assertIn('sender~=UnitName("player")', LUA)

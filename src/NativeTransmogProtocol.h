@@ -8,7 +8,7 @@ namespace native_transmog
 namespace protocol
 {
 constexpr char AddonPrefix[] = "NTRANSMOG";
-constexpr std::uint32_t Version = 4;
+constexpr std::uint32_t Version = 5;
 }
 }
 

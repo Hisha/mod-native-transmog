@@ -145,7 +145,7 @@ class PhaseFourCTooltipTests(unittest.TestCase):
         self.assertIn('parts[2] == "SYNC" && fields.empty()', handler)
         self.assertIn("SendEquipmentState(player, 0)", handler)
         self.assertIn('VERSION.."\\tSYNC"', LUA)
-        state_branch = LUA[LUA.index('if command=="STATE"'):LUA.index('elseif command=="PAGE"')]
+        state_branch = LUA[LUA.index('if command=="STATE"'):LUA.index('elseif string.sub(command,1,6)=="CUSTOM"')]
         self.assertIn('fields[3]~="0"', state_branch)
 
     def test_equipment_changes_push_only_the_changed_authoritative_slot(self):
@@ -162,7 +162,7 @@ class PhaseFourCTooltipTests(unittest.TestCase):
             self.assertNotIn(class_name, message)
 
     def test_custom_set_transport_version_and_existing_phase4c_schema_unchanged(self):
-        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "4"', LUA)
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "5"', LUA)
         self.assertFalse(list((ROOT / "data/sql").rglob("*phase4c*")))
 
 

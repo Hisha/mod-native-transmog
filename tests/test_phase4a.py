@@ -82,10 +82,10 @@ class PhaseFourAContracts(unittest.TestCase):
 
     def test_hide_tile_does_not_consume_pagination(self):
         catalog = WARDROBE[WARDROBE.index("WardrobeService::HandleCatalog"):WARDROBE.index("WardrobeService::HandleHide")]
-        self.assertIn("sources.size() <= pageSize", catalog)
+        self.assertIn("sources.size() < pageSize", catalog)
         self.assertNotIn("sources.insert", catalog)
         self.assertIn("std::to_string(canHide ? 1 : 0)", catalog)
-        self.assertIn("collected=#catalog-(canHide and 1 or 0)", LUA)
+        self.assertIn("NativeTransmogWardrobeState.matched", LUA)
 
     def test_apply_hide_restore_and_hide_apply_share_one_item_override(self):
         self.assertIn("ON DUPLICATE KEY UPDATE", APP[APP.index("ApplicationService::Apply"):])
@@ -127,7 +127,7 @@ class PhaseFourAContracts(unittest.TestCase):
             self.assertNotIn(forbidden, combined)
 
     def test_client_preview_rebuilds_without_selected_slot(self):
-        preview = LUA[LUA.index("local function applySelectedAppearance"):LUA.index("local function createAppearanceButton")]
+        preview = LUA[LUA.index("local function applyOutfitAppearance"):LUA.index("local function createAppearanceButton")]
         for marker in ("model:Undress()", "GetInventorySlotInfo", "GetInventoryItemLink", "inventorySlot~=hiddenSlot"):
             self.assertIn(marker, preview)
 
@@ -135,7 +135,7 @@ class PhaseFourAContracts(unittest.TestCase):
         combined = APP + WARDROBE + LUA
         for forbidden in ("CMSG_", "SMSG_", "Interface/AddOns"):
             self.assertNotIn(forbidden, combined)
-        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "4"', LUA)
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "5"', LUA)
 
 
 class PhaseFourAModels(unittest.TestCase):

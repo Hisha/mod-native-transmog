@@ -32,14 +32,14 @@ class WardrobeAppearanceUsabilityContracts(unittest.TestCase):
         self.assertIn("refreshAppearanceButtonLabel(button)", handler)
 
     def test_selection_reuses_main_preview_and_reapplies_after_async_reset(self) -> None:
-        preview = section("local function applySelectedAppearance", "local function twoLineAppearanceLabel")
+        preview = section("local function applyOutfitAppearance", "local function twoLineAppearanceLabel")
         update = section("function NativeTransmog_FrameUpdate", "function NativeTransmog_OnLoad")
         self.assertIn('local model=getModel(); model:SetUnit("player")', preview)
-        self.assertIn("applySelectedAppearance(model,selectedAppearance)", preview)
+        self.assertIn("applyOutfitAppearance(model,wireSlot,NativeTransmogWardrobeState.selections[wireSlot])", preview)
         self.assertIn("previewRefresh={generation=previewGeneration", preview)
         self.assertIn("refresh.generation~=previewGeneration", update)
-        self.assertIn("refresh.appearance~=selectedAppearance", update)
-        self.assertIn("applySelectedAppearance(getModel(),refresh.appearance)", update)
+        self.assertIn("refresh.generation~=previewGeneration", update)
+        self.assertIn("applyOutfitAppearance(model,wireSlot,NativeTransmogWardrobeState.selections[wireSlot])", update)
         self.assertNotIn('CreateFrame("DressUpModel"', LUA)
         self.assertEqual(XML.count("<DressUpModel"), 3)
 

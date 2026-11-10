@@ -78,7 +78,7 @@ class PhaseThreeDContracts(unittest.TestCase):
                         WARDROBE.index("ApplicationService::Instance().Apply", apply))
 
     def test_pagination_is_bounded_and_deterministic(self):
-        for marker in ("pageSize * 8", "std::min<std::uint32_t>(64", "MaximumCursor",
+        for marker in ("constexpr std::uint32_t chunk = 128", "sources.size() < pageSize", "MaximumCursor",
                        "ORDER BY `item_class`, `inventory_type`, `item_subclass`, `display_id`",
                        "LIMIT {} OFFSET {}"):
             self.assertIn(marker, WARDROBE + COLLECTION)

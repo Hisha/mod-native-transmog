@@ -94,7 +94,7 @@ class PhaseFourBContracts(unittest.TestCase):
 
     def test_slot_selection_uses_wire_mapping_and_requests_catalog(self):
         self.assertIn("selectedSlotId=slotId", LUA)
-        self.assertIn('sendRequest("CAT",requestId.."\\t"..selectedSlotId.."\\t"..cursor)', LUA)
+        self.assertIn('sendRequest("CAT",requestId.."\\t"..selectedSlotId.."\\t"..cursor.."\\t"..NativeTransmogWardrobeState.search)', LUA)
         resolver = WARDROBE[WARDROBE.index("WardrobeService::ResolveSlot"):WARDROBE.index("CollectionFilter")]
         self.assertEqual(resolver.count("case "), 14)
 
@@ -142,9 +142,9 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertIn("NativeTransmog_NextPage", LUA)
         self.assertIn("NativeTransmog_PreviousPage", LUA)
         self.assertIn("cursorHistory", LUA)
-        page = LUA[LUA.index('elseif command=="PAGE"'):LUA.index('elseif command=="ITEM"')]
+        page = LUA[LUA.index('if command=="PAGE"'):LUA.index('elseif command=="ITEM"')]
         self.assertIn("table.insert(incomingCatalog,{selection=0,isHide=true", page)
-        self.assertIn("collected=#catalog-(canHide and 1 or 0)", LUA)
+        self.assertIn("NativeTransmogWardrobeState.matched", LUA)
 
     def test_apply_remove_reset_and_rotation_are_preserved(self):
         for marker in ("NativeTransmog_Apply", "NativeTransmog_Remove", "NativeTransmog_ResetPreview",
@@ -154,7 +154,7 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertNotIn("sendRequest", reset)
 
     def test_hide_preview_prefers_slot_undress_with_safe_fallback(self):
-        preview = LUA[LUA.index("local function applySelectedAppearance"):LUA.index("local function createAppearanceButton")]
+        preview = LUA[LUA.index("local function applyOutfitAppearance"):LUA.index("local function createAppearanceButton")]
         self.assertIn("if model.UndressSlot", preview)
         self.assertIn("model:UndressSlot(hiddenSlot)", preview)
         self.assertIn("model:Undress()", preview)
@@ -163,11 +163,11 @@ class PhaseFourBContracts(unittest.TestCase):
     def test_ui_bounds_leave_catalog_and_controls_inside_window(self):
         self.assertIn('<Size x="960" y="600" />', XML)
         self.assertIn('<Size x="284" y="474" />', XML)
-        self.assertIn('<Size x="622" y="354" />', XML)
-        self.assertIn('<Offset x="323" y="-124" />', XML)
+        self.assertIn('<Size x="622" y="378" />', XML)
+        self.assertIn('<Offset x="323" y="-102" />', XML)
         self.assertLess(12 + 284, 303)
         self.assertLessEqual(323 + 622, 960 - 8)
-        self.assertLessEqual(124 + 354, 600 - 39)
+        self.assertLessEqual(102 + 378, 600 - 39)
 
     def test_lua_source_uses_lua_51_syntax_subset(self):
         for forbidden in ("goto ", "::", "//", "&", "|", "<const>"):

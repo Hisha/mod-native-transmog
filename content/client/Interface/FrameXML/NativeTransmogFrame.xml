@@ -116,10 +116,10 @@
           <Anchors><Anchor point="TOP"><Offset x="0" y="-12" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentSlotTitle" inherits="GameFontNormalLarge" justifyH="LEFT">
-          <Size x="290" y="20" /><Anchors><Anchor point="TOPLEFT"><Offset x="318" y="-77" /></Anchor></Anchors>
+          <Size x="590" y="20" /><Anchors><Anchor point="TOPLEFT"><Offset x="318" y="-43" /></Anchor></Anchors>
         </FontString>
-        <FontString name="$parentHint" inherits="GameFontDisableSmall" justifyH="LEFT" text="Select an appearance to preview it">
-          <Size x="290" y="14" /><Anchors><Anchor point="TOPLEFT"><Offset x="318" y="-98" /></Anchor></Anchors>
+        <FontString name="$parentSearchHint" inherits="GameFontDisableSmall" justifyH="LEFT" text="Search collected appearances...">
+          <Size x="520" y="16" /><Anchors><Anchor point="TOPLEFT"><Offset x="330" y="-73" /></Anchor></Anchors>
         </FontString>
         <FontString name="$parentActual" inherits="GameFontHighlightSmall" justifyH="LEFT">
           <Size x="264" y="12" /><Anchors><Anchor point="BOTTOMLEFT" relativeTo="$parentPreviewPanel" relativePoint="BOTTOMLEFT"><Offset x="10" y="43" /></Anchor></Anchors>
@@ -265,12 +265,12 @@
       </Frame>
 
       <Frame name="$parentBrowserPanel">
-        <Size x="622" y="354" />
-        <Anchors><Anchor point="TOPLEFT"><Offset x="323" y="-124" /></Anchor></Anchors>
+        <Size x="622" y="378" />
+        <Anchors><Anchor point="TOPLEFT"><Offset x="323" y="-102" /></Anchor></Anchors>
         <Frames>
           <ScrollFrame name="$parentScroll" inherits="UIPanelScrollFrameTemplate">
-            <Size x="586" y="353" /><Anchors><Anchor point="TOPLEFT"><Offset x="0" y="0" /></Anchor></Anchors>
-            <ScrollChild><Frame name="$parentChild"><Size x="566" y="353" /></Frame></ScrollChild>
+            <Size x="586" y="377" /><Anchors><Anchor point="TOPLEFT"><Offset x="0" y="0" /></Anchor></Anchors>
+            <ScrollChild><Frame name="$parentChild"><Size x="566" y="377" /></Frame></ScrollChild>
           </ScrollFrame>
           <!-- Build 12340 does not expose SetClipsChildren or a verified way
                to pan camera 0 away from the head. Keep one reusable viewport
@@ -336,7 +336,7 @@
         <Scripts><OnClick>NativeTransmog_Remove();</OnClick></Scripts>
       </Button>
       <Frame name="$parentSavedSetDropDown" inherits="UIDropDownMenuTemplate">
-        <Anchors><Anchor point="TOPLEFT"><Offset x="0" y="-40" /></Anchor></Anchors>
+        <Anchors><Anchor point="TOPLEFT"><Offset x="4" y="-40" /></Anchor></Anchors>
         <Scripts><OnLoad>NativeTransmog_SavedSetDropDown_OnLoad(self);</OnLoad></Scripts>
       </Frame>
       <Button name="$parentApplySavedSet" inherits="UIPanelButtonTemplate" text="Saved Sets..." hidden="true">
@@ -344,26 +344,22 @@
         <Scripts><OnClick>NativeTransmog_ToggleSavedSets(self);</OnClick></Scripts>
       </Button>
       <Button name="$parentSaveOutfit" inherits="UIPanelButtonTemplate" text="Save">
-        <Size x="84" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="208" y="-43" /></Anchor></Anchors>
-        <Scripts><OnLoad>self:Disable();</OnLoad><OnEnter>NativeTransmog_DeferredControl_OnEnter(self,"Save outfits in the gold Collections window.");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
+        <Size x="72" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="220" y="-43" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_SaveOutfit();</OnClick></Scripts>
       </Button>
-      <Button name="$parentItemsTab" inherits="UIPanelButtonTemplate" text="Items">
-        <Size x="70" y="24" /><Anchors><Anchor point="TOPLEFT"><Offset x="319" y="-43" /></Anchor></Anchors><Scripts><OnLoad>self:Disable();</OnLoad></Scripts>
-      </Button>
-      <Button name="$parentSetsTab" inherits="UIPanelButtonTemplate" text="Sets">
-        <Size x="70" y="24" /><Anchors><Anchor point="LEFT" relativeTo="$parentItemsTab" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors><Scripts><OnClick>NativeTransmog_ToggleSavedSets(NativeTransmogFrameApplySavedSet);</OnClick></Scripts>
-      </Button>
-      <StatusBar name="$parentProgress">
-        <Size x="200" y="13" /><Anchors><Anchor point="TOP"><Offset x="104" y="-49" /></Anchor></Anchors><BarTexture file="Interface\TargetingFrame\UI-StatusBar" /><BarColor r="0.18" g="0.32" b="0.15" a="1" />
-        <Layers><Layer level="OVERLAY"><FontString name="$parentText" inherits="GameFontDisableSmall" text="Progress in Collections"><Anchors><Anchor point="CENTER" /></Anchors></FontString></Layer></Layers>
-      </StatusBar>
-      <Frame name="$parentSearchPlaceholder">
-        <Size x="118" y="22" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-102" y="-44" /></Anchor></Anchors>
-        <Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark" edgeFile="Interface\Tooltips\UI-Tooltip-Border" tile="true"><BackgroundInsets><AbsInset left="2" right="2" top="2" bottom="2" /></BackgroundInsets><TileSize><AbsValue val="8" /></TileSize><EdgeSize><AbsValue val="8" /></EdgeSize></Backdrop>
-        <Layers><Layer level="ARTWORK"><FontString inherits="GameFontDisableSmall" text="Search (Collections)"><Anchors><Anchor point="LEFT"><Offset x="7" y="0" /></Anchor></Anchors></FontString></Layer></Layers>
-      </Frame>
-      <Button name="$parentSources" inherits="UIPanelButtonTemplate" text="Sources">
-        <Size x="84" y="22" /><Anchors><Anchor point="TOPRIGHT"><Offset x="-13" y="-44" /></Anchor></Anchors><Scripts><OnLoad>self:Disable();</OnLoad><OnEnter>NativeTransmog_DeferredControl_OnEnter(self,"Source filtering is available in Collections.");</OnEnter><OnLeave>GameTooltip:Hide();</OnLeave></Scripts>
+      <EditBox name="$parentSearch" inherits="InputBoxTemplate" autoFocus="false" multiLine="false">
+        <Size x="570" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="318" y="-68" /></Anchor></Anchors>
+        <FontString inherits="GameFontHighlightSmall" />
+        <Scripts>
+          <OnLoad>NativeTransmog_InitializeSingleLineEditBox(self); self:SetTextInsets(8,4,0,0);</OnLoad>
+          <OnTextChanged>NativeTransmog_AppearanceSearchChanged(self:GetText());</OnTextChanged>
+          <OnEscapePressed>self:SetText(""); self:ClearFocus();</OnEscapePressed>
+          <OnEnterPressed>self:ClearFocus();</OnEnterPressed>
+        </Scripts>
+      </EditBox>
+      <Button name="$parentSearchClear" inherits="UIPanelCloseButton" hidden="true">
+        <Size x="24" y="24" /><Anchors><Anchor point="LEFT" relativeTo="$parentSearch" relativePoint="RIGHT"><Offset x="4" y="0" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_ClearAppearanceSearch();</OnClick></Scripts>
       </Button>
     </Frames>
     <Scripts>

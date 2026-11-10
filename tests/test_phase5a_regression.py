@@ -202,7 +202,7 @@ class PhaseFiveAProtocolRegressionTests(unittest.TestCase):
         self.assertEqual(state.visible, [9, 10])
 
     def test_protocol_version_compatibility(self):
-        self.assertEqual(protocol_version(), "4")
+        self.assertEqual(protocol_version(), "5")
         self.assertEqual(client_version(), protocol_version())
         self.assertIn("version != protocol::Version", WARDROBE)
         self.assertIn("std::to_string(protocol::Version)", SERVICE)

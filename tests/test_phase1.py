@@ -60,7 +60,7 @@ class PhaseOneTests(unittest.TestCase):
     def test_collections_entry_is_read_only(self) -> None:
         body = self.lua[
             self.lua.index("function NativeTransmog_OpenCollections"):
-            self.lua.index("function NativeTransmog_OnEvent")
+            self.lua.index("local function handleItemMessage")
         ]
         self.assertIn('browserMode="SETS"', body)
         self.assertIn("requestSets(0)", body)
@@ -101,7 +101,7 @@ class PhaseOneTests(unittest.TestCase):
     def test_phase1_preview_behaviors_are_preserved(self) -> None:
         for token in (
             'model:SetUnit("player")',
-            "applySelectedAppearance(model,selectedAppearance)",
+            "rebuildOutfitPreview()",
             "NativeTransmog_SelectSlot",
             "NativeTransmog_ResetPreview",
             "NativeTransmog_Rotate",

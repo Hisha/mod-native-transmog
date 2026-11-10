@@ -86,7 +86,8 @@ private:
     void Send(Player* player, std::string const& payload) const;
     void SendError(Player* player, std::uint32_t token, std::uint32_t requestId,
         char const* operation, char const* result) const;
-    void HandleCatalog(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCatalog(Player* player, std::vector<std::uint32_t> const& fields,
+        std::string_view search);
     void HandleItems(Player* player, std::vector<std::uint32_t> const& fields,
         std::string_view search);
     void HandleSets(Player* player, std::vector<std::uint32_t> const& fields);
@@ -101,6 +102,9 @@ private:
     void HandleCustomDelete(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleCustomPreflight(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleCustomConfirm(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomPreview(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomSaveOutfit(Player* player, std::vector<std::uint32_t> const& fields,
+        std::string_view name, std::string_view selections);
     void SendCustomDetail(Player* player, std::uint32_t requestId, CustomSet const& set,
         char const* prefix) const;
     void HandleApply(Player* player, std::vector<std::uint32_t> const& fields);
@@ -118,6 +122,7 @@ private:
     mutable std::mutex _mutex;
     WardrobeConfig _config;
     std::unordered_map<AppearanceKey, std::vector<std::uint32_t>, AppearanceKeyHash> _canonicalSources;
+    std::unordered_map<AppearanceKey, std::string, AppearanceKeyHash> _appearanceSearch;
     std::unordered_map<std::uint32_t, std::vector<BrowseAppearance>> _browseCatalog;
     std::unordered_map<ObjectGuid::LowType, PlayerState> _players;
     std::uint32_t _nextNonce = 1;

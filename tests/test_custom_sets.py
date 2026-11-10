@@ -203,8 +203,8 @@ class PreviewAndUiContractTests(unittest.TestCase):
                 self.assertLessEqual(abs(min(y for _, y in positions)) + 34, 76)
 
     def test_single_line_inputs_do_not_run_scrolling_edit_updates(self):
-        self.assertEqual(XML.count('inherits="InputBoxTemplate"'), 3)
-        self.assertEqual(XML.count('NativeTransmog_InitializeSingleLineEditBox(self)'), 3)
+        self.assertEqual(XML.count('inherits="InputBoxTemplate"'), 4)
+        self.assertEqual(XML.count('NativeTransmog_InitializeSingleLineEditBox(self)'), 4)
         initializer = LUA[LUA.index('function NativeTransmog_InitializeSingleLineEditBox'):LUA.index('function NativeTransmog_StyleCollectionTab')]
         self.assertIn('SetMultiLine(false)', initializer)
         self.assertIn('SetScript("OnUpdate",nil)', initializer)
@@ -252,10 +252,10 @@ class ApplicationContractTests(unittest.TestCase):
 
 
 class IntegrationContractTests(unittest.TestCase):
-    def test_module_initializes_service_and_protocol_is_v4(self):
+    def test_module_initializes_service_and_protocol_is_v5(self):
         self.assertIn("CustomSetService::Instance().Configure", MODULE)
         self.assertIn("CustomSetService::Instance().Initialize", MODULE)
-        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "4"', LUA)
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "5"', LUA)
 
     def test_no_core_hook_standalone_addon_or_collection_schema_change(self):
         combined = CUSTOM + WARDROBE + MODULE + LUA

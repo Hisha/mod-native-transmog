@@ -19,8 +19,8 @@ def grid_height(count: int, columns: int = 6, height: int = 111, gap: int = 10) 
 
 
 class WardrobeVisualPolishContracts(unittest.TestCase):
-    def test_reference_viewport_is_exactly_six_columns_by_three_rows(self):
-        self.assertIn("6, 84, 111, 10, 566, 353", LUA)
+    def test_reference_viewport_keeps_six_columns_and_reclaims_header_space(self):
+        self.assertIn("6, 84, 111, 10, 566, 377", LUA)
         self.assertEqual(grid_height(18), 353)
         self.assertIn("math.max(CATALOG_HEIGHT,contentHeight)", LUA)
 
@@ -52,7 +52,7 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
         self.assertLessEqual(slider_left + 8 + 16, 270)
 
     def test_cursor_navigation_and_recycled_buttons_reset_every_visual_state(self):
-        self.assertIn('NativeTransmogFramePageText:SetText("Page "..(#cursorHistory+1))', LUA)
+        self.assertIn('NativeTransmogFramePageText:SetText("Page "..(#cursorHistory+1).." / "..totalPages)', LUA)
         self.assertIn("table.insert(cursorHistory,cursor)", LUA)
         self.assertIn("requestCatalog(table.remove(cursorHistory))", LUA)
         reset = LUA[LUA.index("local function resetAppearanceButton"):LUA.index("local function renderCatalog")]
@@ -104,7 +104,7 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
     def test_complete_layout_scales_uniformly_at_small_ui_sizes(self):
         self.assertIn('<Size x="960" y="600" />', XML)
         self.assertIn('<Size x="28" y="22" />', XML)
-        self.assertIn('<Size x="586" y="353" />', XML)
+        self.assertIn('<Size x="586" y="377" />', XML)
         self.assertIn("math.min(1,(width-20)/960,(height-20)/600)", LUA)
         self.assertIn("NativeTransmogFrame:SetScale", LUA)
         self.assertEqual(6 * 84 + 5 * 10, 554)
@@ -157,21 +157,26 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
 
     def test_outfit_selector_and_save_are_integrated_as_top_toolbar(self):
         selector = XML[XML.index('name="$parentSavedSetDropDown"'):
-                       XML.index('name="$parentItemsTab"')]
+                       XML.index('name="$parentSearch"')]
         self.assertNotIn('inherits="UIDropDownMenuTemplate" hidden="true"', selector)
-        self.assertIn('<Offset x="208" y="-43" />', selector)
+        self.assertIn('<Offset x="220" y="-43" />', selector)
         self.assertIn('UIDropDownMenu_SetWidth(frame,190)', LUA)
         self.assertIn('selectedName or "No Outfit"', LUA)
-        self.assertLessEqual(208 + 84, 303)
+        self.assertLessEqual(220 + 72, 303)
+        self.assertIn('NativeTransmog_SaveOutfit();', selector)
 
-    def test_retail_frame_toolbar_and_deferred_controls_are_explicit(self):
+    def test_transmogrify_toolbar_is_focused_and_collections_controls_remain_separate(self):
         self.assertIn('text="Transmogrify"', XML)
-        self.assertIn('name="$parentItemsTab"', XML)
-        self.assertIn('name="$parentSetsTab"', XML)
-        self.assertIn('text="Search (Collections)"', XML)
-        self.assertIn('name="$parentSources"', XML)
-        self.assertIn('text="Progress in Collections"', XML)
-        self.assertNotIn('NativeTransmog_Search', XML)
+        wardrobe = XML[XML.index('<Frame name="NativeTransmogFrame"'):
+                       XML.index('<Frame name="NativeTransmogCollectionsFrame"')]
+        for removed in ('name="$parentItemsTab"', 'name="$parentSetsTab"',
+                        'text="Search (Collections)"', 'name="$parentSources"',
+                        'text="Progress in Collections"'):
+            self.assertNotIn(removed, wardrobe)
+        collections = XML[XML.index('<Frame name="NativeTransmogCollectionsFrame"'):]
+        self.assertIn('name="$parentItemsTab"', collections)
+        self.assertIn('name="$parentSetsTab"', collections)
+        self.assertIn('NativeTransmog_AppearanceSearchChanged', wardrobe)
 
     def test_all_fourteen_equipment_slots_remain_in_non_overlapping_columns(self):
         ids = re.findall(r'inherits="NativeTransmogEquipmentSlotTemplate" id="(\d+)"', XML)
@@ -181,13 +186,12 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
         self.assertLessEqual(35 + 280, 474)
         self.assertLessEqual(83 + 5 * 40 + 4 * 8, 474)
 
-    def test_server_protocol_and_cursor_page_semantics_are_unchanged(self):
-        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "4"', LUA)
-        self.assertNotIn("total-page", LUA.lower())
+    def test_server_protocol_v5_pages_filtered_results(self):
+        self.assertIn('local PREFIX, VERSION = "NTRANSMOG", "5"', LUA)
         self.assertIn("pageSize", WARDROBE)
-        self.assertIn("std::to_string(cursor + scanned)", WARDROBE)
+        self.assertIn("std::to_string(cursor + sources.size())", WARDROBE)
         self.assertEqual(len(re.findall(r"NTRANSMOG", PROTOCOL + LUA)), 2)
-        self.assertIn("constexpr std::uint32_t Version = 4", PROTOCOL)
+        self.assertIn("constexpr std::uint32_t Version = 5", PROTOCOL)
 
 
 if __name__ == "__main__":
