@@ -27,6 +27,10 @@ class PortraitState:
     visible: bool = False
     icon_hidden: bool = False
     open: bool = True
+    try_on_items: list[int] | None = None
+
+    def __post_init__(self) -> None:
+        self.try_on_items = []
 
     def clear(self) -> None:
         self.generation += 1
@@ -44,6 +48,7 @@ class PortraitState:
         current = (self.open and self.slot == 1 and success and self.entry == entry
                    and self.generation == token)
         if current:
+            self.try_on_items.append(entry)
             self.visible = self.icon_hidden = True
         return current
 
@@ -77,18 +82,19 @@ class CatalogPortraitContracts(unittest.TestCase):
 
     def test_04_switching_helmets_restores_previous_icon_and_reuses_model(self):
         state = PortraitState()
-        first = state.select(1, 16963)
-        self.assertTrue(state.item_ready(16963, first))
+        first = state.select(1, 16955)  # Judgement Crown
+        self.assertTrue(state.item_ready(16955, first))
         second = state.select(2, 29061)
         self.assertFalse(state.icon_hidden)
         self.assertTrue(state.item_ready(29061, second))
         self.assertEqual(state.entry, 29061)
+        self.assertEqual(state.try_on_items, [16955, 29061])
 
     def test_05_rapid_selection_leaves_latest_active(self):
         state = PortraitState()
-        old = state.select(1, 16963)
+        old = state.select(1, 16955)
         latest = state.select(2, 29061)
-        self.assertFalse(state.item_ready(16963, old))
+        self.assertFalse(state.item_ready(16955, old))
         self.assertTrue(state.item_ready(29061, latest))
 
     def test_06_stale_item_and_camera_callbacks_are_rejected(self):
@@ -99,6 +105,26 @@ class CatalogPortraitContracts(unittest.TestCase):
         self.assertIn("catalogPortraitIsCurrent(generation)", update)
         self.assertIn("catalogPortraitCameraGeneration", update)
         self.assertIn('model:SetScript("OnUpdate",nil)', update)
+        self.assertIn("applyCatalogPortraitItem(model,active,true)", update)
+
+    def test_two_distinct_source_item_ids_reach_try_on(self):
+        apply_item = section("local function applyCatalogPortraitItem", "clearCatalogPortrait=function")
+        render = section("local function renderCatalogPortrait", "selectCatalogPortrait=function")
+        self.assertIn("local itemLink=active.itemLink", apply_item)
+        self.assertIn("model:TryOn(itemLink)", apply_item)
+        self.assertIn('string.match(itemLink,"item:(%d+)")', render)
+        self.assertIn("resolvedItemId~=active.entry", render)
+        state = PortraitState()
+        first = state.select(1, 16955)  # Judgement Crown
+        self.assertTrue(state.item_ready(16955, first))
+        second = state.select(2, 29061)
+        self.assertTrue(state.item_ready(29061, second))
+        self.assertEqual(state.try_on_items, [16955, 29061])
+        self.assertNotEqual(*state.try_on_items)
+
+    def test_no_hardcoded_judgement_item_in_production_portrait_renderer(self):
+        portrait = section("local function catalogPortraitDebug", "local function clearCatalogForUnavailableSlot")
+        self.assertNotIn("16955", portrait)
 
     def test_07_icon_hides_only_after_success_and_clear_restores_it(self):
         clear = section("clearCatalogPortrait=function", "local function catalogPortraitIsCurrent")
@@ -161,7 +187,7 @@ class CatalogPortraitContracts(unittest.TestCase):
     def test_reset_order_and_verified_head_camera(self):
         render = section("local function renderCatalogPortrait", "selectCatalogPortrait=function")
         ordered = ['GetItemInfo(active.entry)', 'model:Hide(); model:ClearModel()',
-                   'model:SetUnit("player")', "model:Undress()", "model:TryOn(itemLink)",
+                   'model:SetUnit("player")', "applyCatalogPortraitItem(model,active,false)",
                    "resetCatalogPortraitCamera(model)", "model:Show()", "active.button.icon:Hide()"]
         positions = [render.index(token) for token in ordered]
         self.assertEqual(positions, sorted(positions))

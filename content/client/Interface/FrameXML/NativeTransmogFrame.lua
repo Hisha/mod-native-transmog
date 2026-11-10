@@ -22,6 +22,7 @@ local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
 -- deliberately keeps its item icon.
 local catalogPortrait, catalogPortraitGeneration = nil, 0
 local catalogPortraitCameraUntil, catalogPortraitCameraGeneration = nil, nil
+local catalogPortraitDiagnostics = false
 -- PTR showed that 1.80 overfilled the 84x111 viewport. Build 12340 does not
 -- reliably clip model geometry, so keep a conservative camera-space margin
 -- for tall helms instead of depending on the widget boundary. Zero X/Z keeps
@@ -69,6 +70,12 @@ local ITEM_CATEGORIES = {
 }
 local requestCatalog, renderPieces, requestSetDetail, requestItems, renderItems
 local selectCatalogPortrait, clearCatalogPortrait
+
+local function catalogPortraitDebug(message)
+ if catalogPortraitDiagnostics and DEFAULT_CHAT_FRAME then
+  DEFAULT_CHAT_FRAME:AddMessage("NativeTransmog portrait: "..message)
+ end
+end
 
 function NativeTransmog_PreviewPanel_OnLoad(frame)
  local _,race=UnitRace("player")
@@ -705,6 +712,7 @@ end
 local function previewItem(button)
  if not button.appearance or not hasPhysicalItem then return end
  selectedAppearance = { selection=button.selectionId, entry=button.entry, isHide=button.isHide }
+ catalogPortraitDebug("click appearanceId="..tostring(button.selectionId).." sourceItemId="..tostring(button.entry))
  local model=getModel(); model:SetUnit("player")
  if button.isHide then
   local hiddenSlot=GetInventorySlotInfo(SLOT_INVENTORY_NAMES[selectedSlotId])
@@ -758,12 +766,29 @@ local function resetCatalogPortraitCamera(model)
  model:SetModelScale(PORTRAIT_MODEL_SCALE)
  model:SetPosition(PORTRAIT_MODEL_X,PORTRAIT_MODEL_Y,PORTRAIT_MODEL_Z)
 end
+local function applyCatalogPortraitItem(model,active,delayed)
+ if not active.itemLink or not active.tryOnItemId then return false end
+ local itemLink=active.itemLink
+ model:Undress()
+ model:TryOn(itemLink)
+ if not delayed or not active.delayedDressLogged then
+  catalogPortraitDebug((delayed and "delayed callback" or "initial render")..
+      " appearanceId="..tostring(active.selection).." sourceItemId="..tostring(active.entry)..
+      " resolvedItemLink="..tostring(active.itemLink).." tryOnItemId="..tostring(active.tryOnItemId)..
+      " reset="..tostring(active.modelReset))
+  if delayed then active.delayedDressLogged=true end
+ end
+ return true
+end
 clearCatalogPortrait=function()
  catalogPortraitGeneration=catalogPortraitGeneration+1
  catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
  if catalogPortrait and catalogPortrait.button then catalogPortrait.button.icon:Show() end
  local model=NativeTransmogCatalogPortraitModel
- if model then pcall(function() model:SetScript("OnUpdate",nil); model:Hide(); model:ClearModel() end) end
+ if model then pcall(function()
+  model:SetScript("OnUpdate",nil); model:Hide(); model:ClearModel()
+  catalogPortraitDebug("model reset=true reason=clear")
+ end) end
  if NativeTransmogCatalogPortraitOverlay then NativeTransmogCatalogPortraitOverlay:Hide() end
  catalogPortrait=nil
 end
@@ -782,6 +807,14 @@ local function renderCatalogPortrait(generation)
  if not model then clearCatalogPortrait(); return false end
  local _,itemLink=GetItemInfo(active.entry)
  if not itemLink then return false end
+ local resolvedItemId=tonumber(string.match(itemLink,"item:(%d+)"))
+ catalogPortraitDebug("resolved appearanceId="..tostring(active.selection).." sourceItemId="..tostring(active.entry)..
+     " resolvedItemLink="..tostring(itemLink).." resolvedItemId="..tostring(resolvedItemId))
+ if resolvedItemId~=active.entry then
+  catalogPortraitDebug("identity mismatch; portrait remains on item icon")
+  return false
+ end
+ active.itemLink=itemLink; active.tryOnItemId=resolvedItemId; active.delayedDressLogged=false
  catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
  -- Models are deliberately not parented to the buttons or ScrollChild. Old
  -- clients do not reliably clip 3-D widgets in that hierarchy. The fixed
@@ -791,14 +824,14 @@ local function renderCatalogPortrait(generation)
  local initialized=pcall(function()
   model:SetScript("OnUpdate",nil)
   model:Hide(); model:ClearModel()
+  active.modelReset=true
   model:SetParent(NativeTransmogFrameBrowserPanel)
   model:ClearAllPoints()
   model:SetPoint("TOPLEFT",active.button,"TOPLEFT",0,0)
   model:SetPoint("BOTTOMRIGHT",active.button,"BOTTOMRIGHT",0,0)
   model:SetFrameLevel(active.button:GetFrameLevel()+1)
   model:SetUnit("player")
-  model:Undress()
-  model:TryOn(itemLink)
+  applyCatalogPortraitItem(model,active,false)
   resetCatalogPortraitCamera(model)
   model:Show()
   model:SetScript("OnUpdate",NativeTransmog_CatalogPortrait_OnUpdate)
@@ -825,6 +858,11 @@ function NativeTransmog_CatalogPortrait_OnUpdate(model)
  local generation=catalogPortraitCameraGeneration
  if not catalogPortraitCameraUntil or not generation or model~=NativeTransmogCatalogPortraitModel or not model:IsShown() then return end
  if not catalogPortraitIsCurrent(generation) then clearCatalogPortrait(); return end
+ local active=catalogPortrait
+ -- SetUnit completes asynchronously on build 12340 and can restore the
+ -- player's equipped items after the initial TryOn. Keep the clicked item as
+ -- the last writer while that same bounded initialization window is active.
+ applyCatalogPortraitItem(model,active,true)
  resetCatalogPortraitCamera(model)
  if GetTime()>=catalogPortraitCameraUntil then
   catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
@@ -1258,6 +1296,13 @@ end
 function NativeTransmog_DebugToggle()
  if NativeTransmogFrame:IsShown() then NativeTransmogFrame:Hide() else authorizedToken=nil; NativeTransmogFrame:Show() end
 end
+function NativeTransmog_TogglePortraitDiagnostics()
+ catalogPortraitDiagnostics=not catalogPortraitDiagnostics
+ if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("NativeTransmog portrait diagnostics "..
+     (catalogPortraitDiagnostics and "enabled" or "disabled")) end
+end
 SLASH_NATIVETRANSMOG1="/wardrobe"
 SLASH_NATIVETRANSMOG2="/nativetransmog"
 SlashCmdList["NATIVETRANSMOG"]=NativeTransmog_DebugToggle
+SLASH_NATIVETRANSMOGPORTRAIT1="/nativetransmogportraitdebug"
+SlashCmdList["NATIVETRANSMOGPORTRAIT"]=NativeTransmog_TogglePortraitDiagnostics

@@ -18,8 +18,26 @@ separate non-model overlay keeps the selection border above the native model.
 
 `TryOn()` is not treated as a Boolean result: build 12340 has no verified
 success return or model-ready event. The implementation only treats a resolved
-item link and an error-free initialization call sequence as sufficient to show
-the model. Final visible geometry remains a PTR validation item.
+item link whose embedded item ID matches the clicked source entry and an
+error-free initialization call sequence as sufficient to show the model.
+Because `SetUnit` can finish native equipment initialization after returning to
+Lua, the renderer repeats `Undress(); TryOn(the same validated link)` during the
+same generation-bound 0.25-second window used for camera stabilization. This
+keeps the clicked helmet as the last writer instead of allowing the player's
+equipped helmet to overwrite it. Final visible geometry remains a PTR
+validation item.
+
+For focused PTR diagnosis, `/nativetransmogportraitdebug` toggles chat logging
+of the clicked appearance selection, source item entry, resolved link and link
+item ID, item ID passed to `TryOn`, model reset, and the first delayed callback.
+It is disabled by default and does not change the server protocol.
+
+The single-model PTR symptom has a separate cause from the removed pool's
+stale-record risk: the correct clicked link reaches the initial `TryOn`, but
+the asynchronous completion of `SetUnit("player")` can subsequently copy the
+player's equipped Judgement helmet over that slot. The old bounded callback
+reasserted only camera state, so Judgement remained the last native equipment
+writer. The callback now reasserts the already validated clicked item as well.
 
 ## Identity and stale-callback diagnosis
 
