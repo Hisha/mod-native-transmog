@@ -104,6 +104,10 @@ class GlobalSlotSearchTests(unittest.TestCase):
 
     def test_client_debounces_resets_slots_and_rejects_stale_responses(self):
         self.assertIn("NativeTransmogWardrobeState.searchDue=GetTime()+.30", LUA)
+        search_changed = LUA[LUA.index("function NativeTransmog_AppearanceSearchChanged"):
+                             LUA.index("function NativeTransmog_ClearAppearanceSearch")]
+        self.assertIn("requestId=requestId+1", search_changed)
+        self.assertIn('pending.operation=="CAT"', search_changed)
         self.assertIn('cursorHistory={}; requestCatalog(0)', LUA)
         selector = LUA[LUA.index("function NativeTransmog_SelectSlot"):
                        LUA.index("function NativeTransmog_Rotate")]
@@ -112,8 +116,35 @@ class GlobalSlotSearchTests(unittest.TestCase):
         self.assertIn('tonumber(fields[4])==requestId', page_handler)
         self.assertIn('tonumber(fields[6])~=selectedSlotId', page_handler)
 
+    def test_status_uses_authoritative_match_count_without_hide_tile_heuristic(self):
+        renderer = LUA[LUA.index("local function renderCatalog"):
+                       LUA.index("function NativeTransmog_CatalogPortraitItemInfo")]
+        completion = LUA[LUA.index('elseif command=="END" then', LUA.index("local function handleWardrobeCatalogMessage")):
+                         LUA.index('elseif command=="RESULT"', LUA.index('elseif command=="END" then', LUA.index("local function handleWardrobeCatalogMessage")))]
+        self.assertNotIn("#catalog==(canHide and 1 or 0)", renderer)
+        self.assertIn("local matched=NativeTransmogWardrobeState.matched", completion)
+        self.assertIn('local searching=catalogRequestSearch~=""', completion)
+        self.assertIn('No collected compatible appearances match', completion)
+        self.assertIn('status=matched.." compatible appearance"', completion)
+
 
 class TransmogrifySavedOutfitTests(unittest.TestCase):
+    def test_collections_and_transmogrify_lists_share_service_but_not_request_ids(self):
+        list_handler = WARDROBE[WARDROBE.index("void WardrobeService::HandleCustomSets"):
+                                WARDROBE.index("void WardrobeService::HandleCustomDetail")]
+        self.assertIn("CustomSetService::Instance().Count(player)", list_handler)
+        self.assertIn("CustomSetService::Instance().List(player", list_handler)
+        self.assertEqual(LUA.count("nextCustomListRequestId()"), 3)
+        self.assertIn("savedSetListPending and NativeTransmogFrame:IsShown()", LUA)
+
+    def test_saved_list_retries_rate_limit_and_refreshes_both_open_windows(self):
+        custom_messages = LUA[LUA.index("local function handleCustomMessage"):
+                              LUA.index("local function handleWardrobeCatalogMessage")]
+        self.assertIn('savedSetListPending=false', custom_messages)
+        self.assertIn('savedSetRefreshDue=GetTime()+.35', custom_messages)
+        self.assertIn('fields[6]=="RATE_LIMITED"', custom_messages)
+        self.assertIn('NativeTransmogCollectionsFrame:IsShown() and browserMode=="SETS" and setSection=="CUSTOM"', custom_messages)
+
     def test_save_uses_existing_custom_set_storage_and_validation(self):
         save = WARDROBE[WARDROBE.index("void WardrobeService::HandleCustomSaveOutfit"):
                          WARDROBE.index("void WardrobeService::SendEquipmentState")]

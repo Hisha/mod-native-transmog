@@ -11,6 +11,7 @@ local SLOT_LABELS = { HEAD="Head Appearances", SHOULDERS="Shoulder Appearances",
     TABARD="Tabard Appearances" }
 local authorizedToken, selectedSlot, selectedSlotId = nil, "HEAD", 1
 local requestId, snapshotNonce, cursor, nextCursor, hasNext = 0, nil, 0, 0, false
+local catalogRequestSearch = ""
 NativeTransmogWardrobeState = {search="",searchDue=nil,matched=0,pageSize=24,load=nil,selections={},saveRequest=0,savedTotal=0,savedMaximum=20}
 local cursorHistory, catalog, incomingCatalog, buttons = {}, {}, {}, {}
 local slotButtons, overrideStates = {}, {}
@@ -44,7 +45,7 @@ local setRequestId = 0
 local setHistory, setCatalog, incomingSets, selectedSet, setPieces = {}, {}, {}, nil, {}
 local restoreSetId = nil
 local incomingSetIds, incomingPieces, activeSetPageRequest, activeSetDetailRequest = {}, {}, nil, nil
-local setPagePending, setDetailPending = nil, nil
+local setPagePending, setDetailPending, setPageRetryDue = nil, nil, nil
 local setRows, pieceRows = {}, {}
 local setSearch, setOverallCollected, setOverallTotal = "", 0, 0
 local SET_PAGE_SIZE, MAXIMUM_SET_PIECES = 8, 32
@@ -53,7 +54,8 @@ local customRequestId, customDraftId, customDraftPieces = 0, 0, {}
 local customHideMask = 0
 local customTotal, customMaximum = 0, 20
 local savedSetCatalog, savedSetIncoming, savedSetId, savedSetNonce, savedSetRequest, savedSetRefreshDue = {}, {}, nil, nil, 0, nil
-local savedSetNextCursor, savedSetHasNext = 0, false
+local savedSetNextCursor, savedSetHasNext, savedSetListPending = 0, false, false
+local customListRequestId = 0
 local savedPreflight = nil
 local CUSTOM_SLOT_CATEGORY = {1,2,5,4,9,10,11,7,8,3,12,15,14,6}
 local collectionMode = "SETS"
@@ -77,6 +79,11 @@ local ITEM_CATEGORIES = {
 }
 local requestCatalog, renderPieces, requestSetDetail, requestItems, renderItems
 local selectCatalogPortrait, clearCatalogPortrait
+
+local function nextCustomListRequestId()
+ customListRequestId=customListRequestId+1
+ return customListRequestId
+end
 
 function NativeTransmog_PreviewPanel_OnLoad(frame)
  local _,race=UnitRace("player")
@@ -382,7 +389,8 @@ renderPieces=function()
  NativeTransmogCollectionsFrameSetDescription:SetText(selectedSet and (selectedSet.custom and ((selectedSet.total or 0).." saved selections • unspecified slots unchanged") or ((selectedSet.expansion or "").." • "..(selectedSet.category or "PvE").." • "..(selectedSet.family or "Set").."  "..selectedSet.collected.."/"..selectedSet.total)) or "")
 end
 local function requestSets(newCursor)
- setRequestId=setRequestId+1; setCursor=newCursor or 0; incomingSets={}; incomingSetIds={}; selectedSet=nil; setPieces={}; incomingPieces={}; renderPieces()
+ if setSection=="CUSTOM" then setRequestId=nextCustomListRequestId() else setRequestId=setRequestId+1 end
+ setCursor=newCursor or 0; incomingSets={}; incomingSetIds={}; selectedSet=nil; setPieces={}; incomingPieces={}; renderPieces()
  activeSetDetailRequest=nil; setDetailPending=nil
  activeSetPageRequest={id=setRequestId,kind=setSection=="CUSTOM" and "CUSTOMSETS" or "SETS",phase="PAGE",filter=setFilter,cursor=setCursor}
  local sent
@@ -932,7 +940,6 @@ local function renderCatalog()
  local contentHeight=rows>0 and rows*ICON_HEIGHT+(rows-1)*ICON_GAP or 0
  NativeTransmogFrameBrowserPanelScrollChild:SetHeight(math.max(CATALOG_HEIGHT,contentHeight))
  NativeTransmogFrameBrowserPanelScroll:SetVerticalScroll(0)
- if #catalog==(canHide and 1 or 0) and not pending and hasPhysicalItem then setStatus("No compatible collected appearances for this slot.",false) end
  refreshSelection()
 end
 function NativeTransmog_CatalogPortraitItemInfo(itemId,success)
@@ -961,7 +968,13 @@ function NativeTransmog_AppearanceSearchChanged(value)
  if string.len(value)>48 then
   value=string.sub(value,1,48); NativeTransmogFrameSearch:SetText(value); return
  end
- NativeTransmogWardrobeState.search=value; refreshAppearanceSearchControls(); cursorHistory={}; NativeTransmogWardrobeState.searchDue=GetTime()+.30
+ if NativeTransmogWardrobeState.search==value then refreshAppearanceSearchControls(); return end
+ NativeTransmogWardrobeState.search=value; refreshAppearanceSearchControls(); cursorHistory={}
+ -- Invalidate the in-flight request immediately.  Waiting for the debounce to
+ -- allocate its replacement lets an older response overwrite the new query's
+ -- count during the intervening 300 ms.
+ if pending and pending.operation=="CAT" then requestId=requestId+1; snapshotNonce=nil; pending=nil end
+ NativeTransmogWardrobeState.searchDue=GetTime()+.30
 end
 function NativeTransmog_ClearAppearanceSearch()
  NativeTransmogFrameSearch:SetText(""); NativeTransmogFrameSearch:ClearFocus()
@@ -977,7 +990,7 @@ end
 requestCatalog=function(newCursor)
  if not slotIsUsable(selectedSlotId) then clearCatalogForUnavailableSlot(unavailableSlotMessage(selectedSlotId)); return end
  if not slotHasItem(selectedSlotId) then clearCatalogForUnavailableSlot("Equip an item to customize this slot."); return end
- hasPhysicalItem=true; requestId=requestId+1; snapshotNonce=nil
+ hasPhysicalItem=true; requestId=requestId+1; snapshotNonce=nil; catalogRequestSearch=NativeTransmogWardrobeState.search
  selectedAppearance=NativeTransmogWardrobeState.selections[selectedSlotId]; if selectedAppearance and not selectedAppearance.isHide then selectedAppearance.selection=nil end
  catalog={}; incomingCatalog={}; catalogMessage=nil
  cursor=newCursor or 0; hasNext=false; canHide=false; hiddenApplied=false; overridePresent=false; NativeTransmogWardrobeState.matched=0; renderCatalog()
@@ -993,7 +1006,8 @@ end
 function NativeTransmog_Remove() if hasPhysicalItem and snapshotNonce then sendRequest("REMOVE",requestId.."\t"..snapshotNonce) end end
 local function requestSavedSets()
  if not authorizedToken then return end
- savedSetRequest=savedSetRequest+1; if savedSetNextCursor==0 then savedSetIncoming={} end; sendReadOnly("CUSTOMSETS",savedSetRequest.."\t"..savedSetNextCursor)
+ savedSetRequest=nextCustomListRequestId(); if savedSetNextCursor==0 then savedSetIncoming={} end
+ savedSetListPending=sendReadOnly("CUSTOMSETS",savedSetRequest.."\t"..savedSetNextCursor)
 end
 function NativeTransmog_SavedSetDropDown_OnLoad(frame)
  UIDropDownMenu_Initialize(frame,function()
@@ -1118,8 +1132,9 @@ function NativeTransmog_FrameUpdate()
    if GetTime()>=refresh.untilTime then previewRefresh=nil end
   end
  end
- if NativeTransmogWardrobeState.searchDue and GetTime()>=NativeTransmogWardrobeState.searchDue then NativeTransmogWardrobeState.searchDue=nil; cursorHistory={}; requestCatalog(0) end
+ if NativeTransmogWardrobeState.searchDue and GetTime()>=NativeTransmogWardrobeState.searchDue and (not pending or pending.operation=="CAT") then NativeTransmogWardrobeState.searchDue=nil; cursorHistory={}; requestCatalog(0) end
  if savedSetRefreshDue and GetTime()>=savedSetRefreshDue then savedSetRefreshDue=nil; requestSavedSets() end
+ if setPageRetryDue and GetTime()>=setPageRetryDue then setPageRetryDue=nil; requestSets(setCursor) end
  if itemSearchDue and GetTime()>=itemSearchDue then itemSearchDue=nil; itemHistory={}; requestItems(0,true) end
  if itemRefreshDue and GetTime()>=itemRefreshDue then itemRefreshDue=nil; itemDirty[itemCategory]=nil; requestItems(itemCursor,true) end
  if itemPending and GetTime()-itemPending.started>5 then
@@ -1161,7 +1176,7 @@ end
 function NativeTransmog_OnHide()
  clearCatalogPortrait()
  previewGeneration=previewGeneration+1; previewRefresh=nil
- NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil; NativeTransmogWardrobeState.searchDue=nil; NativeTransmogWardrobeState.load=nil; savedSetNextCursor=0; savedSetHasNext=false; savedSetRefreshDue=nil
+ NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil; NativeTransmogWardrobeState.searchDue=nil; NativeTransmogWardrobeState.load=nil; savedSetNextCursor=0; savedSetHasNext=false; savedSetListPending=false; savedSetRefreshDue=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
 function NativeTransmog_OpenAuthorized(token)
@@ -1190,7 +1205,7 @@ function NativeTransmog_CloseCollections()
   customRequestId=customRequestId+1; sendReadOnly("CUSTOMCANCEL",customRequestId); setCustomEditorVisible(false)
   customDraftPieces={}; customPickingSlot=nil; customHideMask=0
  end
- NativeTransmog_EndRotation(getCollectionModel()); cancelSetRequest(); cancelItemRequest(); itemSearchDue=nil; itemRefreshDue=nil; browserMode="APPEARANCES"
+ NativeTransmog_EndRotation(getCollectionModel()); cancelSetRequest(); cancelItemRequest(); setPageRetryDue=nil; itemSearchDue=nil; itemRefreshDue=nil; browserMode="APPEARANCES"
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
 local function handleItemMessage(command,fields)
@@ -1252,17 +1267,17 @@ local function handleCustomMessage(command,fields)
   return
  elseif command=="CUSTOMPAGE" then
   local responseId,count=tonumber(fields[3]),tonumber(fields[7]); if not responseId or not count or count<0 or count>20 then return end
-  if NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then savedSetNextCursor=tonumber(fields[5]) or 0; savedSetHasNext=fields[6]=="1"; NativeTransmogWardrobeState.savedTotal=tonumber(fields[8]) or 0; NativeTransmogWardrobeState.savedMaximum=tonumber(fields[9]) or 20; return end
+  if savedSetListPending and NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then savedSetNextCursor=tonumber(fields[5]) or 0; savedSetHasNext=fields[6]=="1"; NativeTransmogWardrobeState.savedTotal=tonumber(fields[8]) or 0; NativeTransmogWardrobeState.savedMaximum=tonumber(fields[9]) or 20; return end
   local request=matchingSetRequest("CUSTOMSETS",responseId); if not request or request.phase~="PAGE" or tonumber(fields[4])~=request.cursor then return end
   setCursor=tonumber(fields[4]) or 0; setNextCursor=tonumber(fields[5]) or 0; setHasNext=fields[6]=="1"; customTotal=tonumber(fields[8]) or 0; customMaximum=tonumber(fields[9]) or 20; incomingSets={}; request.phase="ROWS"; request.expected=count; return
  elseif command=="CUSTOMSET" then
   local responseId,setId=tonumber(fields[3]),tonumber(fields[4]); if not setId then return end
   local row={id=setId,total=tonumber(fields[5]) or 0,collected=0,iconEntry=tonumber(fields[6]),name=fields[7] or "Custom Set",custom=true,family="Custom Set"}
-  if NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then table.insert(savedSetIncoming,row); return end
+  if savedSetListPending and NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then table.insert(savedSetIncoming,row); return end
   local request=matchingSetRequest("CUSTOMSETS",responseId); if request and request.phase=="ROWS" and #incomingSets<request.expected then table.insert(incomingSets,row) end; return
  elseif command=="CUSTOMEND" then
   local responseId=tonumber(fields[3])
-  if NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then if savedSetHasNext then savedSetRefreshDue=GetTime()+.30 else savedSetCatalog=savedSetIncoming; savedSetNextCursor=0; if savedSetId then local found=false; for _,set in ipairs(savedSetCatalog) do if set.id==savedSetId then found=true end end; if not found then savedSetId=nil end end; NativeTransmog_SavedSetDropDown_OnLoad(NativeTransmogFrameSavedSetDropDown) end; return end
+  if savedSetListPending and NativeTransmogFrame:IsShown() and authorizedToken and responseId==savedSetRequest then savedSetListPending=false; if savedSetHasNext then savedSetRefreshDue=GetTime()+.30 else savedSetCatalog=savedSetIncoming; savedSetNextCursor=0; if savedSetId then local found=false; for _,set in ipairs(savedSetCatalog) do if set.id==savedSetId then found=true end end; if not found then savedSetId=nil end end; NativeTransmog_SavedSetDropDown_OnLoad(NativeTransmogFrameSavedSetDropDown) end; return end
   local request=matchingSetRequest("CUSTOMSETS",responseId); if not request or request.phase~="ROWS" then return end
   activeSetPageRequest=nil; setPagePending=nil; setCatalog=incomingSets; renderSets(); setStatus(#setCatalog>0 and "Select a custom set to preview it." or "No custom sets saved.",false); return
  elseif command=="CUSTOMDETAILINFO" or command=="CUSTOMEDITINFO" then
@@ -1304,7 +1319,13 @@ local function handleCustomMessage(command,fields)
  elseif command=="RESULT" and fields[3]==authorizedToken and tonumber(fields[4])==NativeTransmogWardrobeState.saveRequest and (fields[5]=="CUSTOMSAVEOUTFIT" or fields[5]=="REQUEST") then
   pending=nil; refreshSelection(); local result=fields[6] or "MALFORMED"
   if result=="ok" then savedSetId=tonumber(fields[7]); setStatus("Custom outfit saved.",false); savedSetNextCursor=0; savedSetHasNext=false; savedSetRefreshDue=GetTime()+.35
+   if NativeTransmogCollectionsFrame:IsShown() and browserMode=="SETS" and setSection=="CUSTOM" then requestSets(0) end
   else setStatus(RESULT_TEXT[result] or ("Custom outfit save failed: "..result),true) end
+  return true
+ elseif command=="RESULT" and fields[3]=="0" and savedSetListPending and tonumber(fields[4])==savedSetRequest then
+  savedSetListPending=false
+  if fields[6]=="RATE_LIMITED" and authorizedToken and NativeTransmogFrame:IsShown() then savedSetRefreshDue=GetTime()+.35
+  else setStatus(RESULT_TEXT[fields[6]] or ("Custom-set list request failed: "..(fields[6] or "MALFORMED")),true) end
   return true
  elseif command=="RESULT" and fields[3]=="0" and tonumber(fields[4])==customRequestId then
   setStatus(RESULT_TEXT[fields[6]] or ("Custom set request failed: "..(fields[6] or "MALFORMED")),true); return true
@@ -1333,8 +1354,13 @@ local function handleWardrobeCatalogMessage(command,fields)
  elseif command=="END" then
   if not authorizedToken or fields[3]~=authorizedToken or tonumber(fields[4])~=requestId or fields[5]~=snapshotNonce then return true end
   pending=nil; catalog=incomingCatalog
-  catalogMessage=#catalog==0 and (NativeTransmogWardrobeState.search~="" and ("No collected compatible appearances match ‘"..NativeTransmogWardrobeState.search.."’.") or "No compatible collected appearances for this slot.") or nil
-  setStatus(NativeTransmogWardrobeState.matched>0 and (NativeTransmogWardrobeState.matched.." compatible appearance"..(NativeTransmogWardrobeState.matched==1 and " matches." or "s match.")) or "",false); renderCatalog(); return true
+  local matched=NativeTransmogWardrobeState.matched
+  local searching=catalogRequestSearch~=""
+  catalogMessage=#catalog==0 and (searching and ("No collected compatible appearances match ‘"..catalogRequestSearch.."’.") or "No compatible collected appearances for this slot.") or nil
+  local status
+  if searching then status=matched>0 and (matched.." compatible appearance"..(matched==1 and " matches." or "s match.")) or catalogMessage
+  else status=matched.." compatible appearance"..(matched==1 and "." or "s.") end
+  setStatus(status,false); renderCatalog(); return true
  elseif command=="RESULT" and tonumber(fields[4])==requestId and fields[3]==authorizedToken then
   pending=nil; local operation,result=fields[5],fields[6] or "MALFORMED"; local success=result=="ok"
   if success then
@@ -1433,6 +1459,7 @@ function NativeTransmog_OnEvent(_,event,...)
  elseif command=="RESULT" and fields[3]=="0" then
   local responseId=tonumber(fields[4]); local request=activeSetPageRequest
   if request and responseId==request.id then activeSetPageRequest=nil; setPagePending=nil
+   if fields[6]=="RATE_LIMITED" then setPageRetryDue=GetTime()+.35; return end
   else request=activeSetDetailRequest; if not request or responseId~=request.id then return end; activeSetDetailRequest=nil; setDetailPending=nil end
   setStatus(RESULT_TEXT[fields[6]] or ("Set request failed: "..(fields[6] or "MALFORMED")),true); renderSets(); return
  elseif handleWardrobeCatalogMessage(command,fields) then return
