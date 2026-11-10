@@ -1,5 +1,10 @@
 # Phase 2 retail portrait investigation
 
+> Historical record: the default-off three-portrait prototype described below
+> has been removed. The production behavior and command-free PTR procedure are
+> documented in `CATALOG_PORTRAIT_IMPLEMENTATION.md`; the prototype Lua commands
+> in this file no longer exist.
+
 ## Decision
 
 Build 12340 can render isolated item appearances on separate character models. The implementation is now a default-off, maximum-three-tile PTR experiment, not a production catalog change. It is deliberately restricted to the first three unique non-Hide entries in the ordered Head catalog.

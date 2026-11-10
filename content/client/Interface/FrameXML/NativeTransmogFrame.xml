@@ -272,25 +272,23 @@
             <Size x="586" y="353" /><Anchors><Anchor point="TOPLEFT"><Offset x="0" y="0" /></Anchor></Anchors>
             <ScrollChild><Frame name="$parentChild"><Size x="566" y="353" /></Frame></ScrollChild>
           </ScrollFrame>
-          <!-- Build 12340 does not expose SetClipsChildren, and model widgets
-               are not reliable children of a ScrollFrame's clipped child.
-               Keep the three bounded prototype viewports owned by the fixed
-               browser panel; Lua anchors them over eligible Head tiles. -->
-          <DressUpModel name="NativeTransmogPortraitPrototypeModel" hidden="true" enableMouse="false">
+          <!-- Build 12340 does not expose SetClipsChildren. Keep one reusable,
+               conservatively framed viewport on the fixed browser panel and
+               move it over the selected Head tile only. -->
+          <DressUpModel name="NativeTransmogCatalogPortraitModel" hidden="true" enableMouse="false">
             <Size x="84" y="111" />
             <Anchors><Anchor point="TOPLEFT" /></Anchors>
-            <Scripts><OnUpdate>NativeTransmog_PortraitPrototype_OnUpdate(self, elapsed);</OnUpdate></Scripts>
           </DressUpModel>
-          <DressUpModel name="NativeTransmogPortraitPrototypeModel2" hidden="true" enableMouse="false">
+          <Frame name="NativeTransmogCatalogPortraitOverlay" hidden="true" enableMouse="false">
             <Size x="84" y="111" />
             <Anchors><Anchor point="TOPLEFT" /></Anchors>
-            <Scripts><OnUpdate>NativeTransmog_PortraitPrototype_OnUpdate(self, elapsed);</OnUpdate></Scripts>
-          </DressUpModel>
-          <DressUpModel name="NativeTransmogPortraitPrototypeModel3" hidden="true" enableMouse="false">
-            <Size x="84" y="111" />
-            <Anchors><Anchor point="TOPLEFT" /></Anchors>
-            <Scripts><OnUpdate>NativeTransmog_PortraitPrototype_OnUpdate(self, elapsed);</OnUpdate></Scripts>
-          </DressUpModel>
+            <Layers><Layer level="OVERLAY">
+              <Texture file="Interface\Buttons\UI-ActionButton-Border" alphaMode="ADD">
+                <Color r="0.82" g="0.18" b="1" />
+                <Anchors><Anchor point="TOPLEFT"><Offset x="-8" y="8" /></Anchor><Anchor point="BOTTOMRIGHT"><Offset x="8" y="-8" /></Anchor></Anchors>
+              </Texture>
+            </Layer></Layers>
+          </Frame>
           <Button name="$parentPending" hidden="true" enableMouse="true">
             <Anchors>
               <Anchor point="TOPLEFT"><Offset x="5" y="-5" /></Anchor>

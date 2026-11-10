@@ -17,13 +17,11 @@ local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local catalogMessage = nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
--- Phase 2 bounded portrait experiment. Build 12340 has no SetPortraitZoom
--- and no DressUpModel:UndressSlot, so this stays default-off and is limited
--- to three head tiles while their camera, loading, and cost are verified on PTR.
-local portraitPrototypeEnabled = false
-local PORTRAIT_PROTOTYPE_MAX = 3
-local portraitPrototypeModels, portraitPrototypeButtons = {}, {}
-local portraitPrototypeEntries, portraitPrototypeCameraUntil = {}, {}
+-- One XML-owned model is reused for the selected catalog tile. Head is the
+-- only category with framing verified on build 12340; every other category
+-- deliberately keeps its item icon.
+local catalogPortrait, catalogPortraitGeneration = nil, 0
+local catalogPortraitCameraUntil, catalogPortraitCameraGeneration = nil, nil
 -- PTR showed that 1.80 overfilled the 84x111 viewport. Build 12340 does not
 -- reliably clip model geometry, so keep a conservative camera-space margin
 -- for tall helms instead of depending on the widget boundary. Zero X/Z keeps
@@ -70,6 +68,7 @@ local ITEM_CATEGORIES = {
  {label="Shields",icon="Interface\\Icons\\INV_Shield_05"}
 }
 local requestCatalog, renderPieces, requestSetDetail, requestItems, renderItems
+local selectCatalogPortrait, clearCatalogPortrait
 
 function NativeTransmog_PreviewPanel_OnLoad(frame)
  local _,race=UnitRace("player")
@@ -722,7 +721,9 @@ local function previewItem(button)
    end
   end
  else model:TryOn(button.entry) end
- model:SetRotation(modelRotation); refreshSelection()
+ model:SetRotation(modelRotation)
+ if button.isHide then clearCatalogPortrait() else selectCatalogPortrait(button) end
+ refreshSelection()
 end
 local function createAppearanceButton(index)
  local button=CreateFrame("Button", "NativeTransmogAppearanceButton"..index, NativeTransmogFrameBrowserPanelScrollChild)
@@ -744,13 +745,12 @@ local function createAppearanceButton(index)
 end
 local function resetAppearanceButton(button)
  button.appearance=nil; button.entry=nil; button.selectionId=nil; button.applied=false; button.isHide=false
- button:SetAlpha(1); button:Enable(); button.icon:SetTexture(nil); button.icon:SetVertexColor(1,1,1,1)
+ button:SetAlpha(1); button:Enable(); button.icon:Show(); button.icon:SetTexture(nil); button.icon:SetVertexColor(1,1,1,1)
  if button.icon.SetDesaturated then button.icon:SetDesaturated(false) end
  button.background:SetTexture(.012,.009,.007,.96); button.hideLabel:SetText("")
- if button.portraitModel then button.portraitModel:Hide(); button.portraitModel=nil end
  button.selection:Hide(); button.appliedMark:Hide(); button:Hide()
 end
-local function resetPortraitPrototypeCamera(model)
+local function resetCatalogPortraitCamera(model)
  -- SetUnit can finish its native model/camera initialization after the Lua
  -- call returns. Reassert this build-12340-only preset briefly on activation.
  model:SetCamera(0)
@@ -758,64 +758,82 @@ local function resetPortraitPrototypeCamera(model)
  model:SetModelScale(PORTRAIT_MODEL_SCALE)
  model:SetPosition(PORTRAIT_MODEL_X,PORTRAIT_MODEL_Y,PORTRAIT_MODEL_Z)
 end
-local function portraitPrototypeModelAt(index)
- local model=portraitPrototypeModels[index]
- if model then return model end
- if index==1 then model=NativeTransmogPortraitPrototypeModel
- elseif index==2 then model=NativeTransmogPortraitPrototypeModel2
- elseif index==3 then model=NativeTransmogPortraitPrototypeModel3 end
- if model then model.portraitPrototypeIndex=index; portraitPrototypeModels[index]=model end
- return model
+clearCatalogPortrait=function()
+ catalogPortraitGeneration=catalogPortraitGeneration+1
+ catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
+ if catalogPortrait and catalogPortrait.button then catalogPortrait.button.icon:Show() end
+ local model=NativeTransmogCatalogPortraitModel
+ if model then pcall(function() model:SetScript("OnUpdate",nil); model:Hide(); model:ClearModel() end) end
+ if NativeTransmogCatalogPortraitOverlay then NativeTransmogCatalogPortraitOverlay:Hide() end
+ catalogPortrait=nil
 end
-local function hidePortraitPrototype()
- for index=1,PORTRAIT_PROTOTYPE_MAX do
-  portraitPrototypeCameraUntil[index]=nil
-  local button=portraitPrototypeButtons[index]
-  local model=portraitPrototypeModels[index]
-  if button and button.portraitModel==model then button.portraitModel=nil end
-  if model then model:Hide(); model:ClearModel() end
-  portraitPrototypeButtons[index]=nil; portraitPrototypeEntries[index]=nil
- end
+local function catalogPortraitIsCurrent(generation)
+ local active=catalogPortrait
+ return active and active.generation==generation and catalogPortraitGeneration==generation and
+     selectedSlotId==1 and selectedAppearance and not selectedAppearance.isHide and
+     selectedAppearance.selection==active.selection and selectedAppearance.entry==active.entry and
+     active.button and active.button:IsShown() and active.button.appearance==active.appearance and
+     active.button.entry==active.entry and NativeTransmogFrame:IsShown()
 end
-local function renderPortraitPrototype(button,index)
- if not portraitPrototypeEnabled or selectedSlotId~=1 or not button or button.isHide or not button.entry or index<1 or index>PORTRAIT_PROTOTYPE_MAX then return false end
- local model=portraitPrototypeModelAt(index)
- if not model then return false end
- portraitPrototypeCameraUntil[index]=nil
- model:Hide(); model:ClearModel()
+local function renderCatalogPortrait(generation)
+ if not catalogPortraitIsCurrent(generation) then return false end
+ local active=catalogPortrait
+ local model=NativeTransmogCatalogPortraitModel
+ if not model then clearCatalogPortrait(); return false end
+ local _,itemLink=GetItemInfo(active.entry)
+ if not itemLink then return false end
+ catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
  -- Models are deliberately not parented to the buttons or ScrollChild. Old
- -- clients do not reliably clip 3-D widgets in that hierarchy. Each explicit
- -- 84x111 viewport is a BrowserPanel child anchored over exactly one tile.
- model:SetParent(NativeTransmogFrameBrowserPanel)
- model:ClearAllPoints()
- model:SetPoint("TOPLEFT",button,"TOPLEFT",0,0)
- model:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",0,0)
- model:SetFrameLevel(button:GetFrameLevel()+1)
- button.portraitModel=model; portraitPrototypeButtons[index]=button; portraitPrototypeEntries[index]=button.entry
- -- A resolved item link is the input used by Blizzard's 3.3.5 DressUpFrame.
- -- If it is not cached yet, the icon remains authoritative until the matching
- -- GET_ITEM_INFO_RECEIVED event retries this complete initialization.
- local _,itemLink=GetItemInfo(button.entry)
- if not itemLink then return true end
- model:SetUnit("player")
- model:Undress()
- model:TryOn(itemLink)
- model:Show()
- resetPortraitPrototypeCamera(model)
- portraitPrototypeCameraUntil[index]=GetTime()+PORTRAIT_CAMERA_SECONDS
+ -- clients do not reliably clip 3-D widgets in that hierarchy. The fixed
+ -- 84x111 BrowserPanel child moves over the one selected Head tile.
+ catalogPortraitCameraGeneration=generation
+ catalogPortraitCameraUntil=GetTime()+PORTRAIT_CAMERA_SECONDS
+ local initialized=pcall(function()
+  model:SetScript("OnUpdate",nil)
+  model:Hide(); model:ClearModel()
+  model:SetParent(NativeTransmogFrameBrowserPanel)
+  model:ClearAllPoints()
+  model:SetPoint("TOPLEFT",active.button,"TOPLEFT",0,0)
+  model:SetPoint("BOTTOMRIGHT",active.button,"BOTTOMRIGHT",0,0)
+  model:SetFrameLevel(active.button:GetFrameLevel()+1)
+  model:SetUnit("player")
+  model:Undress()
+  model:TryOn(itemLink)
+  resetCatalogPortraitCamera(model)
+  model:Show()
+  model:SetScript("OnUpdate",NativeTransmog_CatalogPortrait_OnUpdate)
+ end)
+ if not initialized or not catalogPortraitIsCurrent(generation) then clearCatalogPortrait(); return false end
+ active.button.icon:Hide()
+ local overlay=NativeTransmogCatalogPortraitOverlay
+ if overlay then
+  overlay:ClearAllPoints(); overlay:SetPoint("TOPLEFT",active.button,"TOPLEFT",0,0)
+  overlay:SetPoint("BOTTOMRIGHT",active.button,"BOTTOMRIGHT",0,0)
+  overlay:SetFrameLevel(model:GetFrameLevel()+1); overlay:Show()
+ end
  return true
 end
-function NativeTransmog_PortraitPrototype_OnUpdate(model)
- local index=model.portraitPrototypeIndex
- local cameraUntil=index and portraitPrototypeCameraUntil[index]
- if not cameraUntil or model~=portraitPrototypeModels[index] or not model:IsShown() then return end
- resetPortraitPrototypeCamera(model)
- if GetTime()>=cameraUntil then portraitPrototypeCameraUntil[index]=nil end
+selectCatalogPortrait=function(button)
+ clearCatalogPortrait()
+ if selectedSlotId~=1 or not button or not button.appearance or button.isHide or not button.entry then return false end
+ local generation=catalogPortraitGeneration
+ catalogPortrait={button=button,appearance=button.appearance,entry=button.entry,
+     selection=button.selectionId,generation=generation}
+ return renderCatalogPortrait(generation)
+end
+function NativeTransmog_CatalogPortrait_OnUpdate(model)
+ local generation=catalogPortraitCameraGeneration
+ if not catalogPortraitCameraUntil or not generation or model~=NativeTransmogCatalogPortraitModel or not model:IsShown() then return end
+ if not catalogPortraitIsCurrent(generation) then clearCatalogPortrait(); return end
+ resetCatalogPortraitCamera(model)
+ if GetTime()>=catalogPortraitCameraUntil then
+  catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
+  model:SetScript("OnUpdate",nil)
+ end
 end
 local function renderCatalog()
- hidePortraitPrototype()
+ clearCatalogPortrait()
  for _,button in ipairs(buttons) do resetAppearanceButton(button) end
- local portraitCount, portraitEntries=0, {}
  for index,appearance in ipairs(catalog) do
   local button=buttons[index] or createAppearanceButton(index)
   resetAppearanceButton(button)
@@ -828,11 +846,6 @@ local function renderCatalog()
   button.icon:SetTexture(appearance.isHide and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or
       (GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"))
   button.hideLabel:SetText(appearance.isHide and "HIDE" or ""); button:Show()
-  if portraitCount<PORTRAIT_PROTOTYPE_MAX and not appearance.isHide and appearance.entry and not portraitEntries[appearance.entry] then
-   if renderPortraitPrototype(button,portraitCount+1) then
-    portraitCount=portraitCount+1; portraitEntries[appearance.entry]=true
-   end
-  end
  end
  local rows=math.ceil(#catalog/ICONS_PER_ROW)
  local contentHeight=rows>0 and rows*ICON_HEIGHT+(rows-1)*ICON_GAP or 0
@@ -841,19 +854,11 @@ local function renderCatalog()
  if #catalog==(canHide and 1 or 0) and not pending and hasPhysicalItem then setStatus("No compatible collected appearances for this slot.",false) end
  refreshSelection()
 end
-function NativeTransmog_SetPortraitPrototype(enabled)
- portraitPrototypeEnabled=enabled and true or false
- renderCatalog()
- if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("Native Transmog portrait prototype: "..(portraitPrototypeEnabled and "enabled" or "disabled")) end
-end
-function NativeTransmog_PortraitPrototypeItemInfo(itemId,success)
- if not portraitPrototypeEnabled or not success then return end
+function NativeTransmog_CatalogPortraitItemInfo(itemId,success)
+ if not success or not catalogPortrait then return end
  itemId=tonumber(itemId)
- for index=1,PORTRAIT_PROTOTYPE_MAX do
-  if itemId==portraitPrototypeEntries[index] and portraitPrototypeButtons[index] then
-   renderPortraitPrototype(portraitPrototypeButtons[index],index)
-  end
- end
+ local generation=catalogPortrait.generation
+ if itemId==catalogPortrait.entry then renderCatalogPortrait(generation) end
 end
 local function clearCatalogForUnavailableSlot(message)
  snapshotNonce=nil; selectedAppearance=nil; catalog={}; incomingCatalog={}; cursorHistory={}
@@ -909,7 +914,7 @@ StaticPopupDialogs["NATIVE_TRANSMOG_APPLY_CUSTOM_SET"]={text="Apply %s?\n\nAll %
 function NativeTransmog_NextPage() if hasNext then table.insert(cursorHistory,cursor); requestCatalog(nextCursor) end end
 function NativeTransmog_PreviousPage() if #cursorHistory>0 then requestCatalog(table.remove(cursorHistory)) end end
 function NativeTransmog_ResetPreview()
- selectedAppearance=nil; modelRotation=0; local model=getModel(); model:SetUnit("player"); model:SetRotation(0); refreshSelection()
+ selectedAppearance=nil; clearCatalogPortrait(); modelRotation=0; local model=getModel(); model:SetUnit("player"); model:SetRotation(0); refreshSelection()
 end
 function NativeTransmog_SelectSlot(slotId)
  if not SLOT_ORDER[slotId] then return end
@@ -1007,11 +1012,11 @@ function NativeTransmog_OnShow()
  elseif authorizedToken then cursorHistory={}; requestCatalog(0); savedSetRefreshDue=GetTime()+.35
  else
   hasPhysicalItem=true; setStatus("Preview-only mode. Interact with a Transmogrifier for your collection.",true)
-  if portraitPrototypeEnabled and #catalog>0 then renderCatalog() end
+  if #catalog>0 then renderCatalog() end
  end
 end
 function NativeTransmog_OnHide()
- hidePortraitPrototype()
+ clearCatalogPortrait()
  NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil; savedSetNextCursor=0; savedSetHasNext=false; savedSetRefreshDue=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
@@ -1136,7 +1141,7 @@ function NativeTransmog_OnEvent(_,event,...)
   updateWardrobeScale()
   return
  elseif event=="GET_ITEM_INFO_RECEIVED" then
-  NativeTransmog_PortraitPrototypeItemInfo(...)
+  NativeTransmog_CatalogPortraitItemInfo(...)
   return
  elseif event=="PLAYER_EQUIPMENT_CHANGED" then
   local changedInventorySlot=...
