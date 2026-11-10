@@ -1,5 +1,40 @@
 # Test results
 
+## Three-view model-position diagnostic
+
+Test date: 2026-11-10.
+
+### Passed
+
+- Added an isolated, command-only protected FrameXML diagnostic with three independent `220x300` `DressUpModel`
+  widgets. All receive the same player, item link, initialization, equipment, camera 0, facing 0, scale `1.30`, and
+  bounded timing; requested Z (`-2`, `0`, `+2`) is the only per-view difference. Initialization and reapplication
+  are phase-synchronized across the trio.
+- The probe records `GetPosition()` after `SetUnit`, `Undress`, and `TryOn`, immediately after the requested
+  position, and before/after the `0.05`, `0.25`, `0.50`, and `1.00` second reapplications. Logs include both target
+  and actual elapsed callback time plus initialization/equipment activity.
+- Sampling removes its `OnUpdate` callback after one second. Closing cancels an active schedule, hides and
+  `ClearModel()`s every widget, and retains no Wardrobe, Collections, selection, application, or protocol reference.
+- Focused contracts cover exactly three diagnostic models, identical call sequences, requested-position isolation,
+  intervals, Lua 5.1 compilation, runtime open/sample/close behavior, cleanup, normal-Wardrobe non-invocation, and
+  the unchanged Head-only portrait preset.
+- Full Lua/XML/module suite: `python3 -m unittest discover -s tests -p 'test_*.py'`
+  - 320 tests passed.
+  - The suite emitted pre-existing Python `ResourceWarning` messages for unclosed test SQLite connections; no test
+    failed.
+- Deterministic EPF verification:
+  - Six members; two consecutive builds were byte-for-byte identical and `python3 content/build_epf.py --check`
+    passed.
+  - SHA-256: `2efd69438951609087549bf72080a14cc2ecda16c47bcf6e697747b9e1cce05c`.
+
+### Not run or not proven
+
+No build-12340 client or PTR deployment is available in this workspace. Automated tests do not prove that camera 0
+visibly responds to `SetPosition`, that the requested values persist through native initialization on the real
+client, or that `TryOn` produced geometry. The three simultaneous views, chat records, and an unedited screenshot
+must be collected using [`MODEL_POSITION_DIAGNOSTIC.md`](MODEL_POSITION_DIAGNOSTIC.md) before claiming that model
+repositioning works. No deployment, commit, or push was performed.
+
 ## Shared portrait camera fallback and weapon navigation
 
 Test date: 2026-11-10.

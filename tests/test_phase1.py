@@ -37,10 +37,16 @@ class PhaseOneTests(unittest.TestCase):
             frame_xml["stockTocSha256"],
             hashlib.sha256((CONTENT / frame_xml["stockTocSource"]).read_bytes()).hexdigest(),
         )
-        self.assertEqual(frame_xml["loadEntries"], [{
-            "target": "Interface/FrameXML/NativeTransmogFrame.xml",
-            "after": "Interface/FrameXML/ContentManagerCollections.lua",
-        }])
+        self.assertEqual(frame_xml["loadEntries"], [
+            {
+                "target": "Interface/FrameXML/NativeTransmogFrame.xml",
+                "after": "Interface/FrameXML/ContentManagerCollections.lua",
+            },
+            {
+                "target": "Interface/FrameXML/NativeTransmogModelPositionProbe.xml",
+                "after": "Interface/FrameXML/NativeTransmogFrame.xml",
+            },
+        ])
         self.assertNotIn("nativePvePages", self.manifest)
         self.assertEqual(self.manifest["nativeCollectionPages"], [{
             "id": "appearances",
