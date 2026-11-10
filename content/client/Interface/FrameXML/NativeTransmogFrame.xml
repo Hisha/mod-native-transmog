@@ -279,16 +279,6 @@
             <Size x="84" y="111" />
             <Anchors><Anchor point="TOPLEFT" /></Anchors>
           </DressUpModel>
-          <Frame name="NativeTransmogCatalogPortraitOverlay" hidden="true" enableMouse="false">
-            <Size x="84" y="111" />
-            <Anchors><Anchor point="TOPLEFT" /></Anchors>
-            <Layers><Layer level="OVERLAY">
-              <Texture file="Interface\Buttons\UI-ActionButton-Border" alphaMode="ADD">
-                <Color r="0.82" g="0.18" b="1" />
-                <Anchors><Anchor point="TOPLEFT"><Offset x="-8" y="8" /></Anchor><Anchor point="BOTTOMRIGHT"><Offset x="8" y="-8" /></Anchor></Anchors>
-              </Texture>
-            </Layer></Layers>
-          </Frame>
           <Button name="$parentPending" hidden="true" enableMouse="true">
             <Anchors>
               <Anchor point="TOPLEFT"><Offset x="5" y="-5" /></Anchor>

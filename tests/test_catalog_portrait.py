@@ -62,9 +62,20 @@ class CatalogPortraitContracts(unittest.TestCase):
         browser = XML[XML.index('<Frame name="$parentBrowserPanel">'):
                       XML.index('<Button name="$parentPending"', XML.index('<Frame name="$parentBrowserPanel">'))]
         self.assertEqual(browser.count("<DressUpModel"), 1)
-        self.assertEqual(browser.count('<Size x="84" y="111" />'), 2)  # model plus non-model overlay
+        self.assertEqual(browser.count('<Size x="84" y="111" />'), 1)
         self.assertNotIn('CreateFrame("DressUpModel"', LUA)
         self.assertNotIn("PORTRAIT_PROTOTYPE", LUA)
+
+    def test_portrait_has_no_redundant_colored_square_overlay(self):
+        browser = XML[XML.index('<Frame name="$parentBrowserPanel">'):
+                      XML.index('<Button name="$parentPending"', XML.index('<Frame name="$parentBrowserPanel">'))]
+        portrait = section("clearCatalogPortrait=function", "selectCatalogPortrait=function")
+        appearance = section("local function createAppearanceButton", "local function resetAppearanceButton")
+        self.assertNotIn("NativeTransmogCatalogPortraitOverlay", browser)
+        self.assertNotIn("UI-ActionButton-Border", browser)
+        self.assertNotIn("NativeTransmogCatalogPortraitOverlay", portrait)
+        # Normal icon tiles retain their existing selected-state artwork.
+        self.assertIn("UI-ActionButton-Border", appearance)
 
     def test_02_click_selection_automatically_requests_portrait(self):
         preview = section("local function previewItem", "local function createAppearanceButton")

@@ -789,7 +789,6 @@ clearCatalogPortrait=function()
   model:SetScript("OnUpdate",nil); model:Hide(); model:ClearModel()
   catalogPortraitDebug("model reset=true reason=clear")
  end) end
- if NativeTransmogCatalogPortraitOverlay then NativeTransmogCatalogPortraitOverlay:Hide() end
  catalogPortrait=nil
 end
 local function catalogPortraitIsCurrent(generation)
@@ -838,12 +837,6 @@ local function renderCatalogPortrait(generation)
  end)
  if not initialized or not catalogPortraitIsCurrent(generation) then clearCatalogPortrait(); return false end
  active.button.icon:Hide()
- local overlay=NativeTransmogCatalogPortraitOverlay
- if overlay then
-  overlay:ClearAllPoints(); overlay:SetPoint("TOPLEFT",active.button,"TOPLEFT",0,0)
-  overlay:SetPoint("BOTTOMRIGHT",active.button,"BOTTOMRIGHT",0,0)
-  overlay:SetFrameLevel(model:GetFrameLevel()+1); overlay:Show()
- end
  return true
 end
 selectCatalogPortrait=function(button)
