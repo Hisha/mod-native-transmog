@@ -181,7 +181,7 @@ python3 content/build_epf.py --check
 python3 -m unittest discover -s tests -p 'test_phase*.py'
 ```
 
-The checks cover all earlier regressions plus gameplay-set discovery, class/race filtering, appearance-identity grouping, source resolution, read-only pagination/detail validation, full-set preview contracts, notifications, tooltips, the 14-slot paper doll, hidden state, authorization, and EPF determinism. See [test results](docs/TEST_RESULTS.md) and the [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
+The checks cover all earlier regressions plus gameplay-set discovery, class/race filtering, appearance-identity grouping, source resolution, read-only pagination/detail validation, full-set preview contracts, notifications, tooltips, the 14-slot paper doll, category-specific single-model portraits, hidden state, authorization, and EPF determinism. See [test results](docs/TEST_RESULTS.md), the [equipment portrait PTR checklist](docs/EQUIPMENT_PORTRAITS_PTR_VALIDATION.md), and the [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
 
 ## Known limitations and future mobile NPCs
 

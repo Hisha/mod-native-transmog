@@ -24,6 +24,7 @@ class PortraitState:
     entry: int | None = None
     tile: int | None = None
     slot: int = 1
+    active_slot: int | None = None
     visible: bool = False
     icon_hidden: bool = False
     open: bool = True
@@ -34,18 +35,18 @@ class PortraitState:
 
     def clear(self) -> None:
         self.generation += 1
-        self.entry = self.tile = None
+        self.entry = self.tile = self.active_slot = None
         self.visible = self.icon_hidden = False
 
     def select(self, tile: int, entry: int | None, *, hide: bool = False) -> int:
         self.clear()
-        if self.slot != 1 or hide or entry is None:
+        if not 1 <= self.slot <= 14 or hide or entry is None:
             return self.generation
-        self.tile, self.entry = tile, entry
+        self.tile, self.entry, self.active_slot = tile, entry, self.slot
         return self.generation
 
     def item_ready(self, entry: int, token: int, success: bool = True) -> bool:
-        current = (self.open and self.slot == 1 and success and self.entry == entry
+        current = (self.open and self.slot == self.active_slot and success and self.entry == entry
                    and self.generation == token)
         if current:
             self.try_on_items.append(entry)
@@ -175,14 +176,40 @@ class CatalogPortraitContracts(unittest.TestCase):
         state.open = False; state.clear(); state.open = True
         self.assertFalse(state.visible)
 
-    def test_12_unsupported_categories_and_missing_data_keep_icon(self):
+    def test_12_every_module_category_is_configured_and_missing_data_keeps_icon(self):
         select = section("selectCatalogPortrait=function", "function NativeTransmog_CatalogPortrait_OnUpdate")
-        self.assertIn("selectedSlotId~=1", select)
-        state = PortraitState(slot=2)
-        token = state.select(1, 16963)
-        self.assertFalse(state.item_ready(16963, token))
+        self.assertIn("getCatalogPortraitFraming(selectedSlotId)", select)
+        framing = section("local CATALOG_PORTRAIT_FRAMING", "-- The retail reconstruction")
+        for category in ("HEAD", "SHOULDERS", "SHIRT", "CHEST", "WAIST", "LEGS", "FEET",
+                         "WRISTS", "HANDS", "BACK", "MAIN_HAND", "OFF_HAND", "RANGED", "TABARD"):
+            self.assertIn(f" {category}={{", framing)
+        for slot in range(1, 15):
+            state = PortraitState(slot=slot)
+            token = state.select(1, 10000 + slot)
+            self.assertTrue(state.item_ready(10000 + slot, token))
         state = PortraitState(); token = state.select(1, 16963)
         self.assertFalse(state.item_ready(16963, token, success=False))
+
+    def test_category_switch_rejects_old_slot_callback(self):
+        state = PortraitState(slot=11)
+        old = state.select(1, 19019)
+        state.slot = 12
+        self.assertFalse(state.item_ready(19019, old))
+        current = section("local function catalogPortraitIsCurrent", "local function renderCatalogPortrait")
+        self.assertIn("selectedSlotId==active.slotId", current)
+        self.assertIn("selectedSlot==active.slot", current)
+
+    def test_back_uses_rear_orientation(self):
+        framing = section("local CATALOG_PORTRAIT_FRAMING", "-- The retail reconstruction")
+        self.assertIn("BACK={camera=0,facing=math.pi,rotation=math.pi", framing)
+
+    def test_weapon_shield_and_ranged_use_the_selected_source_item(self):
+        framing = section("local CATALOG_PORTRAIT_FRAMING", "-- The retail reconstruction")
+        for category in ("MAIN_HAND", "OFF_HAND", "RANGED"):
+            self.assertIn(f" {category}={{camera=0", framing)
+        apply_item = section("local function applyCatalogPortraitItem", "clearCatalogPortrait=function")
+        self.assertIn("model:Undress()", apply_item)
+        self.assertIn("model:TryOn(itemLink)", apply_item)
 
     def test_13_catalog_model_does_not_use_main_preview_accessor(self):
         portrait = section("clearCatalogPortrait=function", "local function clearCatalogForUnavailableSlot")
@@ -199,14 +226,18 @@ class CatalogPortraitContracts(unittest.TestCase):
         render = section("local function renderCatalogPortrait", "selectCatalogPortrait=function")
         ordered = ['GetItemInfo(active.entry)', 'model:Hide(); model:ClearModel()',
                    'model:SetUnit("player")', "applyCatalogPortraitItem(model,active,false)",
-                   "resetCatalogPortraitCamera(model)", "model:Show()", "active.button.icon:Hide()"]
+                   "resetCatalogPortraitCamera(model,active)", "model:Show()", "active.button.icon:Hide()"]
         positions = [render.index(token) for token in ordered]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE = .25, 1.30", LUA)
-        for call in ("SetCamera(0)", "SetFacing(0)", "SetRotation(0)",
-                     "SetModelScale(PORTRAIT_MODEL_SCALE)",
-                     "SetPosition(PORTRAIT_MODEL_X,PORTRAIT_MODEL_Y,PORTRAIT_MODEL_Z)"):
-            self.assertIn(call, section("local function resetCatalogPortraitCamera", "clearCatalogPortrait=function"))
+        framing = section("local CATALOG_PORTRAIT_FRAMING", "-- The retail reconstruction")
+        self.assertIn("HEAD={camera=0,facing=0,rotation=0,scale=PORTRAIT_MODEL_SCALE,"
+                      "x=PORTRAIT_MODEL_X,y=PORTRAIT_MODEL_Y,z=PORTRAIT_MODEL_Z}", framing)
+        camera = section("local function resetCatalogPortraitCamera", "local function applyCatalogPortraitItem")
+        for call in ("SetCamera(framing.camera)", "SetFacing(framing.facing)",
+                     "SetRotation(framing.rotation)", "SetModelScale(framing.scale)",
+                     "SetPosition(framing.x,framing.y,framing.z)"):
+            self.assertIn(call, camera)
 
 
 if __name__ == "__main__":

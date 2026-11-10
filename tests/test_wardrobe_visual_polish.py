@@ -127,7 +127,8 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
     def test_catalog_portrait_is_single_automatic_and_icon_backed(self):
         self.assertEqual(XML.count('<DressUpModel name="NativeTransmogCatalogPortraitModel'), 1)
         self.assertNotIn('CreateFrame("DressUpModel"', LUA)
-        self.assertIn("selectedSlotId~=1", LUA)
+        self.assertIn("local CATALOG_PORTRAIT_FRAMING", LUA)
+        self.assertIn("getCatalogPortraitFraming(selectedSlotId)", LUA)
         self.assertIn("selectCatalogPortrait(button)", LUA)
         self.assertIn("catalogPortraitGeneration", LUA)
         self.assertIn("active.button.icon:Hide()", LUA)

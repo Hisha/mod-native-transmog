@@ -17,9 +17,7 @@ local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local catalogMessage = nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
--- One XML-owned model is reused for the selected catalog tile. Head is the
--- only category with framing verified on build 12340; every other category
--- deliberately keeps its item icon.
+-- One XML-owned model is reused for the selected catalog tile.
 local catalogPortrait, catalogPortraitGeneration = nil, 0
 local catalogPortraitCameraUntil, catalogPortraitCameraGeneration = nil, nil
 local catalogPortraitDiagnostics = false
@@ -29,6 +27,28 @@ local catalogPortraitDiagnostics = false
 -- the head centered; Y retains the verified camera-0 depth.
 local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE = .25, 1.30
 local PORTRAIT_MODEL_X, PORTRAIT_MODEL_Y, PORTRAIT_MODEL_Z = 0, -.13, 0
+-- Build 12340 exposes no model bounds, field-of-view, portrait zoom, or
+-- isolated item-model API. These presets therefore crop the dressed player
+-- model with the verified camera-0 controls. HEAD is the PTR-verified preset
+-- above and must remain unchanged; the other presets are initial PTR tuning
+-- values for their body region or held equipment. BACK turns the player by
+-- pi so cloak geometry and textures face the camera.
+local CATALOG_PORTRAIT_FRAMING = {
+ HEAD={camera=0,facing=0,rotation=0,scale=PORTRAIT_MODEL_SCALE,x=PORTRAIT_MODEL_X,y=PORTRAIT_MODEL_Y,z=PORTRAIT_MODEL_Z},
+ SHOULDERS={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=.18},
+ SHIRT={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=.55},
+ CHEST={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=.55},
+ WAIST={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=1.05},
+ LEGS={camera=0,facing=0,rotation=0,scale=.85,x=0,y=-.13,z=1.45},
+ FEET={camera=0,facing=0,rotation=0,scale=1.00,x=0,y=-.13,z=2.15},
+ WRISTS={camera=0,facing=0,rotation=0,scale=.78,x=0,y=-.13,z=.58},
+ HANDS={camera=0,facing=0,rotation=0,scale=.82,x=0,y=-.13,z=.68},
+ BACK={camera=0,facing=math.pi,rotation=math.pi,scale=.90,x=0,y=-.13,z=.62},
+ MAIN_HAND={camera=0,facing=.35,rotation=.35,scale=.72,x=.20,y=-.13,z=.72},
+ OFF_HAND={camera=0,facing=-.35,rotation=-.35,scale=.72,x=-.20,y=-.13,z=.72},
+ RANGED={camera=0,facing=.35,rotation=.35,scale=.68,x=.18,y=-.13,z=.78},
+ TABARD={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=.55}
+}
 -- The retail reconstruction keeps a fixed six-by-three viewport. Configured
 -- catalog pages larger than 18 continue in the existing scroll child.
 local ICONS_PER_ROW, ICON_WIDTH, ICON_HEIGHT, ICON_GAP, CATALOG_WIDTH, CATALOG_HEIGHT = 6, 84, 111, 10, 566, 353
@@ -758,13 +778,20 @@ local function resetAppearanceButton(button)
  button.background:SetTexture(.012,.009,.007,.96); button.hideLabel:SetText("")
  button.selection:Hide(); button.appliedMark:Hide(); button:Hide()
 end
-local function resetCatalogPortraitCamera(model)
+local function getCatalogPortraitFraming(slotId)
+ local slot=SLOT_ORDER[slotId]
+ return slot and CATALOG_PORTRAIT_FRAMING[slot],slot
+end
+local function resetCatalogPortraitCamera(model,active)
  -- SetUnit can finish its native model/camera initialization after the Lua
  -- call returns. Reassert this build-12340-only preset briefly on activation.
- model:SetCamera(0)
- model:SetFacing(0); model:SetRotation(0)
- model:SetModelScale(PORTRAIT_MODEL_SCALE)
- model:SetPosition(PORTRAIT_MODEL_X,PORTRAIT_MODEL_Y,PORTRAIT_MODEL_Z)
+ local framing=active and active.framing
+ if not framing then return false end
+ model:SetCamera(framing.camera)
+ model:SetFacing(framing.facing); model:SetRotation(framing.rotation)
+ model:SetModelScale(framing.scale)
+ model:SetPosition(framing.x,framing.y,framing.z)
+ return true
 end
 local function applyCatalogPortraitItem(model,active,delayed)
  if not active.itemLink or not active.tryOnItemId then return false end
@@ -794,7 +821,9 @@ end
 local function catalogPortraitIsCurrent(generation)
  local active=catalogPortrait
  return active and active.generation==generation and catalogPortraitGeneration==generation and
-     selectedSlotId==1 and selectedAppearance and not selectedAppearance.isHide and
+     selectedSlotId==active.slotId and selectedSlot==active.slot and
+     CATALOG_PORTRAIT_FRAMING[selectedSlot]==active.framing and
+     selectedAppearance and not selectedAppearance.isHide and
      selectedAppearance.selection==active.selection and selectedAppearance.entry==active.entry and
      active.button and active.button:IsShown() and active.button.appearance==active.appearance and
      active.button.entry==active.entry and NativeTransmogFrame:IsShown()
@@ -817,7 +846,7 @@ local function renderCatalogPortrait(generation)
  catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
  -- Models are deliberately not parented to the buttons or ScrollChild. Old
  -- clients do not reliably clip 3-D widgets in that hierarchy. The fixed
- -- 84x111 BrowserPanel child moves over the one selected Head tile.
+ -- 84x111 BrowserPanel child moves over the one selected appearance tile.
  catalogPortraitCameraGeneration=generation
  catalogPortraitCameraUntil=GetTime()+PORTRAIT_CAMERA_SECONDS
  local initialized=pcall(function()
@@ -831,7 +860,7 @@ local function renderCatalogPortrait(generation)
   model:SetFrameLevel(active.button:GetFrameLevel()+1)
   model:SetUnit("player")
   applyCatalogPortraitItem(model,active,false)
-  resetCatalogPortraitCamera(model)
+  resetCatalogPortraitCamera(model,active)
   model:Show()
   model:SetScript("OnUpdate",NativeTransmog_CatalogPortrait_OnUpdate)
  end)
@@ -841,10 +870,11 @@ local function renderCatalogPortrait(generation)
 end
 selectCatalogPortrait=function(button)
  clearCatalogPortrait()
- if selectedSlotId~=1 or not button or not button.appearance or button.isHide or not button.entry then return false end
+ local framing,slot=getCatalogPortraitFraming(selectedSlotId)
+ if not framing or not button or not button.appearance or button.isHide or not button.entry then return false end
  local generation=catalogPortraitGeneration
  catalogPortrait={button=button,appearance=button.appearance,entry=button.entry,
-     selection=button.selectionId,generation=generation}
+     selection=button.selectionId,generation=generation,slotId=selectedSlotId,slot=slot,framing=framing}
  return renderCatalogPortrait(generation)
 end
 function NativeTransmog_CatalogPortrait_OnUpdate(model)
@@ -856,7 +886,7 @@ function NativeTransmog_CatalogPortrait_OnUpdate(model)
  -- player's equipped items after the initial TryOn. Keep the clicked item as
  -- the last writer while that same bounded initialization window is active.
  applyCatalogPortraitItem(model,active,true)
- resetCatalogPortraitCamera(model)
+ resetCatalogPortraitCamera(model,active)
  if GetTime()>=catalogPortraitCameraUntil then
   catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
   model:SetScript("OnUpdate",nil)
