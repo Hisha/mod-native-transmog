@@ -29,6 +29,8 @@ local function Widget(name,parent,kind)
  local widget={name=name,parent=parent,kind=kind,textures={},scripts={},shown=true,enabled=true,normalTexture="Interface\\Buttons\\UI-Quickslot2"}
  function widget:SetWidth(v) self.width=v end
  function widget:SetHeight(v) self.height=v end
+ function widget:GetFrameLevel() return self.frameLevel or 1 end
+ function widget:SetFrameLevel(v) self.frameLevel=v end
  function widget:SetAlpha(v) self.alpha=v end
  function widget:SetPoint(...) self.point={...} end
  function widget:ClearAllPoints() self.point=nil end
@@ -36,6 +38,9 @@ local function Widget(name,parent,kind)
  function widget:SetTexCoord(...) self.texCoord={...} end
  function widget:SetTexture(...) self.textureArgs={...}; self.texture=select(1,...) end
  function widget:SetBlendMode(v) self.blendMode=v end
+ function widget:SetJustifyH(v) self.justifyH=v end
+ function widget:SetJustifyV(v) self.justifyV=v end
+ function widget:SetWordWrap(v) self.wordWrap=v end
  function widget:SetVertexColor(...) self.vertexColor={...} end
  function widget:SetDesaturated(v) self.desaturated=v end
  function widget:SetTextColor(...) self.textColor={...} end
@@ -79,6 +84,8 @@ catalog={}; canHide=false; pending=nil; hasPhysicalItem=true
 catalogPortrait=nil; catalogPortraitGeneration=0
 catalogPortraitCameraUntil=nil; catalogPortraitCameraGeneration=nil
 function GetItemIcon(entry) return "icon:"..entry end
+function GetItemInfo(entry) return "Item "..entry,nil,2 end
+function GetItemQualityColor() return 0.12,1,0 end
 function refreshSelection() end
 function setStatus() end
 function requestSetDetail() end
@@ -130,7 +137,7 @@ function updateEquipmentSlot() end
         self.assertIsNotNone(button.scripts["OnClick"])
 
     def test_application_grid_fits_normal_page_scrolls_oversize_and_resets_recycled_state(self):
-        snippet = section("local function createAppearanceButton", "local function clearCatalogForUnavailableSlot")
+        snippet = section("local function twoLineAppearanceLabel", "local function clearCatalogForUnavailableSlot")
         self.lua.execute(snippet.replace("local function", "function"))
         globals_ = self.lua.globals()
 
@@ -172,7 +179,7 @@ function updateEquipmentSlot() end
         self.assertFalse(first.isHide)
 
     def test_small_application_collection_centers_its_only_row(self):
-        snippet = section("local function createAppearanceButton", "local function clearCatalogForUnavailableSlot")
+        snippet = section("local function twoLineAppearanceLabel", "local function clearCatalogForUnavailableSlot")
         self.lua.execute(snippet.replace("local function", "function"))
         globals_ = self.lua.globals()
         small = self.lua.table()

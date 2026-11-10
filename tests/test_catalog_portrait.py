@@ -135,7 +135,7 @@ class CatalogPortraitContracts(unittest.TestCase):
         self.assertNotEqual(*state.try_on_items)
 
     def test_no_hardcoded_judgement_item_in_production_portrait_renderer(self):
-        portrait = section("local function catalogPortraitDebug", "local function clearCatalogForUnavailableSlot")
+        portrait = section("local function getCatalogPortraitFraming", "local function clearCatalogForUnavailableSlot")
         self.assertNotIn("16955", portrait)
 
     def test_07_icon_hides_only_after_success_and_clear_restores_it(self):

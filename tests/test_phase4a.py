@@ -127,7 +127,7 @@ class PhaseFourAContracts(unittest.TestCase):
             self.assertNotIn(forbidden, combined)
 
     def test_client_preview_rebuilds_without_selected_slot(self):
-        preview = LUA[LUA.index("local function previewItem"):LUA.index("local function createAppearanceButton")]
+        preview = LUA[LUA.index("local function applySelectedAppearance"):LUA.index("local function createAppearanceButton")]
         for marker in ("model:Undress()", "GetInventorySlotInfo", "GetInventoryItemLink", "inventorySlot~=hiddenSlot"):
             self.assertIn(marker, preview)
 

@@ -27,10 +27,9 @@ keeps the clicked helmet as the last writer instead of allowing the player's
 equipped helmet to overwrite it. Final visible geometry remains a PTR
 validation item.
 
-For focused PTR diagnosis, `/nativetransmogportraitdebug` toggles chat logging
-of the clicked appearance selection, source item entry, resolved link and link
-item ID, item ID passed to `TryOn`, model reset, and the first delayed callback.
-It is disabled by default and does not change the server protocol.
+The temporary portrait chat diagnostic has been removed. The bounded
+generation checks remain covered by automated contracts and require no user
+control or protocol change.
 
 The single-model PTR symptom has a separate cause from the removed pool's
 stale-record risk: the correct clicked link reaches the initial `TryOn`, but

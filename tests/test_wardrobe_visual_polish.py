@@ -58,7 +58,7 @@ class WardrobeVisualPolishContracts(unittest.TestCase):
         reset = LUA[LUA.index("local function resetAppearanceButton"):LUA.index("local function renderCatalog")]
         for marker in ("appearance=nil", "selectionId=nil", "applied=false", "isHide=false",
                        "SetAlpha(1)", "SetDesaturated(false)", "selection:Hide()",
-                       "appliedMark:Hide()", "hideLabel:SetText(\"\")"):
+                       "appliedMark:Hide()", "name:SetText(\"\")"):
             self.assertIn(marker, reset)
 
     def test_selected_applied_and_hidden_combinations_have_independent_indicators(self):

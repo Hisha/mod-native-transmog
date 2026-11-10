@@ -17,10 +17,10 @@ local selectedAppearance, actualItem, appliedItem = nil, nil, nil
 local hiddenApplied, overridePresent, canHide, hasPhysicalItem, pending = false, false, false, false, nil
 local catalogMessage = nil
 local modelRotation, scheduledRefresh, augmentingTooltip = 0, nil, false
+local previewGeneration, previewRefresh = 0, nil
 -- One XML-owned model is reused for the selected catalog tile.
 local catalogPortrait, catalogPortraitGeneration = nil, 0
 local catalogPortraitCameraUntil, catalogPortraitCameraGeneration = nil, nil
-local catalogPortraitDiagnostics = false
 -- PTR showed that 1.80 overfilled the 84x111 viewport. Build 12340 does not
 -- reliably clip model geometry, so keep a conservative camera-space margin
 -- for tall helms instead of depending on the widget boundary. Zero X/Z keeps
@@ -76,12 +76,6 @@ local ITEM_CATEGORIES = {
 }
 local requestCatalog, renderPieces, requestSetDetail, requestItems, renderItems
 local selectCatalogPortrait, clearCatalogPortrait
-
-local function catalogPortraitDebug(message)
- if catalogPortraitDiagnostics and DEFAULT_CHAT_FRAME then
-  DEFAULT_CHAT_FRAME:AddMessage("NativeTransmog portrait: "..message)
- end
-end
 
 function NativeTransmog_PreviewPanel_OnLoad(frame)
  local _,race=UnitRace("player")
@@ -715,12 +709,9 @@ local function showAppearanceTooltip(button)
  else GameTooltip:SetHyperlink("item:" .. button.entry) end
  GameTooltip:Show()
 end
-local function previewItem(button)
- if not button.appearance or not hasPhysicalItem then return end
- selectedAppearance = { selection=button.selectionId, entry=button.entry, isHide=button.isHide }
- catalogPortraitDebug("click appearanceId="..tostring(button.selectionId).." sourceItemId="..tostring(button.entry))
- local model=getModel(); model:SetUnit("player")
- if button.isHide then
+local function applySelectedAppearance(model,appearance)
+ if not appearance then return end
+ if appearance.isHide then
   local hiddenSlot=GetInventorySlotInfo(SLOT_INVENTORY_NAMES[selectedSlotId])
   if model.UndressSlot then
    model:UndressSlot(hiddenSlot)
@@ -734,17 +725,53 @@ local function previewItem(button)
     end
    end
   end
- else model:TryOn(button.entry) end
+ else model:TryOn(appearance.entry) end
+end
+local function previewItem(button)
+ if not button.appearance or not hasPhysicalItem then return end
+ selectedAppearance = { selection=button.selectionId, entry=button.entry, isHide=button.isHide }
+ previewGeneration=previewGeneration+1
+ local model=getModel(); model:SetUnit("player"); applySelectedAppearance(model,selectedAppearance)
+ previewRefresh={generation=previewGeneration,appearance=selectedAppearance,untilTime=GetTime()+PORTRAIT_CAMERA_SECONDS}
  model:SetRotation(modelRotation)
  if button.isHide then clearCatalogPortrait() else selectCatalogPortrait(button) end
  refreshSelection()
+end
+local function twoLineAppearanceLabel(text)
+ text=string.gsub(text or "","%s+"," ")
+ local lineLength,maximum=14,29
+ if string.len(text)<=lineLength then return text end
+ if string.len(text)>maximum then text=string.sub(text,1,maximum-3).."..." end
+ local split=lineLength
+ while split>1 and string.sub(text,split,split)~=" " do split=split-1 end
+ local first,second
+ if split==1 then
+  first=string.sub(text,1,lineLength); second=string.sub(text,lineLength+1)
+ else
+  first=string.sub(text,1,split-1); second=string.sub(text,split+1)
+ end
+ second=string.gsub(second,"^%s+","")
+ if string.len(second)>lineLength then second=string.sub(second,1,lineLength-3).."..." end
+ return first.."\n"..second
+end
+local function refreshAppearanceButtonLabel(button)
+ if not button.appearance then return end
+ if button.isHide then
+  button.name:SetText("Hide\nAppearance"); button.name:SetTextColor(.82,.82,.82)
+  return
+ end
+ local name,_,quality=GetItemInfo(button.entry)
+ button.name:SetText(twoLineAppearanceLabel(name or ("Item "..button.entry)))
+ local r,g,b=1,1,1
+ if quality and GetItemQualityColor then r,g,b=GetItemQualityColor(quality) end
+ button.name:SetTextColor(r,g,b)
 end
 local function createAppearanceButton(index)
  local button=CreateFrame("Button", "NativeTransmogAppearanceButton"..index, NativeTransmogFrameBrowserPanelScrollChild)
  button:SetWidth(ICON_WIDTH); button:SetHeight(ICON_HEIGHT)
  button.background=button:CreateTexture(nil,"BACKGROUND"); button.background:SetTexture(.012,.009,.007,.96); button.background:SetAllPoints(button)
  button.recess=button:CreateTexture(nil,"BORDER"); button.recess:SetTexture(.18,.13,.08,.72); button.recess:SetPoint("TOPLEFT",1,-1); button.recess:SetPoint("BOTTOMRIGHT",-1,1)
- button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetWidth(72); button.icon:SetHeight(72); button.icon:SetPoint("CENTER",0,1)
+ button.icon=button:CreateTexture(nil,"ARTWORK"); button.icon:SetWidth(68); button.icon:SetHeight(68); button.icon:SetPoint("TOP",0,-3)
  button.icon:SetTexCoord(.08,.92,.08,.92)
  button.border=button:CreateTexture(nil,"BORDER"); button.border:SetTexture("Interface\\Buttons\\UI-Quickslot2"); button.border:SetAllPoints(button)
  button.highlight=button:CreateTexture(nil,"HIGHLIGHT"); button.highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
@@ -752,8 +779,12 @@ local function createAppearanceButton(index)
  button.selection=button:CreateTexture(nil,"OVERLAY"); button.selection:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
  button.selection:SetVertexColor(.82,.18,1); button.selection:SetBlendMode("ADD"); button.selection:SetPoint("TOPLEFT",-8,8); button.selection:SetPoint("BOTTOMRIGHT",8,-8); button.selection:Hide()
  button.appliedMark=button:CreateTexture(nil,"OVERLAY"); button.appliedMark:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
- button.appliedMark:SetWidth(16); button.appliedMark:SetHeight(16); button.appliedMark:SetPoint("BOTTOMRIGHT",-2,2); button.appliedMark:Hide()
- button.hideLabel=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); button.hideLabel:SetPoint("BOTTOM",0,4); button.hideLabel:SetTextColor(1,.82,0)
+ button.appliedMark:SetWidth(16); button.appliedMark:SetHeight(16); button.appliedMark:SetPoint("TOPRIGHT",-2,-2); button.appliedMark:Hide()
+ button.labelFrame=CreateFrame("Frame",nil,button); button.labelFrame:SetPoint("BOTTOMLEFT",2,2); button.labelFrame:SetPoint("BOTTOMRIGHT",-2,2); button.labelFrame:SetHeight(35)
+ button.labelFrame:SetFrameLevel(button:GetFrameLevel()+2)
+ button.labelShade=button.labelFrame:CreateTexture(nil,"BACKGROUND"); button.labelShade:SetTexture(0,0,0,.78); button.labelShade:SetAllPoints(button.labelFrame)
+ button.name=button.labelFrame:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall"); button.name:SetPoint("TOPLEFT",2,-2); button.name:SetPoint("BOTTOMRIGHT",-2,2)
+ button.name:SetJustifyH("CENTER"); button.name:SetJustifyV("MIDDLE"); if button.name.SetWordWrap then button.name:SetWordWrap(true) end
  button:SetScript("OnClick",previewItem); button:SetScript("OnEnter",showAppearanceTooltip); button:SetScript("OnLeave",function() GameTooltip:Hide() end)
  buttons[index]=button; return button
 end
@@ -761,7 +792,7 @@ local function resetAppearanceButton(button)
  button.appearance=nil; button.entry=nil; button.selectionId=nil; button.applied=false; button.isHide=false
  button:SetAlpha(1); button:Enable(); button.icon:Show(); button.icon:SetTexture(nil); button.icon:SetVertexColor(1,1,1,1)
  if button.icon.SetDesaturated then button.icon:SetDesaturated(false) end
- button.background:SetTexture(.012,.009,.007,.96); button.hideLabel:SetText("")
+ button.background:SetTexture(.012,.009,.007,.96); button.name:SetText(""); button.name:SetTextColor(1,1,1)
  button.selection:Hide(); button.appliedMark:Hide(); button:Hide()
 end
 local function getCatalogPortraitFraming(slotId)
@@ -785,10 +816,6 @@ local function applyCatalogPortraitItem(model,active,delayed)
  model:Undress()
  model:TryOn(itemLink)
  if not delayed or not active.delayedDressLogged then
-  catalogPortraitDebug((delayed and "delayed callback" or "initial render")..
-      " appearanceId="..tostring(active.selection).." sourceItemId="..tostring(active.entry)..
-      " resolvedItemLink="..tostring(active.itemLink).." tryOnItemId="..tostring(active.tryOnItemId)..
-      " reset="..tostring(active.modelReset))
   if delayed then active.delayedDressLogged=true end
  end
  return true
@@ -800,7 +827,6 @@ clearCatalogPortrait=function()
  local model=NativeTransmogCatalogPortraitModel
  if model then pcall(function()
   model:SetScript("OnUpdate",nil); model:Hide(); model:ClearModel()
-  catalogPortraitDebug("model reset=true reason=clear")
  end) end
  catalogPortrait=nil
 end
@@ -822,10 +848,7 @@ local function renderCatalogPortrait(generation)
  local _,itemLink=GetItemInfo(active.entry)
  if not itemLink then return false end
  local resolvedItemId=tonumber(string.match(itemLink,"item:(%d+)"))
- catalogPortraitDebug("resolved appearanceId="..tostring(active.selection).." sourceItemId="..tostring(active.entry)..
-     " resolvedItemLink="..tostring(itemLink).." resolvedItemId="..tostring(resolvedItemId))
  if resolvedItemId~=active.entry then
-  catalogPortraitDebug("identity mismatch; portrait remains on item icon")
   return false
  end
  active.itemLink=itemLink; active.tryOnItemId=resolvedItemId; active.delayedDressLogged=false
@@ -892,7 +915,7 @@ local function renderCatalog()
   button.appearance,button.entry,button.selectionId,button.applied,button.isHide=appearance,appearance.entry,appearance.selection,appearance.applied,appearance.isHide
   button.icon:SetTexture(appearance.isHide and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or
       (GetItemIcon(appearance.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"))
-  button.hideLabel:SetText(appearance.isHide and "HIDE" or ""); button:Show()
+  refreshAppearanceButtonLabel(button); button:Show()
  end
  local rows=math.ceil(#catalog/ICONS_PER_ROW)
  local contentHeight=rows>0 and rows*ICON_HEIGHT+(rows-1)*ICON_GAP or 0
@@ -902,8 +925,11 @@ local function renderCatalog()
  refreshSelection()
 end
 function NativeTransmog_CatalogPortraitItemInfo(itemId,success)
- if not success or not catalogPortrait then return end
  itemId=tonumber(itemId)
+ for _,button in ipairs(buttons) do
+  if button.appearance and button.entry==itemId then refreshAppearanceButtonLabel(button) end
+ end
+ if not success or not catalogPortrait then return end
  local generation=catalogPortrait.generation
  if itemId==catalogPortrait.entry then renderCatalogPortrait(generation) end
 end
@@ -961,7 +987,7 @@ StaticPopupDialogs["NATIVE_TRANSMOG_APPLY_CUSTOM_SET"]={text="Apply %s?\n\nAll %
 function NativeTransmog_NextPage() if hasNext then table.insert(cursorHistory,cursor); requestCatalog(nextCursor) end end
 function NativeTransmog_PreviousPage() if #cursorHistory>0 then requestCatalog(table.remove(cursorHistory)) end end
 function NativeTransmog_ResetPreview()
- selectedAppearance=nil; clearCatalogPortrait(); modelRotation=0; local model=getModel(); model:SetUnit("player"); model:SetRotation(0); refreshSelection()
+ selectedAppearance=nil; previewGeneration=previewGeneration+1; previewRefresh=nil; clearCatalogPortrait(); modelRotation=0; local model=getModel(); model:SetUnit("player"); model:SetRotation(0); refreshSelection()
 end
 function NativeTransmog_SelectSlot(slotId)
  if not SLOT_ORDER[slotId] then return end
@@ -1029,6 +1055,14 @@ function NativeTransmog_GameTooltip_OnTooltipSetItem(tooltip)
 end
 
 function NativeTransmog_FrameUpdate()
+ if previewRefresh then
+  local refresh=previewRefresh
+  if refresh.generation~=previewGeneration or refresh.appearance~=selectedAppearance or not NativeTransmogFrame:IsShown() then previewRefresh=nil
+  else
+   applySelectedAppearance(getModel(),refresh.appearance); getModel():SetRotation(modelRotation)
+   if GetTime()>=refresh.untilTime then previewRefresh=nil end
+  end
+ end
  if savedSetRefreshDue and GetTime()>=savedSetRefreshDue then savedSetRefreshDue=nil; requestSavedSets() end
  if itemSearchDue and GetTime()>=itemSearchDue then itemSearchDue=nil; itemHistory={}; requestItems(0,true) end
  if itemRefreshDue and GetTime()>=itemRefreshDue then itemRefreshDue=nil; itemDirty[itemCategory]=nil; requestItems(itemCursor,true) end
@@ -1070,6 +1104,7 @@ function NativeTransmog_OnShow()
 end
 function NativeTransmog_OnHide()
  clearCatalogPortrait()
+ previewGeneration=previewGeneration+1; previewRefresh=nil
  NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil; savedSetNextCursor=0; savedSetHasNext=false; savedSetRefreshDue=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
@@ -1311,13 +1346,6 @@ end
 function NativeTransmog_DebugToggle()
  if NativeTransmogFrame:IsShown() then NativeTransmogFrame:Hide() else authorizedToken=nil; NativeTransmogFrame:Show() end
 end
-function NativeTransmog_TogglePortraitDiagnostics()
- catalogPortraitDiagnostics=not catalogPortraitDiagnostics
- if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("NativeTransmog portrait diagnostics "..
-     (catalogPortraitDiagnostics and "enabled" or "disabled")) end
-end
 SLASH_NATIVETRANSMOG1="/wardrobe"
 SLASH_NATIVETRANSMOG2="/nativetransmog"
 SlashCmdList["NATIVETRANSMOG"]=NativeTransmog_DebugToggle
-SLASH_NATIVETRANSMOGPORTRAIT1="/nativetransmogportraitdebug"
-SlashCmdList["NATIVETRANSMOGPORTRAIT"]=NativeTransmog_TogglePortraitDiagnostics

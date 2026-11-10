@@ -154,7 +154,7 @@ class PhaseFourBContracts(unittest.TestCase):
         self.assertNotIn("sendRequest", reset)
 
     def test_hide_preview_prefers_slot_undress_with_safe_fallback(self):
-        preview = LUA[LUA.index("local function previewItem"):LUA.index("local function createAppearanceButton")]
+        preview = LUA[LUA.index("local function applySelectedAppearance"):LUA.index("local function createAppearanceButton")]
         self.assertIn("if model.UndressSlot", preview)
         self.assertIn("model:UndressSlot(hiddenSlot)", preview)
         self.assertIn("model:Undress()", preview)

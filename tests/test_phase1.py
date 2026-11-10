@@ -42,10 +42,6 @@ class PhaseOneTests(unittest.TestCase):
                 "target": "Interface/FrameXML/NativeTransmogFrame.xml",
                 "after": "Interface/FrameXML/ContentManagerCollections.lua",
             },
-            {
-                "target": "Interface/FrameXML/NativeTransmogModelPositionProbe.xml",
-                "after": "Interface/FrameXML/NativeTransmogFrame.xml",
-            },
         ])
         self.assertNotIn("nativePvePages", self.manifest)
         self.assertEqual(self.manifest["nativeCollectionPages"], [{
@@ -105,7 +101,7 @@ class PhaseOneTests(unittest.TestCase):
     def test_phase1_preview_behaviors_are_preserved(self) -> None:
         for token in (
             'model:SetUnit("player")',
-            "model:TryOn(button.entry)",
+            "applySelectedAppearance(model,selectedAppearance)",
             "NativeTransmog_SelectSlot",
             "NativeTransmog_ResetPreview",
             "NativeTransmog_Rotate",

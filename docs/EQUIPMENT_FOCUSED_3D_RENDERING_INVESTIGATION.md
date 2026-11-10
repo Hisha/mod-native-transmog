@@ -292,74 +292,11 @@ build complexity and invalidation/storage cost. They are especially
 combinatorial for texture-based armor. No such pipeline should be started from
 this investigation.
 
-## 7. Minimal isolated PTR experiment
+## 7. Retired isolated PTR experiment
 
-Implement this only as a temporary, separately approved experiment. It must be
-delivered through mod-content-manager's existing EPF injection mechanism, not
-as an addon, and must not call or parent itself to any Wardrobe frame.
-
-### Structure
-
-- Add a protected FrameXML diagnostic file, for example
-  `NativeTransmogModelPositionProbe.xml/.lua`, loaded by the existing EPF
-  manifest after stock `DressUpFrame.xml`.
-- Declare one hidden top-level control frame with three large (`220x300` or
-  larger) side-by-side `DressUpModel` children. Do not use the Wardrobe's
-  selected portrait, model accessor, scroll child, state, or callbacks.
-- Open/close it only through a probe-specific slash command such as
-  `/ntmodelprobe`. Closing it must hide and `ClearModel()` all three widgets.
-- Accept a typed item ID/link locally. It must not send an addon message or
-  alter selection, application, collections, sets, acquisition, or protocol.
-
-### First decisive test
-
-For all three frames, run the identical sequence:
-
-```lua
-model:ClearModel()
-model:SetUnit("player")
-model:Undress()
-model:TryOn(itemLink)
-model:SetCamera(0)
-model:SetFacing(0)       -- do not also call SetRotation in this test
-model:SetModelScale(1.30)
-```
-
-Then assign deliberately separated positions:
-
-```lua
-left:SetPosition(0, -0.13, -2.0)
-middle:SetPosition(0, -0.13, 0.0)
-right:SetPosition(0, -0.13, 2.0)
-```
-
-Label each viewport with the requested values. Reapply dressing first and the
-same transform second at 0.00, 0.05, 0.25, 0.50, and 1.00 seconds. At every
-step, print each widget's `GetPosition()` and `GetModelScale()` to chat. Stop
-all callbacks after the 1.00-second sample. This longer diagnostic schedule
-does not change the production Head portrait's working 0.25-second correction.
-
-The three Z values are intentionally not candidate production presets. They
-are a falsifiable axis test. Add buttons for an X-axis trio
-`(-1.5, 0, +1.5)` with fixed Y/Z and a Y-axis trio
-`(-2.0, -0.13, +2.0)` with fixed X/Z only after the Z test. Change one axis at
-a time.
-
-### Interpretation
-
-| Observation | Conclusion |
-|---|---|
-| The three body regions visibly differ and getters retain the requested values | Position-based profiles are viable; tune large diagnostic viewports first, then test the `84x111` tile separately. |
-| Views initially differ, then converge; getters also revert | Native initialization overwrote the transform; determine the latest reset time and retain post-dress reapplication. |
-| Getters differ but all three views remain the same | Camera 0 is following model space or otherwise ignores translation for composition; stop pursuing `SetPosition` body-region profiles. |
-| Getters and views never differ | The transform is rejected/reset in this widget path; record Lua errors and exact timestamps. |
-| Large viewports work but `84x111` does not | The blocker is viewport/aspect/clipping, not positioning. Keep icons or redesign only under separate layout approval. |
-
-After the axis test, validate one upper-torso, one hands, one feet, and one rear
-profile on at least a short and a tall race, both sexes, a robe, and oversized
-shoulder/helm geometry. A screenshot and human observation are required for
-each claimed success. Source tests may verify isolation and call order, but
-must not be reported as visual validation.
+The temporary three-view position probe was investigated and removed. The EPF
+contains no probe files, load entry, diagnostic slash command, or extra model
+frames. Production keeps the previously accepted single Head portrait only.
 
 ## 8. Limitations and unresolved questions
 

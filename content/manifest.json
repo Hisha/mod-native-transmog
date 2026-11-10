@@ -14,16 +14,6 @@
       "type": "file",
       "source": "client/Interface/FrameXML/NativeTransmogFrame.lua",
       "target": "Interface/FrameXML/NativeTransmogFrame.lua"
-    },
-    {
-      "type": "file",
-      "source": "client/Interface/FrameXML/NativeTransmogModelPositionProbe.xml",
-      "target": "Interface/FrameXML/NativeTransmogModelPositionProbe.xml"
-    },
-    {
-      "type": "file",
-      "source": "client/Interface/FrameXML/NativeTransmogModelPositionProbe.lua",
-      "target": "Interface/FrameXML/NativeTransmogModelPositionProbe.lua"
     }
   ],
   "clientFrameXml": {
@@ -33,10 +23,6 @@
       {
         "target": "Interface/FrameXML/NativeTransmogFrame.xml",
         "after": "Interface/FrameXML/ContentManagerCollections.lua"
-      },
-      {
-        "target": "Interface/FrameXML/NativeTransmogModelPositionProbe.xml",
-        "after": "Interface/FrameXML/NativeTransmogFrame.xml"
       }
     ]
   },
