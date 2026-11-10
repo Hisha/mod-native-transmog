@@ -1,127 +1,91 @@
-# Equipment-focused catalog portraits: implementation and PTR validation
+# Catalog portrait camera and weapon navigation validation
 
-Implementation date: 2026-11-10.
+Investigation date: 2026-11-10.
 
-## Implementation status
+## Build-12340 camera result
 
-The Wardrobe reuses the single XML-owned `NativeTransmogCatalogPortraitModel` for the currently selected appearance.
-Selection clears the old model, resolves and verifies the exact source item link, calls `SetUnit("player")`,
-`Undress()`, and `TryOn(itemLink)`, applies the selected slot's framing preset, and moves the model over the selected
-tile. Every other tile remains an item icon. The main Wardrobe preview and Collections preview are not used by this
-path.
+The build-12340 registration inventory exposes these relevant methods:
 
-The Head preset is unchanged from the PTR-accepted implementation. All other presets are implemented but have not
-been visually verified in a build-12340 client and must be treated as initial tuning values.
+- `DressUpModel`: `Undress`, `Dress`, and `TryOn`.
+- inherited player/model controls: `SetUnit`, `SetCamera`, `SetFacing`,
+  `SetRotation`, `SetModelScale`, `SetPosition`, `ClearModel`, and limited
+  corresponding getters.
 
-| Wardrobe category | Rendering method | Camera / orientation | Scale | Position `(x,y,z)` | Visual status |
-|---|---|---:|---:|---:|---|
-| Head | Selected item dressed on isolated player model | camera 0, front `0` | `1.30` | `(0,-0.13,0)` | PTR accepted; preserved |
-| Shoulders | Selected paired shoulder appearance on player model | camera 0, front `0` | `1.05` | `(0,-0.13,0.18)` | Implemented; PTR tuning required |
-| Shirt | Selected garment texture/geometry on torso | camera 0, front `0` | `1.05` | `(0,-0.13,0.55)` | Implemented; PTR tuning required |
-| Chest | Selected chest/robe texture and geometry on torso | camera 0, front `0` | `1.05` | `(0,-0.13,0.55)` | Implemented; PTR tuning required |
-| Waist | Selected belt texture/geometry on player model | camera 0, front `0` | `1.05` | `(0,-0.13,1.05)` | Implemented; PTR tuning required |
-| Legs | Selected leg texture/geometry on player model | camera 0, front `0` | `0.85` | `(0,-0.13,1.45)` | Implemented; PTR tuning required |
-| Feet | Selected boot texture/geometry on player model | camera 0, front `0` | `1.00` | `(0,-0.13,2.15)` | Implemented; PTR tuning required |
-| Wrists | Selected bracer textures/geometry with forearms | camera 0, front `0` | `0.78` | `(0,-0.13,0.58)` | Implemented; PTR tuning required |
-| Hands | Selected glove/gauntlet textures and geometry | camera 0, front `0` | `0.82` | `(0,-0.13,0.68)` | Implemented; PTR tuning required |
-| Back | Selected cloak on player model | camera 0, rear `pi` | `0.90` | `(0,-0.13,0.62)` | Implemented; PTR tuning required |
-| Main Hand | Selected weapon dressed through `TryOn` | camera 0, facing/rotation `0.35` | `0.72` | `(0.20,-0.13,0.72)` | Implemented; held pose and crop require PTR verification |
-| Off Hand | Selected weapon, shield, or held item through `TryOn` | camera 0, facing/rotation `-0.35` | `0.72` | `(-0.20,-0.13,0.72)` | Implemented; each item family requires PTR verification |
-| Ranged | Selected bow, gun, crossbow, thrown weapon, or supported ranged item through `TryOn` | camera 0, facing/rotation `0.35` | `0.68` | `(0.18,-0.13,0.78)` | Implemented; held/sheathed pose and crop require PTR verification |
-| Tabard | Selected garment texture on torso | camera 0, front `0` | `1.05` | `(0,-0.13,0.55)` | Implemented; PTR tuning required |
+It does not expose a model-bounds query, field-of-view control, camera target,
+portrait zoom, model-ready event, `TryOn` success result, or isolated item-model
+renderer. In particular, modern `SetPortraitZoom` guidance does not apply.
 
-These are the module's actual 14 wire slots. A class relic in the ranged equipment slot remains excluded by the
-existing `UnitHasRelicSlot` rule because it is not an ordinary dressable appearance.
+The removed non-Head configurations changed camera 0's facing, scale, and
+`SetPosition` coordinates. Confirmed PTR behavior shows that those calls do not
+reliably pan the viewport from the head to a selected body region. The renderer
+did apply each slot's table entry: it called the transform sequence immediately
+and again during its bounded 0.25-second initialization window. That same
+delayed callback also repeated `Undress(); TryOn(itemLink)` before reapplying the
+transform. The sequence therefore did not overwrite a working category camera
+with Head values; it repeatedly applied ineffective or incorrectly interpreted
+non-Head transforms.
 
-## Build-12340 limitations and fallback
+There is no supported API evidence for a different deterministic vertical or
+horizontal viewport repositioning scheme. Rather than substitute another set
+of guessed offsets, production now keeps the PTR-verified Head configuration
+unchanged and leaves Shoulders, Shirt, Chest, Waist, Legs, Feet, Wrists, Hands,
+Back, Main Hand, Off Hand, Ranged, and Tabard on their normal item icons.
 
-Build 12340 exposes no model-bounds query, field-of-view control, portrait zoom, success result from `TryOn`,
-model-ready event, or supported isolated item-model renderer. Camera 0 plus model facing, rotation, scale, and
-position is the verified control surface. Shirts, tabards, many chest/leg/waist/wrist/hand/foot appearances, and
-parts of other armor are character textures rather than separable geometry, so the relevant dressed body region is
-the honest 3-D representation.
+| Category | Catalog rendering | PTR status |
+|---|---|---|
+| Head | Single reusable `DressUpModel`; camera 0, scale `1.30`, position `(0,-0.13,0)` | Previously accepted; regression verification required |
+| All other supported equipment categories | Normal item icon | Deterministic fallback; verify no head model appears |
+| Relic/ranged slot on relic classes | Existing unavailable-slot behavior | Unchanged |
 
-Weapons, shields, held items, and ranged items are also dressed on the player model. The implementation does not
-substitute a generic item model. Whether a particular item is held, sheathed, occluded, or outside the initial crop
-cannot be detected from Lua and requires the matrix below.
+## Weapon navigation result
 
-The item-specific icon remains visible until item identity is resolved and the protected model initialization
-finishes without a Lua error. Missing item data, an identity mismatch, a missing preset/model, or a failed protected
-model call leaves that exact item's icon in place. A silent native `TryOn` failure has no programmatic signal; if PTR
-finds a category or item family that cannot render reliably, keep its icon and record the unsupported family rather
-than accepting a blank or unrelated portrait.
+Main Hand, Off Hand, and Ranged already had complete module support: XML wire
+IDs 11/12/13, `MainHandSlot`/`SecondaryHandSlot`/`RangedSlot` inventory names,
+the common click handler, catalog requests, and server mappings to
+`EQUIPMENT_SLOT_MAINHAND`, `EQUIPMENT_SLOT_OFFHAND`, and
+`EQUIPMENT_SLOT_RANGED`. No intentional weapon-category disable was present.
 
-The source-item entry, selected slot, selected tile, selection identity, and generation token are all rechecked by
-item-info and model-update callbacks. Switching slots or appearances invalidates the old generation before the next
-render. During the bounded 0.25-second native initialization window, the selected source item remains the final
-`TryOn` writer so late `SetUnit` initialization cannot restore equipped gear over it.
+Their horizontal row overlaps the mouse-enabled large character preview. The
+preview could receive hit testing above those center buttons, unlike most
+side-column slots. Equipment-slot initialization now puts every slot button one
+frame level above the preview model. The remaining visible model area continues
+to handle drag rotation. No server or collection behavior changed.
 
-## Exact PTR procedure
+## Automated validation
 
-### Prepare and publish
+Run from the module root:
 
-1. Use an isolated PTR checkout and record the module revision, active Content Manager build, client package hash,
-   character race/sex/class, client build, resolution, and UI scale. Do not target production.
-2. Run from the module root:
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py'
+python3 content/build_epf.py
+sha256sum content/mod-native-transmog.epf
+python3 content/build_epf.py
+sha256sum content/mod-native-transmog.epf
+python3 content/build_epf.py --check
+```
 
-   ```bash
-   python3 -m unittest discover -s tests -p 'test_*.py'
-   python3 content/build_epf.py
-   sha256sum content/mod-native-transmog.epf
-   python3 content/build_epf.py
-   sha256sum content/mod-native-transmog.epf
-   python3 content/build_epf.py --check
-   ```
+The tests assert that only Head has a 3D framing entry, unsupported categories
+retain icons, stale callbacks remain rejected, only one catalog model exists,
+weapon buttons sit above the mouse-enabled preview, clicks use the shared slot
+handler, and all three client/server slot mappings remain connected. These are
+source and lifecycle contracts, not proof of client pixels or hit testing.
 
-   The two hashes must match.
-3. Publish `content/mod-native-transmog.epf` through the existing FrameForge → EPF → Content Manager → Portalkeeper
-   protected-FrameXML pipeline. Do not install an addon or edit a generated MPQ.
-4. Launch the isolated build-12340 PTR client with Lua errors visible. Interact with a native Warpweaver; no script,
-   slash command, or manual portrait activation is part of acceptance.
+## Required PTR checks
 
-### Validate every category
+1. Select two different Head appearances, including one initially uncached.
+   Confirm the existing crop, exact item identity, rapid-selection behavior,
+   and cleanup on page/slot/close transitions remain correct.
+2. Visit every non-Head category and click multiple appearances. Confirm the
+   selected tile remains its normal item icon and never presents the character's
+   head as the selected equipment.
+3. With compatible physical items equipped, click Main Hand, Off Hand, and
+   Ranged. Confirm each selection highlight moves, its title changes, and its
+   catalog request completes. A relic class should retain the existing ranged
+   unavailability message.
+4. Drag the uncovered character preview before and after weapon navigation to
+   confirm rotation still works. Recheck Apply, Remove, Hide, pagination,
+   Collections, Saved Sets, and the EPF deployment path.
 
-5. For each row below, equip a compatible physical item, select the Wardrobe slot, and click at least three visually
-   distinct collected appearances. Capture the selected icon and portrait after each click. A passing portrait must
-   match that source item and emphasize the named region without overflowing into neighboring tiles.
-
-   - [ ] Head — helmet/headpiece; confirm the accepted crop is unchanged.
-   - [ ] Shoulders — both shoulder pieces visible where the model geometry permits.
-   - [ ] Chest — chest or robe centered on the torso.
-   - [ ] Shirt — shirt design centered on the torso.
-   - [ ] Tabard — tabard design centered on the torso.
-   - [ ] Wrists — both bracers/forearms recognizable.
-   - [ ] Hands — both gloves/gauntlets recognizable.
-   - [ ] Waist — belt and buckle centered.
-   - [ ] Legs — leg armor fills the tile without feet/torso becoming the focus.
-   - [ ] Feet — both boots recognizable.
-   - [ ] Back — cloak shown from behind; verify rear orientation on short and long cloaks.
-   - [ ] Main Hand — test one-hand and two-hand weapons; selected weapon is recognizable.
-   - [ ] Off Hand — separately test a one-hand weapon, shield, and held-in-offhand item.
-   - [ ] Ranged — separately test a bow, gun, and crossbow; test thrown/fishing appearances if the catalog offers them.
-
-6. Repeat step 5 on at least one short race and one tall/wide race, both sexes where available. Record clipping,
-   occlusion, empty space, and whether texture-only pieces remain legible. Tune only the relevant preset; do not alter
-   tile/window dimensions or the accepted Head values.
-
-### Identity, lifecycle, and fallback regressions
-
-7. Enable `/nativetransmogportraitdebug`, click two known look-alike variants and verify each diagnostic reports its
-   own appearance ID, source item ID, resolved item link, and matching `tryOnItemId`.
-8. Click 10 appearances rapidly in one category, then switch categories during the 0.25-second initialization
-   window. Only the last selected tile may contain a model; every prior tile must restore its own icon, with no late
-   model jump or unrelated equipment.
-9. Page forward/back, change slots, select Hide, close/reopen the Wardrobe, unequip the target, and reset the main
-   preview. Each action must clear the catalog portrait cleanly. Hide and unavailable/relic slots remain icon/UI-only.
-10. Test a normally uncached source item after clearing the client item cache by the PTR's approved procedure. Its
-    item-specific icon must remain until item data resolves; an identity mismatch or Lua error must never reveal a
-    stale model.
-11. Rotate and reset the large character preview before and after catalog selections. Confirm it does not rotate,
-    dress, clear, move, or otherwise share state with the tile portrait. Repeat in Collections/Appearances and Saved
-    Sets and confirm those previews are unchanged.
-12. Recheck Apply, Remove, Hide, pagination, equipment-slot selection, Saved Sets, acquisition/ownership, tooltips,
-    and the purple selected-tile accent. No server, database, NPC, protocol, or transmog behavior should differ.
-
-For each category, record **implemented framing result**, **visually verified result**, tested item entries, race/sex,
-screenshots, and any item family left on icon fallback. Automated tests establish configuration and lifecycle only;
-they do not establish that any new crop looks correct in the client.
+Automated tests cannot establish successful visual framing or native hit
+testing. Head and the three restored weapon buttons still require this PTR
+verification; the other categories intentionally require no 3D framing check.

@@ -98,6 +98,21 @@ class PhaseFourBContracts(unittest.TestCase):
         resolver = WARDROBE[WARDROBE.index("WardrobeService::ResolveSlot"):WARDROBE.index("CollectionFilter")]
         self.assertEqual(resolver.count("case "), 14)
 
+    def test_weapon_buttons_are_above_mouse_enabled_preview_and_navigate(self):
+        loader = LUA[LUA.index("function NativeTransmog_EquipmentSlot_OnLoad"):
+                     LUA.index("function NativeTransmog_EquipmentSlot_OnClick")]
+        click = LUA[LUA.index("function NativeTransmog_EquipmentSlot_OnClick"):
+                    LUA.index("function NativeTransmog_EquipmentSlot_OnEnter")]
+        self.assertIn("button:SetFrameLevel(NativeTransmogFramePreviewPanelModel:GetFrameLevel()+1)", loader)
+        self.assertIn("NativeTransmog_SelectSlot(wireSlot)", click)
+        for wire_slot, inventory_name, server_slot in (
+                (11, "MainHandSlot", "EQUIPMENT_SLOT_MAINHAND"),
+                (12, "SecondaryHandSlot", "EQUIPMENT_SLOT_OFFHAND"),
+                (13, "RangedSlot", "EQUIPMENT_SLOT_RANGED")):
+            self.assertIn(f'id="{wire_slot}"', XML)
+            self.assertIn(f'"{inventory_name}"', LUA)
+            self.assertRegex(WARDROBE, rf"case {wire_slot}: return {server_slot};")
+
     def test_equipment_tooltips_are_native(self):
         self.assertIn('GameTooltip:SetInventoryItem("player",button.inventorySlot)', LUA)
         self.assertIn('return "Appearance: Hidden"', LUA)

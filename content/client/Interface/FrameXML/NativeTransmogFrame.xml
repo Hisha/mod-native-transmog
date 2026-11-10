@@ -272,9 +272,9 @@
             <Size x="586" y="353" /><Anchors><Anchor point="TOPLEFT"><Offset x="0" y="0" /></Anchor></Anchors>
             <ScrollChild><Frame name="$parentChild"><Size x="566" y="353" /></Frame></ScrollChild>
           </ScrollFrame>
-          <!-- Build 12340 does not expose SetClipsChildren. Keep one reusable,
-               conservatively framed viewport on the fixed browser panel and
-               move it over the selected Head tile only. -->
+          <!-- Build 12340 does not expose SetClipsChildren or a verified way
+               to pan camera 0 away from the head. Keep one reusable viewport
+               for the PTR-verified Head portrait; other slots retain icons. -->
           <DressUpModel name="NativeTransmogCatalogPortraitModel" hidden="true" enableMouse="false">
             <Size x="84" y="111" />
             <Anchors><Anchor point="TOPLEFT" /></Anchors>

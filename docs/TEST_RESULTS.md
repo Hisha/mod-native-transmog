@@ -1,36 +1,34 @@
 # Test results
 
-## Equipment-focused catalog portraits
+## Shared portrait camera fallback and weapon navigation
 
 Test date: 2026-11-10.
 
 ### Passed
 
-- Extended the existing single reusable catalog `DressUpModel` from Head to all 14 module Wardrobe slots with one
-  data-driven framing table. The PTR-accepted Head camera, facing, rotation, scale `1.30`, and position
-  `(0,-0.13,0)` are unchanged. Back uses rear-facing `pi`; main hand, off hand/shields/held items, and ranged
-  appearances use the same exact-source `TryOn` path with asymmetric equipment-focused presets.
+- Removed the unverified non-Head camera presets after PTR showed they all remained focused on the head. The one
+  reusable model and PTR-accepted Head camera, facing, rotation, scale `1.30`, and position `(0,-0.13,0)` are
+  unchanged. Every non-Head category now retains its normal item icon.
+- Restored click access to Main Hand, Off Hand, and Ranged by putting equipment buttons above the overlapping
+  mouse-enabled preview model. Existing wire IDs, slot mappings, catalog queries, and server support are unchanged.
 - Preserved exact source-link verification, clear/`SetUnit`/`Undress`/`TryOn` order, bounded delayed reapplication,
   generation invalidation, item-specific icon fallback, the independent main character preview, Collections,
   Saved Sets, window/tile dimensions, purple selection accent, and all server/database/application behavior.
 - Full Lua/XML/module suite: `python3 -m unittest discover -s tests -p 'test_*.py'`
   - 311 tests passed.
-  - Coverage includes all category presets, unchanged Head framing, rear-facing Back, weapons/shields/ranged,
-    exact source identity, rapid selection, category switching, stale item/model callbacks, icon fallback, one XML
-    model, and main-preview/Collections isolation.
+  - Coverage includes Head-only 3D framing, icon fallback for every other slot, exact source identity, rapid
+    selection, stale callbacks, one XML model, weapon hit-test ordering and navigation mappings, and preview isolation.
 - Deterministic EPF verification:
   - Four members; two consecutive builds were byte-for-byte identical and `python3 content/build_epf.py --check`
     passed.
-  - SHA-256: `8e655a3affba0e159e58d4df8e15826f40d1dad675e3da9e85a788b55c2b8dd4`.
+  - SHA-256: `91231edbf3a4177c9ece5fbca9a0172ebe33da2431cffdb58cbaaa968b32141d`.
 
 ### Not run or not proven
 
-No build-12340 client or PTR deployment is available in this workspace. Only Head is visually verified. Shoulders,
-chest, shirt, tabard, wrists, hands, waist, legs, feet, Back, main hand, off hand, shields/held items, and ranged
-framing require the category and race/sex matrix in
-[`EQUIPMENT_PORTRAITS_PTR_VALIDATION.md`](EQUIPMENT_PORTRAITS_PTR_VALIDATION.md). In particular, Lua cannot report
-whether `TryOn` held or sheathed a weapon, whether texture-only armor is legible at the crop, or whether native model
-geometry silently failed to render. No deployment, commit, or push was performed.
+No build-12340 client or PTR deployment is available in this workspace. Automated tests do not prove that the Head
+crop remains visually correct or that native hit testing now reaches all three weapon buttons. Those checks remain
+in [`EQUIPMENT_PORTRAITS_PTR_VALIDATION.md`](EQUIPMENT_PORTRAITS_PTR_VALIDATION.md). No deployment, commit, or push
+was performed.
 
 ## Single-tile portrait framing correction
 

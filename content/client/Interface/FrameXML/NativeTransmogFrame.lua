@@ -27,27 +27,13 @@ local catalogPortraitDiagnostics = false
 -- the head centered; Y retains the verified camera-0 depth.
 local PORTRAIT_CAMERA_SECONDS, PORTRAIT_MODEL_SCALE = .25, 1.30
 local PORTRAIT_MODEL_X, PORTRAIT_MODEL_Y, PORTRAIT_MODEL_Z = 0, -.13, 0
--- Build 12340 exposes no model bounds, field-of-view, portrait zoom, or
--- isolated item-model API. These presets therefore crop the dressed player
--- model with the verified camera-0 controls. HEAD is the PTR-verified preset
--- above and must remain unchanged; the other presets are initial PTR tuning
--- values for their body region or held equipment. BACK turns the player by
--- pi so cloak geometry and textures face the camera.
+-- Build 12340 exposes model transforms, but no model bounds, field-of-view,
+-- portrait zoom, camera-target, or verified viewport-pan API. PTR confirms
+-- that SetPosition-based non-Head presets still render the character's head.
+-- Keep the verified Head portrait only; every other category retains its
+-- normal item icon instead of presenting a misleading head portrait.
 local CATALOG_PORTRAIT_FRAMING = {
- HEAD={camera=0,facing=0,rotation=0,scale=PORTRAIT_MODEL_SCALE,x=PORTRAIT_MODEL_X,y=PORTRAIT_MODEL_Y,z=PORTRAIT_MODEL_Z},
- SHOULDERS={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=.18},
- SHIRT={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=.55},
- CHEST={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=.55},
- WAIST={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=1.05},
- LEGS={camera=0,facing=0,rotation=0,scale=.85,x=0,y=-.13,z=1.45},
- FEET={camera=0,facing=0,rotation=0,scale=1.00,x=0,y=-.13,z=2.15},
- WRISTS={camera=0,facing=0,rotation=0,scale=.78,x=0,y=-.13,z=.58},
- HANDS={camera=0,facing=0,rotation=0,scale=.82,x=0,y=-.13,z=.68},
- BACK={camera=0,facing=math.pi,rotation=math.pi,scale=.90,x=0,y=-.13,z=.62},
- MAIN_HAND={camera=0,facing=.35,rotation=.35,scale=.72,x=.20,y=-.13,z=.72},
- OFF_HAND={camera=0,facing=-.35,rotation=-.35,scale=.72,x=-.20,y=-.13,z=.72},
- RANGED={camera=0,facing=.35,rotation=.35,scale=.68,x=.18,y=-.13,z=.78},
- TABARD={camera=0,facing=0,rotation=0,scale=1.05,x=0,y=-.13,z=.55}
+ HEAD={camera=0,facing=0,rotation=0,scale=PORTRAIT_MODEL_SCALE,x=PORTRAIT_MODEL_X,y=PORTRAIT_MODEL_Y,z=PORTRAIT_MODEL_Z}
 }
 -- The retail reconstruction keeps a fixed six-by-three viewport. Configured
 -- catalog pages larger than 18 continue in the existing scroll child.
@@ -1004,6 +990,12 @@ function NativeTransmog_EquipmentSlot_OnLoad(button)
  button.selection=_G[button:GetName().."Selection"]
  button.transmogMark=_G[button:GetName().."TransmogMark"]
  button.hiddenMark=_G[button:GetName().."HiddenMark"]
+ -- The center weapon row overlaps the mouse-enabled preview model. Keep all
+ -- slot buttons above that model so Main Hand, Off Hand, and Ranged receive
+ -- their clicks while the uncovered model area still supports rotation.
+ if NativeTransmogFramePreviewPanelModel then
+  button:SetFrameLevel(NativeTransmogFramePreviewPanelModel:GetFrameLevel()+1)
+ end
  updateEquipmentSlot(wireSlot)
 end
 function NativeTransmog_EquipmentSlot_OnClick(button)
