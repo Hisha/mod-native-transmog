@@ -249,6 +249,7 @@ void SetCatalog::Initialize()
     if (QueryResult result = WorldDatabase.Query(
         "SELECT `v`.`item`, `v`.`entry`, `c`.`name`, `v`.`ExtendedCost` FROM `npc_vendor` `v` "
         "JOIN `creature_template` `c` ON `c`.`entry` = `v`.`entry` "
+        "WHERE `v`.`item` > 0 "
         "ORDER BY `v`.`item`, `c`.`entry`"))
     {
         do
