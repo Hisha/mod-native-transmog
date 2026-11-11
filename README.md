@@ -1,111 +1,108 @@
-# mod-native-transmog
+# Native Transmog for AzerothCore
 
-`mod-native-transmog` is an independently authored, MIT-licensed native AzerothCore module and protected-FrameXML package for WoW 3.3.5a build 12340. It does not use a standalone addon and does not modify `azerothcore/mod-transmog`.
+**`mod-native-transmog`** brings appearance collection, equipment transmogrification, and saved outfits to **World of Warcraft: Wrath of the Lich King 3.3.5a (build 12340)**. It is an independently authored, MIT-licensed AzerothCore module with a native, protected-FrameXML interface.
 
-Phases 1–3C provide the preview UI, NPC authorization, persistent collection, quest collection/backfill, and server-side appearance engine. Phase 3D connects them. Phase 4A adds every visually relevant slot and Hide Appearance; Phase 4B presents them as a native paper doll. Phase 4C adds persisted-unlock chat notifications and authoritative appearance details to wardrobe and CharacterFrame tooltips. Phase 5A adds browsing and preview for authentic gameplay equipment sets. Player-created custom sets add character-owned named canonical appearance configurations, in-place Collections editing/preview, and atomic NPC-gated application without introducing a second transmog engine. See [custom appearance sets](docs/CUSTOM_APPEARANCE_SETS.md).
+Players can collect appearances through gameplay, browse them in **Collections → Appearances**, and visit a **Warpweaver** to preview and apply appearances without changing their equipped items or stats. Custom outfits can be saved, edited, previewed, and applied together.
 
-## Phase 5A equipment sets
+The project does **not** install a standalone WoW addon, patch AzerothCore's core, or depend on `mod-transmog`. Client content is distributed through the existing **EPF → mod-content-manager → Portalkeeper** pipeline.
 
-The read-only set browser is registered as the `Appearances` page under Content Manager's top-level Collections surface. It is a separate large frame from the NPC wardrobe: the left side lists complete and incomplete armor sets, the selected set's item icons and collection markers run across the preview top, and the right side previews the complete set on a `DressUpModel`. The frame contains no equipment-slot paper doll or apply/remove actions. The explicit reviewed catalog contains 263 Blizzard class-tier and PvP ItemSet identities covering Classic Tiers 1–3, TBC Tiers 4–6 plus level-70 honor/arena sets, and Wrath Tiers 7–10 plus arena sets. Distinct installed appearance variants remain distinct while identical composite appearances are deduplicated. Loaded DBC/templates remain authoritative for membership, names, and race/faction eligibility. Acquisition details are appended to native item tooltips; unresolved paths remain honestly labeled. Browsing and preview require no NPC session, while every mutation remains in the separate Transmogrifier-authorized wardrobe. See [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
+## Features
 
-## Phase 4C notifications and tooltips
+| Feature | Description |
+| --- | --- |
+| Persistent appearance collection | Unlock eligible armor and weapon appearances from acquired/equipped items and completed quest rewards. |
+| Account-wide or character-specific collection | Choose the collection scope through configuration; switching scopes does not erase either collection. |
+| Collections browser | Browse collected appearances and preview Blizzard equipment sets, including incomplete sets. |
+| Native Transmogrify window | A character paper doll, equipment-slot catalogs, previews, and apply/remove actions, opened through an authorized NPC. |
+| Search and pagination | Search the **entire compatible collection for the selected slot** before pagination, not just the visible page. |
+| Hide Appearance | Hide supported equipment appearances and restore their original look. Weapon hiding is optional and disabled by default. |
+| Saved custom outfits | Create, edit, and save named outfits; load them into the preview and apply a complete outfit with **Apply Outfit**. |
+| Compatibility enforcement | Server-side checks for collection ownership, class/race eligibility, armor type, weapon grouping, handedness, and equipped-slot compatibility. |
+| Notifications and tooltips | Announce newly saved appearances and show applied/hidden state on supported equipped-item tooltips. |
+| GM administration | NPC registration, collection diagnostics, controlled quest-history backfill, and appearance diagnostics. |
 
-`CollectionService` emits `Appearance saved: <item name>` through AzerothCore's normal system-message chat path only after a previously absent appearance identity is synchronously inserted and read back from `native_transmog_collection`. The same centralized rule covers item storage, inventory transfer, successful first equip, and live quest reward collection. Cache/unique-key checks suppress duplicates and repeated equips in either account-wide or character-specific scope. Collection-disabled paths, failed persistence, application/removal/hiding, and explicit historical quest backfills emit nothing. There is no notification configuration or acquisition-specific notification hook.
+### Supported equipment slots
 
-Equipped-item tooltips show no extra line for original state, `Appearance: Hidden` for effective hidden state, or `Transmogrified to: <name>` for an applied override. The name comes from the persisted override's canonical `appearance_item`, not the physical item or display ID. The server adds that entry and its item-template name to the existing version-2 `STATE` response; no appearance table or database migration is added.
+Head, Shoulders, Shirt, Chest, Waist, Legs, Feet, Wrists, Hands, Back, Main Hand, Off Hand, Ranged, and Tabard. Necklaces, rings, and trinkets are not appearance slots. Ranged/relic behavior depends on the equipped item and the client's supported slot behavior; relic appearances cannot be customized.
 
-The protected FrameXML installs a narrow post-hook on `PaperDollItemSlotButton_OnEnter`, leaving Blizzard's normal item tooltip construction and comparison tooltips intact. It also uses the same helper for wardrobe slots and checks existing tooltip lines before appending. On `PLAYER_ENTERING_WORLD` (including `/reload`) the client sends the authenticated-self, read-only `SYNC` request, which requires no Transmogrifier session and returns token-zero state for all supported equipped slots. Equipment changes push a token-zero update for the affected slot. Apply, Hide, Remove, and catalogs retain their NPC-session and snapshot authorization. This makes persisted state available to CharacterFrame before the wardrobe is opened.
+Armor generally requires the same armor subclass and visual slot, with chest/robe interchange. One-handed swords, axes, and maces share a compatibility group; two-handed swords, axes, maces, and polearms share another. These groups do not cross handedness. Shields remain shields. The server makes the final eligibility decision.
 
-## Phase 4B native paper doll
+## How to use it
 
-The wardrobe uses a local equipment-slot template built on Blizzard's `ItemButtonTemplate`, stock inventory-slot textures returned by `GetInventorySlotInfo`, live equipped icons from `GetInventoryItemTexture`, `GameTooltip:SetInventoryItem`, dialog/tooltip borders, rotation button art, and `DressUpModel`. It does not inherit `PaperDollItemSlotButtonTemplate`: that template's handlers own CharacterFrame equip, drag, event, and gear-flyout state. The local template retains the native icon treatment while making every click wardrobe-only. See [Phase 4B architecture](docs/PHASE4B_ARCHITECTURE.md).
+### 1. Collect appearances
 
-The fourteen visual slots form left and right columns around the model; main hand, off hand, and ranged form the familiar bottom row. Empty usable slots show Blizzard's native empty-slot texture and explain that an item must be equipped. They never request a catalog or enable Apply/Remove. The client uses WotLK's `UnitHasRelicSlot("player")` convention to render the non-dressable ranged/relic position inactive without a class-name exception list and explains that relic appearances cannot be customized. Server compatibility remains authoritative for every item and appearance.
+Eligible appearances unlock as items enter your inventory or are equipped. Completing a quest can also unlock the eligible appearances from its offered rewards, subject to configuration. Newly persisted unlocks produce an `Appearance saved: <item name>` system message. Previously collected appearances do not generate duplicate notifications.
 
-The server sends additive version-2 `STATE` replies for equipped item instances at read-only world-entry synchronization, equipment changes, and authorized wardrobe open. The paper doll shows a small stock ready-check marker for an applied appearance and stock pass marker for hidden state; original items have no marker. Catalog `PAGE` replies refresh the selected marker after Apply, Hide, or Remove. These indicators never follow a local preview selection.
+Historical quest rewards are **not** scanned automatically. An authorized GM can preview and run a limited backfill for a selected online character; see [quest collection design](docs/PHASE3B_ARCHITECTURE.md).
 
-## Phase 4A full slots and Hide Appearance
+### 2. Browse Collections
 
-The supported AzerothCore equipment slots are Head, Shoulders, Shirt (`EQUIPMENT_SLOT_BODY`), Chest, Waist, Legs, Feet, Wrists, Hands, Back, Main Hand, Off Hand, Ranged, and Tabard. Neck, fingers, and trinkets are excluded. Catalog filtering and application continue through the Phase 3C compatibility validator, including exact armor subclass rules, chest/robe interchange, grouped melee weapons, strict handedness, and player eligibility.
+Open the **Appearances** page under Collections to browse and preview collected appearances and equipment sets. The equipment-set browser includes a reviewed catalog of 263 Blizzard class-tier and PvP set identities from Classic, The Burning Crusade, and Wrath of the Lich King, subject to the installed game data.
 
-Every supported catalog begins with a special **Hide Appearance** tile when hiding is permitted. It is independent of collection ownership, remains available for an empty collection, and does not consume a collected-appearance page position. Hide is a separate authenticated `HIDE` request using the same NPC session and item-GUID-bound snapshot as Apply and Remove. Hide and Restore Original are free; ordinary application pricing remains unchanged for this phase.
+Collections browsing does not require a Warpweaver. It is not a substitute for NPC authorization when applying an appearance to equipped gear. Custom sets can also be managed from the Collections interface. See [custom appearance sets](docs/CUSTOM_APPEARANCE_SETS.md) and [equipment-set data design](docs/PHASE5A_DATA_DESIGN.md).
 
-`native_transmog_item_override.override_state` distinguishes a collected appearance (`0`) from explicit hidden state (`1`). Existing rows migrate as state `0`. A hidden row retains the real item-instance GUID and owner but stores no fake appearance identity. Rendering writes zero only to the public visible-item entry field after the core has populated the real item and enchant fields; the item template, inventory record, stats, enchantments, durability, and combat behavior are untouched. The mirror-image hook returns display `0` for hidden armor. Removing the row and refreshing the slot restores the physical item's entry.
+### 3. Transmogrify equipment
 
-Weapon-slot hiding—including shields and held-in-off-hand items because they occupy `EQUIPMENT_SLOT_OFFHAND`—is controlled by the single default-off `NativeTransmog.HideWeapons` setting. When disabled, the tile is omitted for main hand, off hand, and ranged; the server independently rejects `HIDE`; and retained hidden-weapon rows render as the real item. Configuration reload refreshes online visible equipment but never deletes those rows.
+Visit a **Warpweaver — Transmogrifier**. The module installs its own NPC (creature entry `14999992`) at nine default city locations.
 
-## Phase 3D native wardrobe integration
+In the Transmogrify window:
 
-Protected FrameXML and the server exchange version-5 `NTRANSMOG` addon messages over a stock `LANG_ADDON` self-whisper. Version 5 adds an NPC-catalog search term and filtered result metadata plus preview/save operations backed by the existing custom-set service. The client uses build-12340 `SendAddonMessage`; the Playerbot core exposes the authenticated message through `PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT`, where the module consumes only its exact protocol. Replies arrive through `CHAT_MSG_ADDON`. This requires no standalone addon, custom opcode, chat command, core patch, Content Manager change, or Portalkeeper change. See the [transport decision](docs/PHASE3D_TRANSPORT_DESIGN.md).
+1. Choose an equipped slot on the character paper doll.
+2. Browse or search the collected appearances compatible with that slot. Search is applied across all matching results **before** pages are formed.
+3. Select an appearance to preview it, then use **Apply Appearance** to change that slot.
+4. Use **Remove Appearance** to restore the item's original look, or **Hide Appearance** where supported.
 
-Catalog pages come from `CollectionService` using the configured account or character scope. The composite identity remains `(display ID, item class, item subclass, inventory type)`. A startup-built item-template index selects the lowest-entry representative that passes the shared Phase 3C validator for the current player and equipped target, so the original physical item is not required and a restricted duplicate cannot hide a legitimate representative.
+Selecting an appearance or using **Reset Preview** does not modify equipped gear. The server validates application requests against the live NPC session, equipped item, and owned collection.
 
-Saved custom outfits selected in the NPC window remain preview-only until the player clicks **Apply Outfit**. That
-button sends one server-authoritative saved-set request; the server reloads the owned set, validates every explicit
-appearance or hide selection, and commits all applicable item-instance overrides transactionally. Empty explicitly
-hidden slots are already satisfied, while genuinely unspecified slots remain unchanged.
+### 4. Save and apply an outfit
 
-Each bounded page is tied to a server-issued nonce, NPC session, equipment slot, and item-instance GUID. Apply and Remove revalidate that snapshot and then call the existing Phase 3C `ApplicationService`; equipment changes invalidate it. The UI separately displays equipped, applied, and previewed states. Reset Preview and Close send no mutation request. `/wardrobe` and `/nativetransmog` remain preview-only because they have no server token.
+Build a look by selecting appearances across multiple slots, then save it as a named custom outfit. You can also manage saved custom sets in Collections.
 
-## Phase 3C appearance application
+To wear a saved outfit:
 
-The application service resolves the equipped target and source template entirely on the server. It requires either an immediately revalidated Phase 2 NPC session or an RBAC-protected GM diagnostic operation, verifies ownership in the authenticated account/character collection, and checks class, race, required skill/spell, armor/weapon proficiency, subclass, and inventory-slot compatibility before writing anything.
+1. Open Transmogrify at a Warpweaver.
+2. Choose the saved outfit from the dropdown.
+3. Inspect the complete character preview.
+4. Click **Apply Outfit** to apply the saved selections together.
 
-Armor requires the same subclass and visual slot, with chest/robe interchange. One-handed axes, maces, and swords form one compatibility group; two-handed axes, maces, swords, and polearms form another. The groups never cross handedness. Shields remain shields, while other weapon and ranged categories retain their exact-subclass and placement behavior. The legacy handedness settings remain parsed for configuration compatibility but no longer broaden eligibility. Persistence is keyed to the real item-instance GUID in `native_transmog_item_override`; the item's stats and gameplay identity never change.
+**Selecting an outfit only previews it**; it does not automatically apply it. Apply Outfit is a separate server-authoritative action that reloads and validates the owned saved set. Explicitly hidden slots are respected, while **unspecified slots remain unchanged**. Equipped item IDs, statistics, enchantments, and gameplay behavior are not replaced by the selected appearances.
 
-Login restoration, ordinary visible-slot refreshes, ownership transfers, permanent item deletion, removal, nearby object-field synchronization, and mirror images use existing Playerbot hooks. No core patch was needed. See [Phase 3C architecture](docs/PHASE3C_ARCHITECTURE.md).
+## Installation
 
-## Phase 3B quest reward collection
+### Requirements
 
-After a successful quest reward transaction, all eligible appearances in the quest's six selectable and four guaranteed WotLK reward fields are collected. The character still receives only the selected choice plus normal guaranteed items. Collection ignores class, race, armor/weapon proficiency, skills, and equip requirements; the Phase 3A resolver still excludes non-visible/non-equipment categories, missing templates, invalid display data, rings, trinkets, and other ineligible items.
+- An AzerothCore **Playerbot-branch** build compatible with the module's hooks and WoW client **3.3.5a build 12340**.
+- A configured `mod-content-manager` deployment supporting managed server resources, `ContentResourceApiV1` (Milestone 2), and the migration `2026_09_25_06_content_managed_server_resources.sql`.
+- The existing `protected-framexml` realm requirement and EPF distribution path through Content Manager and Portalkeeper.
+- AzerothCore addon-message transport enabled (`AddonChannel = 1`). This is the **stock client messaging facility**, not a standalone addon.
 
-The Playerbot `PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST` hook is post-reward on the inspected branch: item delivery, rewarded-state mutation, and `SaveToDB` precede the hook. Accepting, previewing, objective-completing, abandoning, or failing to turn in a quest does not collect offered rewards. Duplicate item entries, shared composite appearances, repeated quests, and appearances already acquired normally are idempotent and preserve first provenance.
+### Server and client setup
 
-Quest unlocks use the same authenticated account/character owner, appearance key, cache, persistence table, and query APIs as Phase 3A. Acquisition categories `4` and `5` distinguish live all-offered-reward enumeration and historical backfill. The additive `source_quest` column records the current quest definition responsible for a new quest-derived row; existing rows remain unchanged with zero. A selected or guaranteed item may already have been recorded by Phase 3A's earlier physical-item hook, in which case its original item-storage provenance remains authoritative.
+1. Install the repository as `modules/mod-native-transmog` in your AzerothCore source tree. **Do not run it alongside `mod-transmog` as a competing appearance writer.**
+2. Apply the module's SQL migrations using the normal AzerothCore database updater. The world migration `2026_11_09_00_native_warpweavers.sql` installs the dedicated Warpweaver template and nine default spawns. Its one-time installation avoids recreating deleted or administrator-modified default NPCs on later runs.
+3. Install `conf/mod_native_transmog.conf.dist` using the module configuration workflow. Review and enable the desired collection, application, and custom-set settings.
+4. In `worldserver.conf`, set:
 
-Historical backfill is never automatic. An authorized in-game GM starts preview or execution for one selected online character (or the GM character), and status reports progress. Only active `character_queststatus_rewarded` rows are accepted as reliable evidence; active quest-log state and achievements are ignored. Processing uses monotonic indexed queries of at most 25 quests every 100 ms. Account-wide execution contributes that one character's history to the shared collection without claiming sibling characters were scanned. Current server quest definitions are authoritative; deleted definitions, unretained history, old reward choices, repeat counts, and historical definition changes cannot be reconstructed. See [Phase 3B architecture](docs/PHASE3B_ARCHITECTURE.md).
+   ```ini
+   AddonChannel = 1
+   ```
 
-## Phase 3A persistent collection
+5. Build and deploy the updated worldserver.
+6. Generate and validate the client EPF:
 
-Eligible visible armor and weapon appearances unlock when an item is newly stored, moved into a character's inventory, or successfully equipped. The equipment path resolves the item actually occupying the server-side equipment slot and is idempotent, so an item already collected through loot, storage, or a quest creates no duplicate. Collection ignores class, race, armor proficiency, weapon proficiency, and required skills: a mage can collect plate and a rogue can collect a two-handed sword. Phase 3C independently enforces compatibility whenever an appearance is applied.
+   ```bash
+   python3 content/build_epf.py
+   python3 content/build_epf.py --check
+   ```
 
-Ownership lives in the character-database table `native_transmog_collection`. Account ownership uses the authenticated `WorldSession` account ID; character ownership uses the server-side character GUID. Both namespaces coexist. Switching scope never merges, copies, or deletes rows, and switching back restores the earlier namespace.
+7. Publish `content/mod-native-transmog.epf` through **mod-content-manager** and distribute/activate it through **Portalkeeper**. Restart the client after updating protected FrameXML.
+8. Restart the worldserver and verify the native Warpweaver is available. For NPC migration and deployment checks, see [Native Warpweaver installation](docs/NATIVE_WARPWEAVER_INSTALLATION.md).
 
-The appearance identity is `(DisplayInfoID, item class, item subclass, inventory type)`. This deduplicates item entries that safely share complete client/category identity while keeping shared display IDs separate where armor/weapon/slot semantics differ. Original source item, acquiring character, timestamp, and acquisition hook category remain attached to the first unlock.
+The EPF contains client UI content only; the module's SQL updater owns server-side Warpweaver installation. The EPF does not install a standalone addon, replace the raw FrameXML TOC, or require a custom network opcode.
 
-Supported central acquisition paths include ordinary loot storage, quest rewards actually received, crafted items, most vendor purchases, mail retrieval, and trades. A focused hook covers vendor purchases equipped directly. There is no startup/login inventory scan; Phase 3B's separate historical command is explicit and selected-character-only. See [Phase 3A architecture](docs/PHASE3A_ARCHITECTURE.md) for exact eligibility, acquisition limitations, schema semantics, performance, Playerbot, and cross-realm details.
+### Configuration
 
-## Phase 2 architecture
-
-The service registry resolves an interacted creature in this order:
-
-1. module-owned Warpweaver template entry `14999992`;
-2. enabled creature-entry registration;
-3. enabled persistent spawn-ID registration.
-
-Entry registration also works for dynamically created creatures. Spawn registration requires AzerothCore's persistent `Creature::GetSpawnId()` and rejects temporary creatures whose spawn ID is zero. Registrations live in the module-owned world table `native_transmog_npc_registration`; `(scope, target_id)` is the primary key, scope `1` means creature entry, scope `2` means spawn ID, and `enabled` retains disabled registrations for audit/re-enablement.
-
-The AzerothCore world updater installs entry `14999992` as neutral, gossip-enabled **Warpweaver — Transmogrifier**, model `19646`, scale/probability `1`, plus one default spawn in each of nine major cities. Installation is transactional, refuses an unrelated entry collision, allocates spawn GUIDs through the actual `creature.guid` auto-increment column, and records a durable one-time marker. Re-running the migration, restarting worldserver, or later updating the module does not duplicate NPCs or restore administrator-modified/deleted defaults.
-
-At startup the existing NPC service validates the installed native template and resolves its creatures as the dedicated service before generic entry/spawn registrations. The dedicated gossip interaction is consumed after sending one native wardrobe authorization; it has no `ScriptName` and does not invoke legacy gossip. Content Manager remains the delivery path for protected FrameXML, but no longer allocates or installs the server-side NPC. See [native Warpweaver installation](docs/NATIVE_WARPWEAVER_INSTALLATION.md).
-
-### Existing NPC services
-
-The module does not change `ScriptName`, gossip rows, or the `npcflag` of existing NPCs. The global creature gossip hook observes a core-validated interaction, sends authorization, and returns control for registered existing creatures, allowing their original gossip/script path to continue. It consumes only the dedicated template's intentionally empty gossip. Vendor-only interactions are covered by `OnPlayerSendListInventory`, and trainer interaction by the corresponding pre-list hook; both independently repeat AzerothCore interaction validation. Quest-giver hello also passes through the creature gossip hook on the inspected branch.
-
-The inspected hook order cannot safely append a new gossip option to every scripted NPC: the global hook runs before AzerothCore clears the menu, while consuming it would suppress the existing creature script. Phase 2 therefore opens the wardrobe immediately on a registered supported interaction instead of replacing or rewriting the NPC's menu. NPCs with no client-interactable service flag cannot initiate an interaction, and the module deliberately does not add one.
-
-## Wardrobe transport and authorization
-
-The server sends a self-whisper with `LANG_ADDON` using prefix `NTRANSMOG`. Stock build-12340 FrameXML receives it as `CHAT_MSG_ADDON`; the protected Lua accepts only protocol version 5, `WHISPER`, the exact prefix, and the player's own sender name. `OPEN` carries an opaque server session token; `CLOSE` carries the same token. Additive `STATE` replies carry server-confirmed per-slot original/applied/hidden state plus the canonical source entry/name. Read-only Collections browsing and character-owned custom-set editing need no NPC session; the slot catalog, slot search, apply/hide/remove, NPC preview loading, and NPC outfit saving require the live server-authorized session. Search is evaluated against the full server-authorized compatible collection before pagination, and only one result page is sent to the client.
-
-This uses the stock addon-message wire protocol without installing an addon, inventing an opcode, or exposing normal chat text. It is also a pattern already supported by the inspected Playerbot branch and other native FrameXML modules in this environment.
-
-The server creates a session only after resolving the actual server-side `Creature*`, confirming it is registered, and calling `GetNPCIfCanInteractWith` for proximity, map, reaction, life-state, control-state, and existence checks. Combat is rejected. Every 500 ms the session is revalidated and is closed when the player moves away, enters combat, the creature disappears, eligibility is removed, the five-minute lifetime ends, or the map changes; logout removes it without sending a packet. The client never supplies an entry or spawn ID.
-
-Addon messages are not cryptographic: arbitrary client Lua can imitate UI traffic. This grants no authority. Every request is associated with the hook-provided authenticated player, requires the live server token, and independently resolves collection ownership, equipped item, canonical source, and compatibility. Snapshot nonces are short-lived, replay-bound, rate-limited, and invalidated by equipment changes.
-
-## Configuration
+The module's authoritative configuration file is **`conf/mod_native_transmog.conf.dist`**. The following are key settings documented by the project; consult the installed file for the full list and exact defaults.
 
 ```ini
 NativeTransmog.Enable = 1
@@ -118,19 +115,18 @@ NativeTransmog.Collection.UnlockOnAcquire = 1
 NativeTransmog.Collection.UnlockAllQuestRewards = 1
 NativeTransmog.Collection.QuestBackfill.Enable = 1
 NativeTransmog.Application.Enable = 1
-NativeTransmog.AllowTwoHandAppearanceOnOneHand = 0
-NativeTransmog.AllowOneHandAppearanceOnTwoHand = 0
+NativeTransmog.CustomSets.Enable = 1
 NativeTransmog.HideWeapons = 0
 NativeTransmog.Wardrobe.PageSize = 24
 NativeTransmog.Wardrobe.RequestCooldownMs = 250
 NativeTransmog.Wardrobe.SnapshotLifetimeMs = 30000
 ```
 
-Collection is account-wide by default. Disabling account-wide mode selects existing/per-character rows without touching account rows. Application can be disabled independently for rendering rollback. The two weapon-direction settings and weapon hiding are independent and default to the conservative disabled policy.
+The `NativeTransmog.CustomSets.Enable` setting is required for the saved-outfit workflow; verify its spelling and default against the current `.conf.dist` before publishing this README. The legacy `NativeTransmog.AllowTwoHandAppearanceOnOneHand` and `NativeTransmog.AllowOneHandAppearanceOnTwoHand` settings remain accepted for configuration compatibility but **do not** override the current weapon grouping and handedness rules.
+
+Collection is account-wide by default. Changing to character-specific scope does not merge or delete account-wide rows. `NativeTransmog.HideWeapons` is disabled by default; this covers main hand, off hand (including shields), and ranged slots.
 
 ## GM commands
-
-Select a creature before using selection-based commands:
 
 ```text
 .nativetransmog npc add entry
@@ -150,58 +146,49 @@ Select a creature before using selection-based commands:
 .nativetransmog appearance info <equipment-slot>
 ```
 
-Add, appearance apply, and quest-backfill execution use AzerothCore's existing NPC-add RBAC permission; removal uses NPC-delete; read-only diagnostics and backfill preview/status use NPC-info. Appearance commands target the selected online player or the executing GM. Ordinary players cannot invoke them. Equipment slots use AzerothCore's zero-based slot values (for example head `0`, main hand `15`, off hand `16`, ranged `17`).
+Select a creature before selection-based NPC commands. Appearance commands operate on the selected online player or the executing GM. Slot arguments use AzerothCore's zero-based equipment slot IDs (for example, Head `0`, Main Hand `15`, Off Hand `16`, Ranged `17`). GM commands use AzerothCore's existing RBAC permissions: NPC-add for adding/application/backfill execution, NPC-delete for removal, and NPC-info for read-only diagnostics/backfill preview and status.
 
-## Installation and PTR deployment
+## Architecture and security
 
-1. Install this repository as `modules/mod-native-transmog` in the isolated Playerbot PTR build. Confirm `mod-transmog` is excluded from that build/load; production remains unchanged.
-2. Apply the normal AzerothCore module SQL updater. The world update `2026_11_09_00_native_warpweavers.sql` installs entry `14999992` and the nine one-time defaults; character-schema migrations remain unchanged. Legacy entry `190010`, legacy tables, and existing appearance data remain untouched.
-3. Install `conf/mod_native_transmog.conf.dist` through the normal module config flow. Ensure AzerothCore's `worldserver.conf` contains:
+The client uses protected FrameXML and stock build-12340 addon messages (`NTRANSMOG` over `LANG_ADDON` self-whisper). The Playerbot branch's existing hooks pass authenticated traffic to the module. No standalone addon, custom opcode, or AzerothCore core patch is needed.
 
-   ```ini
-   AddonChannel = 1
-   ```
+The server—not the client—decides whether an NPC interaction is authorized, an appearance belongs to the player, and a source is compatible with the actual equipped item. Wardrobe requests use a time-limited NPC session and equipment-bound request snapshots; changing equipment invalidates pending slot authorization. Saved outfits are loaded and applied through the same authoritative appearance system, with transactional persistence of applicable overrides.
 
-   The protected native FrameXML wardrobe uses AzerothCore's existing addon-message transport; it does not install or require a standalone addon. Then build worldserver.
-4. Rebuild/verify the EPF:
+The collection's canonical appearance identity is `(display ID, item class, item subclass, inventory type)`. Appearance overrides are attached to the **real item-instance GUID**, not applied by replacing the item. Read-only appearance state also synchronizes to supported CharacterFrame tooltips.
 
-   ```bash
-   python3 content/build_epf.py
-   python3 content/build_epf.py --check
-   ```
+Detailed implementation references:
 
-5. Feed `content/mod-native-transmog.epf` through the existing FrameForge → EPF → mod-content-manager → Portalkeeper pipeline. The package now supplies client content only; no server creature allocation is declared. No content-manager or Portalkeeper code change is required. The existing `protected-framexml` realm requirement remains mandatory.
-6. Restart PTR so AzerothCore loads entry `14999992`, confirm `.nativetransmog npc list` reports the native Warpweaver, and visit all nine installed city spawns. Follow the [deployment and verification checklist](docs/NATIVE_WARPWEAVER_INSTALLATION.md).
+- [Collection architecture](docs/PHASE3A_ARCHITECTURE.md)
+- [Quest rewards and backfill](docs/PHASE3B_ARCHITECTURE.md)
+- [Appearance application](docs/PHASE3C_ARCHITECTURE.md)
+- [Transport design](docs/PHASE3D_TRANSPORT_DESIGN.md)
+- [Native paper doll](docs/PHASE4B_ARCHITECTURE.md)
+- [Equipment-set data design](docs/PHASE5A_DATA_DESIGN.md)
+- [Custom appearance sets](docs/CUSTOM_APPEARANCE_SETS.md)
 
-The checked-in EPF is deterministic Schema 3 content. It adds the XML immediately after stock `DressUpFrame.xml`; it contains no addon directory, addon manifest, raw FrameXML TOC replacement, custom opcode, or executable transformation.
+## Testing
 
-## Development command
-
-`/wardrobe` and `/nativetransmog` remain temporary local preview toggles. They explicitly clear the client authorization token, send no request, and create no server session. They cannot authorize a future application operation.
-
-## Automated checks
+Run the repository's automated checks:
 
 ```bash
 python3 content/build_epf.py --check
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-The checks cover all earlier regressions plus gameplay-set discovery, class/race filtering, grouped weapon compatibility, appearance-identity grouping, source resolution, read-only pagination/detail validation, saved-outfit preview routing, full-set preview contracts, notifications, tooltips, the 14-slot paper doll and weapon navigation, Head-only single-model portraits with icon fallback elsewhere, hidden state, authorization, and EPF determinism. See [test results](docs/TEST_RESULTS.md), the [weapon and saved-outfit PTR checklist](docs/WEAPON_COMPATIBILITY_SAVED_OUTFIT_PTR_VALIDATION.md), the [equipment portrait PTR checklist](docs/EQUIPMENT_PORTRAITS_PTR_VALIDATION.md), and the [Phase 5A data design](docs/PHASE5A_DATA_DESIGN.md).
+The project also has PTR validation guides for [weapon compatibility and saved outfits](docs/WEAPON_COMPATIBILITY_SAVED_OUTFIT_PTR_VALIDATION.md) and [equipment portraits](docs/EQUIPMENT_PORTRAITS_PTR_VALIDATION.md), plus [test results](docs/TEST_RESULTS.md).
 
-## Known limitations and future mobile NPCs
+The saved-outfit workflow has been exercised on PTR: a custom outfit was loaded, previewed, and applied to the actual character, with the underlying item IDs and stats unchanged. Automated checks complement but do not replace gameplay testing across different races, equipment types, and client environments.
 
-- Phase 4C build-12340 client behavior requires PTR validation. Automated contracts and a Playerbot compile/link do not prove live chat delivery, GameTooltip refresh behavior, comparison-tooltip interaction, pixel layout, local/observer models, every race/gender geometry, enchant visuals, relog/restart, or mirror-image behavior.
-- Read-only state covers the player's equipped items in the wardrobe and CharacterFrame only. Bag items, item/chat links, inspection, other players, and arbitrary tooltip sources are intentionally unsupported. If addon channels are disabled, neither wardrobe transport nor CharacterFrame appearance lines can synchronize.
-- Hidden preview uses `DressUpModel:UndressSlot` when the build exposes it. A guarded fallback reconstructs the model from physical item links; on clients without the slot API, that fallback can temporarily show other overridden slots' original appearances until Reset Preview.
-- Phase 2 opens immediately on supported gossip/quest, vendor, and trainer interactions; it cannot safely inject an option into arbitrary scripted gossip on this branch.
-- Client service types that bypass all inspected hooks are not covered. Registration never changes their flags to manufacture an interaction path.
-- Vehicle-passenger creatures are explicitly rejected in Phase 2. Entry resolution itself is location- and spawn-independent, so the registry is suitable for a future mobile Transmogrifier, but passenger interaction and moving-distance/session semantics require dedicated validation before removing this guard.
-- Addon transport requires AzerothCore's addon channel to be enabled and has build-12340's 255-byte message limit; pages are therefore multipart.
-- Backfill can prove only active persisted rewarded rows and uses current quest definitions; it cannot reconstruct missing repeat history, old choices, or historical reward definitions. Offline targets are intentionally unsupported.
-- No favorites, cost system, legacy integration, or migration from `mod-transmog` exists.
+## Scope and limitations
 
-No code change outside this repository is required. The target Content Manager must already include managed server resources and `ContentResourceApiV1` (Milestone 2), and its `2026_09_25_06_content_managed_server_resources.sql` migration must be present before building/activating this EPF.
+- The Collections browser is available without a Warpweaver, but **applying or removing equipped appearances requires an authorized NPC interaction** (or an authorized GM diagnostic command).
+- The wardrobe supports the fourteen visual slots listed above; it does not transmogrify jewelry or trinkets. Relic appearances are not customizable.
+- Item previews use regular item icons in the catalog. The selected Head appearance has a specialized 3D portrait; equivalent close-up rendering for other equipment categories is not a supported feature.
+- CharacterFrame appearance tooltip integration is limited to supported equipped-item slots. It does not extend to bag items, chat links, inspection, or other players' tooltips.
+- Quest-history backfill relies on retained rewarded-quest records and current quest definitions. It cannot reconstruct missing historical choices or deleted quest definitions, and does not operate on offline targets.
+- Registered existing NPCs retain their original gossip/script behavior. Some unsupported interaction types and vehicle-passenger creatures cannot serve as Warpweavers.
+- This is not a migration tool for `mod-transmog`; existing legacy appearance records are not automatically imported.
 
 ## License
 
-All module implementation is independently authored under the [MIT License](LICENSE). No AGPL implementation from `mod-transmog` was copied or adapted. `mod-native-transmog` is the sole appearance writer intended for PTR; production remains unchanged.
+`mod-native-transmog` is independently authored and distributed under the [MIT License](LICENSE). No AGPL implementation from `mod-transmog` was copied or adapted.
