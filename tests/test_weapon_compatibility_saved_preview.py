@@ -13,6 +13,8 @@ WARDROBE = (ROOT / "src/NativeTransmogWardrobe.cpp").read_text()
 LUA = (ROOT / "content/client/Interface/FrameXML/NativeTransmogFrame.lua").read_text()
 ONE_HAND = {0, 4, 7}
 TWO_HAND = {1, 5, 6, 8}
+SAVED_SLOTS = tuple(range(1, 13)) + (14,)
+HIDDEN_SLOTS = {3, 10}
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,40 @@ def catalog(rows, target_subclass, two_hand, query="", cursor=0, page_size=2):
     matches = [row for row in rows if row.collected and row.proficient and
                row.subclass in subclasses and query.lower() in row.name.lower()]
     return matches[cursor:cursor + page_size], len(matches)
+
+
+def saved_fixture():
+    """Representative 13-piece outfit: two hides and only Ranged unspecified."""
+    return {
+        slot: {"state": 1, "entry": 0} if slot in HIDDEN_SLOTS
+        else {"state": 0, "entry": 5000 + slot}
+        for slot in SAVED_SLOTS
+    }
+
+
+def preview_wire_rows(pieces):
+    return [(index, slot, piece["state"], piece["entry"], "ok")
+            for index, (slot, piece) in enumerate(pieces.items(), 1)]
+
+
+def decode_preview(rows):
+    loaded = {}
+    for _, slot, state, entry, result in rows:
+        if result == "ok" and (state == 1 or entry > 0):
+            loaded[slot] = {"is_hide": state == 1, "entry": entry}
+    return loaded
+
+
+def reconstruct_preview(physical, selections):
+    """Model the fallback's baseline-first, selections-second reconstruction."""
+    rendered = dict(physical)
+    for slot, selection in selections.items():
+        if selection["is_hide"]:
+            rendered.pop(slot, None)
+    for slot, selection in selections.items():
+        if not selection["is_hide"]:
+            rendered[slot] = selection["entry"]
+    return rendered
 
 
 class WeaponCompatibilityTests(unittest.TestCase):
@@ -105,11 +141,72 @@ class SavedPreviewTests(unittest.TestCase):
                        (1, 0, "appearance is not collected")) if result == "ok"}
         self.assertEqual(selections, {11: 1001, 12: 1002})
 
+    def test_thirteen_saved_states_survive_wire_decode_with_slot_identity(self):
+        pieces = saved_fixture()
+        decoded = decode_preview(preview_wire_rows(pieces))
+        self.assertEqual(set(decoded), set(SAVED_SLOTS))
+        for slot in SAVED_SLOTS:
+            self.assertEqual(decoded[slot]["entry"], pieces[slot]["entry"])
+
+    def test_hide_and_unspecified_remain_three_distinct_states(self):
+        decoded = decode_preview(preview_wire_rows(saved_fixture()))
+        self.assertTrue(decoded[3]["is_hide"])
+        self.assertTrue(decoded[10]["is_hide"])
+        self.assertNotIn(13, decoded)
+        self.assertNotEqual(decoded.get(13), decoded[3])
+
+    def test_fallback_rebuild_keeps_every_saved_appearance_after_hides(self):
+        decoded = decode_preview(preview_wire_rows(saved_fixture()))
+        physical = {slot: 9000 + slot for slot in range(1, 15)}
+        first = reconstruct_preview(physical, decoded)
+        refreshed = reconstruct_preview(physical, decoded)
+        expected_selected = {slot: 5000 + slot for slot in SAVED_SLOTS
+                             if slot not in HIDDEN_SLOTS}
+        self.assertEqual({slot: first[slot] for slot in expected_selected}, expected_selected)
+        self.assertNotIn(3, first)
+        self.assertNotIn(10, first)
+        self.assertEqual(first[13], physical[13])
+        self.assertEqual(refreshed, first)
+        self.assertEqual((first[11], first[12]), (5011, 5012))
+
+        preview = LUA[LUA.index("local function prepareOutfitModel"):
+                      LUA.index("local function twoLineAppearanceLabel")]
+        self.assertLess(preview.index("prepareOutfitModel(model,selections)"),
+                        preview.index("applyOutfitAppearance(model,wireSlot,selections[wireSlot])"))
+        self.assertIn("NativeTransmog_RebuildModelOutfit(model,NativeTransmogWardrobeState.selections)", LUA)
+        self.assertIn("local current=overrideStates[wireSlot]", preview)
+        self.assertIn("current.state==1", preview)
+        self.assertIn("current.state~=2", preview)
+
+    def test_collections_normal_view_keeps_slot_state_for_tooltips(self):
+        renderer = LUA[LUA.index("renderPieces=function()"):
+                       LUA.index("local function requestSets")]
+        piece_row = LUA.index("local function createPieceRow")
+        tooltip = LUA[LUA.index('row:SetScript("OnEnter"', piece_row):
+                      LUA.index('row:SetScript("OnLeave"', piece_row)]
+        self.assertIn("for wireSlot=1,#SLOT_ORDER", renderer)
+        self.assertIn("piecesBySlot[piece.slot]=piece", renderer)
+        self.assertIn("row.savedSlot=wireSlot", renderer)
+        self.assertIn('slotName.." — Hide Appearance"', tooltip)
+        self.assertIn('slotName.." — Unspecified"', tooltip)
+        self.assertIn('slotName.." — Saved Appearance"', tooltip)
+        self.assertIn('self.savedSlot==10 and "cloak"', tooltip)
+
     def test_completion_errors_and_timeout_clear_request_state(self):
         self.assertIn('piece.result=="ok"', LUA)
         self.assertIn('"; unavailable: "', LUA)
         self.assertIn('operation=="CUSTOMPREVIEW" then NativeTransmogWardrobeState.load=nil', LUA)
         self.assertIn("NativeTransmogWardrobeState.load=nil; pending=nil", LUA)
+
+    def test_preview_load_is_read_only_and_terminates(self):
+        load = LUA[LUA.index("function NativeTransmog_LoadSavedSet"):
+                   LUA.index("local function submitOutfitSave")]
+        self.assertIn('sendRequest("CUSTOMPREVIEW"', load)
+        self.assertNotIn('sendRequest("APPLY"', load)
+        self.assertNotIn('sendRequest("CUSTOMCONFIRM"', load)
+        completion = LUA[LUA.index('elseif command=="CUSTOMPREVIEWEND"'):
+                         LUA.index('elseif command=="CUSTOMPAGE"')]
+        self.assertIn("NativeTransmogWardrobeState.load=nil; pending=nil", completion)
 
 
 if __name__ == "__main__":

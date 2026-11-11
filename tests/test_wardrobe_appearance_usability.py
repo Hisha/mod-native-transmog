@@ -35,11 +35,11 @@ class WardrobeAppearanceUsabilityContracts(unittest.TestCase):
         preview = section("local function applyOutfitAppearance", "local function twoLineAppearanceLabel")
         update = section("function NativeTransmog_FrameUpdate", "function NativeTransmog_OnLoad")
         self.assertIn('local model=getModel(); model:SetUnit("player")', preview)
-        self.assertIn("applyOutfitAppearance(model,wireSlot,NativeTransmogWardrobeState.selections[wireSlot])", preview)
+        self.assertIn("NativeTransmog_RebuildModelOutfit(model,NativeTransmogWardrobeState.selections)", preview)
         self.assertIn("previewRefresh={generation=previewGeneration", preview)
         self.assertIn("refresh.generation~=previewGeneration", update)
         self.assertIn("refresh.generation~=previewGeneration", update)
-        self.assertIn("applyOutfitAppearance(model,wireSlot,NativeTransmogWardrobeState.selections[wireSlot])", update)
+        self.assertIn("NativeTransmog_RebuildModelOutfit(model,NativeTransmogWardrobeState.selections)", update)
         self.assertNotIn('CreateFrame("DressUpModel"', LUA)
         self.assertEqual(XML.count("<DressUpModel"), 3)
 

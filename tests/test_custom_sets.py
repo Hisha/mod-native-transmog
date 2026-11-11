@@ -184,7 +184,8 @@ class PreviewAndUiContractTests(unittest.TestCase):
         layout = LUA[LUA.index("local function positionCustomPieceRow"):LUA.index("renderPieces=function()")]
         renderer = LUA[LUA.index("renderPieces=function()"):LUA.index("local function requestSets")]
         self.assertIn("positionCustomPieceRow(row,wireSlot)", renderer)
-        self.assertIn("selectedSet.custom then positionCustomPieceRow(row,index)", renderer)
+        self.assertIn("if selectedSet and selectedSet.custom then", renderer)
+        self.assertIn("piecesBySlot[piece.slot]=piece", renderer)
         values = re.search(
             r"column=\(index-1\)%(\d+).*?42\+column\*(\d+),-line\*(\d+)",
             layout,

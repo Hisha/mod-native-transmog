@@ -2,6 +2,8 @@
 local PREFIX, VERSION = "NTRANSMOG", "5"
 local SLOT_ORDER = { "HEAD", "SHOULDERS", "SHIRT", "CHEST", "WAIST", "LEGS", "FEET", "WRISTS",
     "HANDS", "BACK", "MAIN_HAND", "OFF_HAND", "RANGED", "TABARD" }
+NativeTransmogSavedSlotNames = { "Head", "Shoulders", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrists",
+    "Hands", "Back", "Main Hand", "Off Hand", "Ranged", "Tabard" }
 local SLOT_INVENTORY_NAMES = { "HeadSlot", "ShoulderSlot", "ShirtSlot", "ChestSlot", "WaistSlot", "LegsSlot",
     "FeetSlot", "WristSlot", "HandsSlot", "BackSlot", "MainHandSlot", "SecondaryHandSlot", "RangedSlot", "TabardSlot" }
 local SLOT_LABELS = { HEAD="Head Appearances", SHOULDERS="Shoulder Appearances", SHIRT="Shirt Appearances",
@@ -329,7 +331,8 @@ end
 local function previewSet()
  local model=getCollectionModel(); model:SetUnit("player")
  if selectedSet and selectedSet.custom then
-  for _,piece in ipairs(setPieces) do if piece.entry and piece.entry>0 then model:TryOn(piece.entry) elseif piece.state==1 and model.UndressSlot then local inventorySlot=getInventorySlot(piece.slot); if inventorySlot then model:UndressSlot(inventorySlot) end end end
+  local selections={}; for _,piece in ipairs(setPieces) do selections[piece.slot]={entry=piece.entry,isHide=piece.state==1} end
+  NativeTransmog_RebuildModelOutfit(model,selections)
  else
   model:Undress()
   for _,piece in ipairs(setPieces) do model:TryOn(piece.entry) end
@@ -344,9 +347,29 @@ local function createPieceRow(index)
  row.state=row:CreateTexture(nil,"OVERLAY"); row.state:SetWidth(26); row.state:SetHeight(3); row.state:SetPoint("BOTTOM",0,2)
  row:SetScript("OnEnter",function(self)
   GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
-  if self.entry and self.entry>0 then GameTooltip:SetHyperlink("item:"..self.entry) else GameTooltip:SetText(self.itemName or "Unspecified slot",1,.82,0,true) end
-  if self.entry and self.entry>0 and not GetItemInfo(self.entry) and self.itemName then GameTooltip:AddLine(self.itemName,1,.82,0,true) end
-  GameTooltip:AddLine(" "); GameTooltip:AddLine("Source",1,.82,0); addTooltipLines(GameTooltip,self.sourceText); GameTooltip:Show()
+  if self.savedSlot then
+   local slotName=NativeTransmogSavedSlotNames[self.savedSlot] or "Slot"
+   if self.savedState==nil then
+    GameTooltip:SetText(slotName.." — Unspecified",1,.82,0,true)
+    GameTooltip:AddLine("This outfit leaves the "..string.lower(slotName).." slot unchanged.",.8,.8,.8,true)
+   elseif self.savedState==1 then
+    local appearanceName=self.savedSlot==10 and "cloak" or string.lower(slotName)
+    GameTooltip:SetText(slotName.." — Hide Appearance",1,.82,0,true)
+    GameTooltip:AddLine("This outfit hides the "..appearanceName.." appearance.",.8,.8,.8,true)
+   elseif self.entry and self.entry>0 then
+    GameTooltip:SetHyperlink("item:"..self.entry)
+    GameTooltip:AddLine(" "); GameTooltip:AddLine(slotName.." — Saved Appearance",1,.82,0,true)
+    if not GetItemInfo(self.entry) and self.itemName then GameTooltip:AddLine(self.itemName,1,.82,0,true) end
+   else
+    GameTooltip:SetText(slotName.." — Saved Appearance",1,.82,0,true)
+   end
+   if customEditing then GameTooltip:AddLine(" "); addTooltipLines(GameTooltip,self.sourceText) end
+  else
+   if self.entry and self.entry>0 then GameTooltip:SetHyperlink("item:"..self.entry) else GameTooltip:SetText(self.itemName or "Unspecified slot",1,.82,0,true) end
+   if self.entry and self.entry>0 and not GetItemInfo(self.entry) and self.itemName then GameTooltip:AddLine(self.itemName,1,.82,0,true) end
+   GameTooltip:AddLine(" "); GameTooltip:AddLine("Source",1,.82,0); addTooltipLines(GameTooltip,self.sourceText)
+  end
+  GameTooltip:Show()
  end)
  row:SetScript("OnLeave",function() GameTooltip:Hide() end)
  if row.RegisterForClicks then row:RegisterForClicks("LeftButtonUp","RightButtonUp") end
@@ -366,7 +389,7 @@ renderPieces=function()
  if customEditing then
   for wireSlot=1,#SLOT_ORDER do
    local piece=customDraftPieces[wireSlot]; local row=pieceRows[wireSlot] or createPieceRow(wireSlot)
-   positionCustomPieceRow(row,wireSlot); row.slot=wireSlot; row.entry=piece and piece.entry or nil; row.itemName=SLOT_ORDER[wireSlot]; row.sourceText="Left-click to choose. Right-click to leave unchanged. Shift-click to hide."
+   positionCustomPieceRow(row,wireSlot); row.slot=wireSlot; row.savedSlot=wireSlot; row.savedState=piece and piece.state or nil; row.entry=piece and piece.entry or nil; row.itemName=NativeTransmogSavedSlotNames[wireSlot]; row.sourceText="Left-click to choose. Right-click to leave unchanged. Shift-click to hide."
    row.icon:SetTexture(piece and piece.state==1 and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or (piece and GetItemIcon(piece.entry)) or (ITEM_CATEGORIES[CUSTOM_SLOT_CATEGORY[wireSlot]] and ITEM_CATEGORIES[CUSTOM_SLOT_CATEGORY[wireSlot]].icon) or "Interface\\Icons\\INV_Misc_QuestionMark")
    row:SetAlpha(piece and 1 or .35); row.state:SetTexture(piece and .15 or .45,piece and .8 or .42,piece and .2 or .36,1); row:Show()
   end
@@ -375,16 +398,26 @@ renderPieces=function()
   NativeTransmogCollectionsFrameSetDescription:SetText("Unspecified slots keep their current appearance")
   return
  end
- local count=#setPieces; local width=count>0 and count*34+(count-1)*5 or 0; local start=(360-width)/2
- for index,piece in ipairs(setPieces) do
-  local row=pieceRows[index] or createPieceRow(index)
-  if selectedSet and selectedSet.custom then positionCustomPieceRow(row,index)
-  else row:ClearAllPoints(); row:SetPoint("LEFT",NativeTransmogCollectionsFramePieceBar,"LEFT",start+(index-1)*39,0) end
-  row.slot=nil; row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
-  row.icon:SetTexture(piece.state==1 and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row:SetAlpha(piece.collected and 1 or .45)
-  row.state:SetTexture(piece.collected and .15 or .65,piece.collected and .8 or .12,piece.collected and .2 or .12,1); row:Show()
+ if selectedSet and selectedSet.custom then
+  local piecesBySlot={}; for _,piece in ipairs(setPieces) do piecesBySlot[piece.slot]=piece end
+  for wireSlot=1,#SLOT_ORDER do
+   local piece=piecesBySlot[wireSlot]; local row=pieceRows[wireSlot] or createPieceRow(wireSlot)
+   positionCustomPieceRow(row,wireSlot); row.slot=nil; row.savedSlot=wireSlot; row.savedState=piece and piece.state or nil; row.entry=piece and piece.entry or nil; row.itemName=NativeTransmogSavedSlotNames[wireSlot]; row.sourceText=piece and piece.source or nil
+   row.icon:SetTexture(piece and piece.state==1 and "Interface\\Buttons\\UI-GroupLoot-Pass-Up" or (piece and GetItemIcon(piece.entry)) or (ITEM_CATEGORIES[CUSTOM_SLOT_CATEGORY[wireSlot]] and ITEM_CATEGORIES[CUSTOM_SLOT_CATEGORY[wireSlot]].icon) or "Interface\\Icons\\INV_Misc_QuestionMark")
+   row:SetAlpha(piece and 1 or .35); row.state:SetTexture(piece and .15 or .45,piece and .8 or .42,piece and .2 or .36,1); row:Show()
+  end
+  for index=#SLOT_ORDER+1,#pieceRows do pieceRows[index]:Hide() end
+ else
+  local count=#setPieces; local width=count>0 and count*34+(count-1)*5 or 0; local start=(360-width)/2
+  for index,piece in ipairs(setPieces) do
+   local row=pieceRows[index] or createPieceRow(index)
+   row:ClearAllPoints(); row:SetPoint("LEFT",NativeTransmogCollectionsFramePieceBar,"LEFT",start+(index-1)*39,0)
+   row.slot=nil; row.savedSlot=nil; row.savedState=nil; row.entry=piece.entry; row.itemName=piece.name; row.sourceText=piece.source
+   row.icon:SetTexture(GetItemIcon(piece.entry) or "Interface\\Icons\\INV_Misc_QuestionMark"); row:SetAlpha(piece.collected and 1 or .45)
+   row.state:SetTexture(piece.collected and .15 or .65,piece.collected and .8 or .12,piece.collected and .2 or .12,1); row:Show()
+  end
+  for index=#setPieces+1,#pieceRows do pieceRows[index]:Hide() end
  end
- for index=#setPieces+1,#pieceRows do pieceRows[index]:Hide() end
  NativeTransmogCollectionsFrameSetTitle:SetText(selectedSet and string.upper(truncateLabel(selectedSet.name or "Armor Set",32)) or "SELECT AN ARMOR SET")
  NativeTransmogCollectionsFrameSetDescription:SetText(selectedSet and (selectedSet.custom and ((selectedSet.total or 0).." saved selections • unspecified slots unchanged") or ((selectedSet.expansion or "").." • "..(selectedSet.category or "PvE").." • "..(selectedSet.family or "Set").."  "..selectedSet.collected.."/"..selectedSet.total)) or "")
 end
@@ -727,24 +760,37 @@ local function applyOutfitAppearance(model,wireSlot,appearance)
  if not appearance then return end
  if appearance.isHide then
   local hiddenSlot=GetInventorySlotInfo(SLOT_INVENTORY_NAMES[wireSlot])
-  if model.UndressSlot then
-   model:UndressSlot(hiddenSlot)
-  else
-   -- Fallback clients rebuild physical links and may temporarily show other slots' originals.
-   model:Undress()
-   for _,slotName in ipairs(SLOT_INVENTORY_NAMES) do
-    local inventorySlot=GetInventorySlotInfo(slotName)
-    if inventorySlot and inventorySlot~=hiddenSlot then
-     local link=GetInventoryItemLink("player",inventorySlot); if link then model:TryOn(link) end
-    end
+  if model.UndressSlot then model:UndressSlot(hiddenSlot) end
+ else model:TryOn(appearance.entry) end
+end
+local function prepareOutfitModel(model,selections)
+ local hiddenSlots={}
+ for wireSlot=1,#SLOT_ORDER do
+  local appearance=selections[wireSlot]
+  if appearance and appearance.isHide then local inventorySlot=GetInventorySlotInfo(SLOT_INVENTORY_NAMES[wireSlot]); if inventorySlot then hiddenSlots[inventorySlot]=inventorySlot end end
+ end
+ if next(hiddenSlots) and not model.UndressSlot then
+  -- Build the physical baseline once, excluding every hidden slot. Applying all
+  -- saved appearances afterward prevents a later hide from erasing earlier slots.
+  model:Undress()
+  for wireSlot,slotName in ipairs(SLOT_INVENTORY_NAMES) do
+   local inventorySlot=GetInventorySlotInfo(slotName); local hiddenSlot=hiddenSlots[inventorySlot]
+   if inventorySlot and inventorySlot~=hiddenSlot then
+    local current=overrideStates[wireSlot]
+    if current and current.state==1 and current.entry and current.entry>0 then model:TryOn(current.entry)
+    elseif not current or current.state~=2 then local link=GetInventoryItemLink("player",inventorySlot); if link then model:TryOn(link) end end
    end
   end
- else model:TryOn(appearance.entry) end
+ end
+end
+function NativeTransmog_RebuildModelOutfit(model,selections)
+ prepareOutfitModel(model,selections)
+ for wireSlot=1,#SLOT_ORDER do applyOutfitAppearance(model,wireSlot,selections[wireSlot]) end
 end
 local function rebuildOutfitPreview()
  previewGeneration=previewGeneration+1
  local model=getModel(); model:SetUnit("player")
- for wireSlot=1,#SLOT_ORDER do applyOutfitAppearance(model,wireSlot,NativeTransmogWardrobeState.selections[wireSlot]) end
+ NativeTransmog_RebuildModelOutfit(model,NativeTransmogWardrobeState.selections)
  model:SetRotation(modelRotation)
  previewRefresh={generation=previewGeneration,untilTime=GetTime()+PORTRAIT_CAMERA_SECONDS}
 end
@@ -1128,7 +1174,7 @@ function NativeTransmog_FrameUpdate()
   local refresh=previewRefresh
   if refresh.generation~=previewGeneration or not NativeTransmogFrame:IsShown() then previewRefresh=nil
   else
-   local model=getModel(); for wireSlot=1,#SLOT_ORDER do applyOutfitAppearance(model,wireSlot,NativeTransmogWardrobeState.selections[wireSlot]) end; model:SetRotation(modelRotation)
+   local model=getModel(); NativeTransmog_RebuildModelOutfit(model,NativeTransmogWardrobeState.selections); model:SetRotation(modelRotation)
    if GetTime()>=refresh.untilTime then previewRefresh=nil end
   end
  end
