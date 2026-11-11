@@ -356,7 +356,8 @@ class PhaseFiveAUiTests(unittest.TestCase):
         reset = LUA[LUA.index("function NativeTransmog_ResetPreview"):LUA.index("function NativeTransmog_SelectSlot")]
         self.assertIn('model:SetUnit("player")', reset)
         self.assertIn('sendRequest("APPLY"', LUA)
-        self.assertIn("Saved Sets...", XML + LUA)
+        self.assertIn('text="Apply Outfit"', XML)
+        self.assertIn('sendRequest("CUSTOMAPPLYOUTFIT"', LUA)
 
     def test_long_set_names_and_piece_icons_fit_collections_layout(self):
         self.assertIn("local function truncateLabel", LUA)

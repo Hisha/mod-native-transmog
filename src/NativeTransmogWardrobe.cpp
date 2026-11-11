@@ -324,10 +324,8 @@ bool WardrobeService::HandleAddonWhisper(Player* player, std::string const& mess
         HandleCustomCancel(player, fields);
     else if (parts[2] == "CUSTOMDELETE" && fields.size() == 2)
         HandleCustomDelete(player, fields);
-    else if (parts[2] == "CUSTOMPREFLIGHT" && fields.size() == 3)
-        HandleCustomPreflight(player, fields);
-    else if (parts[2] == "CUSTOMCONFIRM" && fields.size() == 3)
-        HandleCustomConfirm(player, fields);
+    else if (parts[2] == "CUSTOMAPPLYOUTFIT" && fields.size() == 3)
+        HandleCustomApplyOutfit(player, fields);
     else if (parts[2] == "CUSTOMPREVIEW" && fields.size() == 3)
         HandleCustomPreview(player, fields);
     else if (outfitSaveRequest && parts.size() == 8 && fields.size() == 3)
@@ -671,71 +669,69 @@ void WardrobeService::HandleCustomDelete(Player* player, std::vector<std::uint32
         CustomSetService::ResultName(result) + '\t' + std::to_string(fields[1]));
 }
 
-void WardrobeService::HandleCustomPreflight(Player* player, std::vector<std::uint32_t> const& fields)
+void WardrobeService::HandleCustomApplyOutfit(Player* player, std::vector<std::uint32_t> const& fields)
 {
     std::uint32_t token = fields[0], requestId = fields[1], setId = fields[2];
-    if (!Service::Instance().ValidateSession(player, token))
+    if (!requestId || !setId)
     {
-        SendError(player, token, requestId, "CUSTOMPREFLIGHT", "SESSION_EXPIRED");
+        SendError(player, token, requestId, "CUSTOMAPPLYOUTFIT", "MALFORMED");
         return;
     }
+    if (!Service::Instance().ValidateSession(player, token))
+    {
+        SendError(player, token, requestId, "CUSTOMAPPLYOUTFIT", "SESSION_EXPIRED");
+        return;
+    }
+
+    bool duplicate = false;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        PlayerState& state = _players[player->GetGUID().GetCounter()];
+        duplicate = state.lastCustomApplyRequestId == requestId;
+        if (!duplicate)
+            state.lastCustomApplyRequestId = requestId;
+    }
+    if (duplicate)
+    {
+        Send(player, "RESULT\t" + std::to_string(token) + '\t' + std::to_string(requestId) +
+            "\tCUSTOMAPPLYOUTFIT\tDUPLICATE_REQUEST\t0\t0");
+        return;
+    }
+
     CustomSet set;
     if (!CustomSetService::Instance().Load(player, setId, set))
     {
-        SendError(player, token, requestId, "CUSTOMPREFLIGHT", "CUSTOM_NOT_FOUND");
+        SendError(player, token, requestId, "CUSTOMAPPLYOUTFIT", "CUSTOM_NOT_FOUND");
         return;
     }
+
     std::vector<BatchAppearanceSelection> selections;
+    selections.reserve(set.pieces.size());
     for (CustomSetPiece const& piece : set.pieces)
         selections.push_back({ piece.equipmentSlot,
             piece.state == CustomSetSelectionState::Hidden ? OverrideState::Hidden : OverrideState::Appearance,
             CustomSetService::Instance().ResolveRepresentative(player, piece) });
+
     std::vector<BatchValidation> validation = ApplicationService::Instance().ValidateBatch(
         player, selections, ApplicationAuthorization::NpcSession);
-    bool valid = !validation.empty();
-    for (BatchValidation const& entry : validation)
-        valid = valid && entry.result == ApplicationResult::Ok;
-    std::uint32_t nonce = 0;
-    if (valid)
-    {
-        std::lock_guard<std::mutex> lock(_mutex);
-        nonce = _nextNonce++;
-        if (!nonce)
-            nonce = _nextNonce++;
-        _players[player->GetGUID().GetCounter()].customApply = { nonce, token, requestId, setId, selections,
-            std::chrono::steady_clock::now() + std::chrono::seconds(30) };
-    }
-    Send(player, "CUSTOMPREFLIGHTINFO\t" + std::to_string(token) + '\t' + std::to_string(requestId) + '\t' +
-        std::to_string(setId) + '\t' + std::to_string(nonce) + '\t' + std::to_string(valid ? 1 : 0) + '\t' +
-        std::to_string(validation.size()) + '\t' + CleanProtocolText(set.name, 48));
     for (std::size_t index = 0; index < validation.size(); ++index)
-        Send(player, "CUSTOMAPPLYPIECE\t" + std::to_string(token) + '\t' + std::to_string(requestId) + '\t' +
-            std::to_string(ResolveWireSlot(validation[index].equipmentSlot)) + '\t' +
-            std::to_string(selections[index].appearanceItem) + '\t' +
-            ApplicationService::ResultName(validation[index].result));
-    Send(player, "CUSTOMAPPLYEND\t" + std::to_string(token) + '\t' + std::to_string(requestId));
-}
+    {
+        if (set.pieces[index].state == CustomSetSelectionState::Appearance && !selections[index].appearanceItem)
+            validation[index].result = ApplicationResult::AppearanceNotCollected;
+        if (validation[index].result != ApplicationResult::Ok)
+        {
+            Send(player, "RESULT\t" + std::to_string(token) + '\t' + std::to_string(requestId) +
+                "\tCUSTOMAPPLYOUTFIT\t" + ApplicationService::ResultName(validation[index].result) + '\t' +
+                std::to_string(ResolveWireSlot(validation[index].equipmentSlot)) + "\t0");
+            return;
+        }
+    }
 
-void WardrobeService::HandleCustomConfirm(Player* player, std::vector<std::uint32_t> const& fields)
-{
-    std::uint32_t token = fields[0], requestId = fields[1], nonce = fields[2];
-    PlayerState::ApplySnapshot snapshot;
-    {
-        std::lock_guard<std::mutex> lock(_mutex);
-        snapshot = _players[player->GetGUID().GetCounter()].customApply;
-    }
-    ApplicationResult result = ApplicationResult::Unauthorized;
-    if (Service::Instance().ValidateSession(player, token) && snapshot.nonce == nonce &&
-        snapshot.sessionToken == token && snapshot.requestId == requestId &&
-        snapshot.expires >= std::chrono::steady_clock::now())
-        result = ApplicationService::Instance().ApplyBatch(player, snapshot.selections,
-            ApplicationAuthorization::NpcSession);
-    if (result == ApplicationResult::Ok)
-    {
-        std::lock_guard<std::mutex> lock(_mutex);
-        _players[player->GetGUID().GetCounter()].customApply = {};
-    }
-    SendError(player, token, requestId, "CUSTOMCONFIRM", ApplicationService::ResultName(result));
+    ApplicationResult result = ApplicationService::Instance().ApplyBatch(
+        player, selections, ApplicationAuthorization::NpcSession);
+    Send(player, "RESULT\t" + std::to_string(token) + '\t' + std::to_string(requestId) +
+        "\tCUSTOMAPPLYOUTFIT\t" + ApplicationService::ResultName(result) + "\t0\t" +
+        std::to_string(result == ApplicationResult::Ok ? selections.size() : 0));
 }
 
 void WardrobeService::HandleCustomPreview(Player* player, std::vector<std::uint32_t> const& fields)
@@ -761,13 +757,13 @@ void WardrobeService::HandleCustomPreview(Player* player, std::vector<std::uint3
         std::uint32_t representative = CustomSetService::Instance().ResolveRepresentative(player, piece);
         ApplicationResult result = ApplicationResult::Ok;
         Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, piece.equipmentSlot);
-        if (!target)
-            result = ApplicationResult::TargetMissing;
-        else if (piece.state == CustomSetSelectionState::Hidden)
+        if (piece.state == CustomSetSelectionState::Hidden)
         {
             if (!ApplicationService::Instance().CanHide(piece.equipmentSlot))
                 result = ApplicationResult::HideWeaponsDisabled;
         }
+        else if (!target)
+            result = ApplicationResult::TargetMissing;
         else if (!representative)
             result = ApplicationResult::AppearanceNotCollected;
         else

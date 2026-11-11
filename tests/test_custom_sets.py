@@ -222,17 +222,17 @@ class PreviewAndUiContractTests(unittest.TestCase):
 
 class ApplicationContractTests(unittest.TestCase):
     def test_remote_application_is_rejected_and_npc_session_is_rechecked(self):
-        preflight = WARDROBE[WARDROBE.index("void WardrobeService::HandleCustomPreflight"):WARDROBE.index("void WardrobeService::HandleCustomConfirm")]
-        confirm = WARDROBE[WARDROBE.index("void WardrobeService::HandleCustomConfirm"):WARDROBE.index("void WardrobeService::SendEquipmentState")]
-        self.assertIn("ValidateSession(player, token)", preflight)
-        self.assertIn("ValidateSession(player, token)", confirm)
-        self.assertIn("ApplicationAuthorization::NpcSession", preflight + confirm)
+        apply_outfit = WARDROBE[WARDROBE.index("void WardrobeService::HandleCustomApplyOutfit"):WARDROBE.index("void WardrobeService::HandleCustomPreview")]
+        self.assertIn("ValidateSession(player, token)", apply_outfit)
+        self.assertIn("ApplicationAuthorization::NpcSession", apply_outfit)
 
     def test_every_piece_is_preflighted_and_partial_apply_is_not_offered(self):
-        self.assertIn("ValidateBatch", WARDROBE)
-        self.assertIn("valid = valid && entry.result == ApplicationResult::Ok", WARDROBE)
-        self.assertIn("if (valid)", WARDROBE)
-        self.assertIn("savedPreflight.valid and savedSetNonce", LUA)
+        apply_outfit = WARDROBE[WARDROBE.index("void WardrobeService::HandleCustomApplyOutfit"):WARDROBE.index("void WardrobeService::HandleCustomPreview")]
+        self.assertIn("ValidateBatch", apply_outfit)
+        self.assertIn("validation[index].result != ApplicationResult::Ok", apply_outfit)
+        self.assertLess(apply_outfit.index("validation[index].result != ApplicationResult::Ok"),
+                        apply_outfit.index("ApplyBatch"))
+        self.assertIn('sendRequest("CUSTOMAPPLYOUTFIT"', LUA)
 
     def test_batch_write_is_one_transaction_and_cache_changes_after_commit(self):
         batch = APPLICATION[APPLICATION.index("ApplicationResult ApplicationService::ApplyBatch"):APPLICATION.index("void ApplicationService::LoadPlayer")]

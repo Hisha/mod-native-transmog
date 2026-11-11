@@ -43,12 +43,19 @@ equipment or item overrides.
 
 ## NPC application and security
 
-The existing NPC wardrobe has a Saved Custom Sets selector. Application is deliberately unavailable from Collections.
-The NPC path loads the set with both set ID and authenticated character GUID, resolves every canonical appearance,
-rechecks collection ownership, validates every currently equipped target with `CompatibilityValidator`, and reports
-per-slot failures. A confirmation nonce is issued only when every specified selection is valid. Confirmation rechecks
-the live NPC session and atomically writes all item-instance overrides in one character-database transaction before
-updating the cache and visible equipment. Unspecified slots are untouched.
+The existing NPC wardrobe has a Saved Custom Sets selector and an **Apply Outfit** button. Application remains
+deliberately unavailable from Collections. Selecting a set only loads its read-only preview; it never applies it. The
+button becomes available only after the selected preview finishes without eligibility failures, and it is disabled
+while a request is pending.
+
+One `CUSTOMAPPLYOUTFIT` request carries the authenticated NPC-session token, request ID, and saved-set ID. The server
+loads the set by both set ID and authenticated character GUID, resolves every canonical appearance, rechecks collection
+ownership, validates every specified target with `CompatibilityValidator`, and rejects the entire operation before any
+write if a selection fails. Successful application atomically writes the applicable item-instance overrides in one
+character-database transaction before updating the cache and visible equipment. Explicit hide on an equipped item
+writes a hidden override; explicit hide on an already-empty slot succeeds as an already-satisfied no-op because there
+is no item instance to key an override to. Unspecified slots are untouched, and no equipped item is replaced or
+modified.
 
 Requests are protocol-versioned, length-bounded, rate-limited, paged, and numeric except for the final bounded name
 field. Names are trimmed and validated server-side, escaped before SQL use, limited to 48 UTF-8 bytes by default, and
@@ -75,7 +82,8 @@ application.
 3. Merge the three `NativeTransmog.CustomSets.*` settings from `conf/mod_native_transmog.conf.dist` into the realm
    configuration as needed. Defaults enable the feature, allow 20 sets, and limit names to 48 bytes.
 4. Rebuild and deploy worldserver with the module. No AzerothCore core patch or custom hook is required.
-5. Run `python3 content/build_epf.py`, deploy the resulting `content/mod-native-transmog.epf` through Content Manager,
+5. Run `python3 content/build_epf.py` followed by `python3 content/build_epf.py --check`, deploy the resulting
+   `content/mod-native-transmog.epf` through Content Manager,
    and run the normal Portalkeeper client-patch generation/deployment flow.
 6. Restart worldserver. A configuration reload can change limits, but schema availability is checked at startup/reload.
 
@@ -88,8 +96,8 @@ application.
   produce useful errors.
 - Compare custom preview against current unspecified slots; switch repeatedly between Items, predefined Sets, and custom
   Sets; verify predefined ordering/progress/totals remain unchanged.
-- At an authorized Transmogrifier, preflight a fully compatible set and confirm it. Repeat with a missing/incompatible
-  weapon and verify no slot is applied. Try the same request remotely and verify session rejection.
+- At an authorized Transmogrifier, load a fully compatible set and click **Apply Outfit**. Repeat with a
+  missing/incompatible weapon and verify no slot is applied. Try the same request remotely and verify session rejection.
 - Verify explicit hide only where configured, no double application, no item/equipment mutation during preview/edit,
   existing single-slot NPC transmog, collection acquisition, icon rendering, Dominos, and Content Manager navigation.
 

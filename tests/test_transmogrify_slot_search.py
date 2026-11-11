@@ -161,10 +161,10 @@ class TransmogrifySavedOutfitTests(unittest.TestCase):
         self.assertIn("for wireSlot=1,#SLOT_ORDER", preview)
         self.assertIn("NativeTransmogWardrobeState.selections[selectedSlotId]=selectedAppearance", preview)
         load = LUA[LUA.index("function NativeTransmog_LoadSavedSet"):
-                   LUA.index("function NativeTransmog_PreflightSavedSet")]
+                   LUA.index("function NativeTransmog_ApplySavedOutfit")]
         self.assertIn('sendRequest("CUSTOMPREVIEW"', load)
         self.assertIn('sendRequest("CUSTOMSAVEOUTFIT"', load)
-        self.assertNotIn('sendRequest("CUSTOMCONFIRM"', load)
+        self.assertNotIn('sendRequest("CUSTOMAPPLYOUTFIT"', load)
 
     def test_save_feedback_shared_refresh_and_missing_piece_handling(self):
         self.assertIn('setStatus("Custom outfit saved."', LUA)

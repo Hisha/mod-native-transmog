@@ -40,6 +40,11 @@ Protected FrameXML and the server exchange version-5 `NTRANSMOG` addon messages 
 
 Catalog pages come from `CollectionService` using the configured account or character scope. The composite identity remains `(display ID, item class, item subclass, inventory type)`. A startup-built item-template index selects the lowest-entry representative that passes the shared Phase 3C validator for the current player and equipped target, so the original physical item is not required and a restricted duplicate cannot hide a legitimate representative.
 
+Saved custom outfits selected in the NPC window remain preview-only until the player clicks **Apply Outfit**. That
+button sends one server-authoritative saved-set request; the server reloads the owned set, validates every explicit
+appearance or hide selection, and commits all applicable item-instance overrides transactionally. Empty explicitly
+hidden slots are already satisfied, while genuinely unspecified slots remain unchanged.
+
 Each bounded page is tied to a server-issued nonce, NPC session, equipment slot, and item-instance GUID. Apply and Remove revalidate that snapshot and then call the existing Phase 3C `ApplicationService`; equipment changes invalidate it. The UI separately displays equipped, applied, and previewed states. Reset Preview and Close send no mutation request. `/wardrobe` and `/nativetransmog` remain preview-only because they have no server token.
 
 ## Phase 3C appearance application

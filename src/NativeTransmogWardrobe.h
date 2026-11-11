@@ -64,15 +64,7 @@ private:
             std::string name;
             std::vector<CustomSetPiece> pieces;
         } draft;
-        struct ApplySnapshot
-        {
-            std::uint32_t nonce = 0;
-            std::uint32_t sessionToken = 0;
-            std::uint32_t requestId = 0;
-            std::uint32_t setId = 0;
-            std::vector<BatchAppearanceSelection> selections;
-            std::chrono::steady_clock::time_point expires;
-        } customApply;
+        std::uint32_t lastCustomApplyRequestId = 0;
     };
 
     struct BrowseAppearance
@@ -100,8 +92,7 @@ private:
     void HandleCustomSave(Player* player, std::vector<std::uint32_t> const& fields, std::string_view name);
     void HandleCustomCancel(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleCustomDelete(Player* player, std::vector<std::uint32_t> const& fields);
-    void HandleCustomPreflight(Player* player, std::vector<std::uint32_t> const& fields);
-    void HandleCustomConfirm(Player* player, std::vector<std::uint32_t> const& fields);
+    void HandleCustomApplyOutfit(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleCustomPreview(Player* player, std::vector<std::uint32_t> const& fields);
     void HandleCustomSaveOutfit(Player* player, std::vector<std::uint32_t> const& fields,
         std::string_view name, std::string_view selections);

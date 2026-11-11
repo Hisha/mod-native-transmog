@@ -437,7 +437,7 @@ std::vector<BatchValidation> ApplicationService::ValidateBatch(Player* player,
             result = ApplicationResult::InvalidSlot;
         Item* target = result == ApplicationResult::Ok ?
             player->GetItemByPos(INVENTORY_SLOT_BAG_0, selection.equipmentSlot) : nullptr;
-        if (result == ApplicationResult::Ok && (!target || target->GetOwnerGUID() != player->GetGUID()))
+        if (result == ApplicationResult::Ok && target && target->GetOwnerGUID() != player->GetGUID())
             result = ApplicationResult::TargetMissing;
         if (result == ApplicationResult::Ok && selection.state == OverrideState::Hidden)
         {
@@ -446,6 +446,11 @@ std::vector<BatchValidation> ApplicationService::ValidateBatch(Player* player,
         }
         else if (result == ApplicationResult::Ok)
         {
+            if (!target)
+            {
+                results.push_back({ selection.equipmentSlot, ApplicationResult::TargetMissing });
+                continue;
+            }
             ItemTemplate const* source = sObjectMgr->GetItemTemplate(selection.appearanceItem);
             AppearanceKey appearance;
             if (!source)
@@ -473,12 +478,17 @@ ApplicationResult ApplicationService::ApplyBatch(Player* player,
         if (entry.result != ApplicationResult::Ok)
             return entry.result;
 
-    CharacterDatabaseTransaction transaction = CharacterDatabase.BeginTransaction();
     std::vector<AppearanceOverride> overrides;
     overrides.reserve(selections.size());
     for (BatchAppearanceSelection const& selection : selections)
     {
         Item* target = player->GetItemByPos(INVENTORY_SLOT_BAG_0, selection.equipmentSlot);
+        // An explicit hide on an already-empty slot is satisfied without a
+        // row: there is no item instance to key the override to, and the slot
+        // is already visually hidden. Appearance selections still require a
+        // live equipped target during validation above.
+        if (!target && selection.state == OverrideState::Hidden)
+            continue;
         AppearanceOverride appearanceOverride;
         appearanceOverride.itemGuid = target->GetGUID().GetCounter();
         appearanceOverride.ownerGuid = player->GetGUID().GetCounter();
@@ -487,23 +497,28 @@ ApplicationResult ApplicationService::ApplyBatch(Player* player,
         if (selection.state == OverrideState::Appearance)
             CollectionService::ResolveAppearance(sObjectMgr->GetItemTemplate(selection.appearanceItem),
                 appearanceOverride.appearance);
-        transaction->Append(
-            "INSERT INTO `native_transmog_item_override` (`item_guid`, `owner_guid`, `override_state`, "
-            "`appearance_item`, `display_id`, `item_class`, `item_subclass`, `inventory_type`, `applied_at`) "
-            "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE "
-            "`owner_guid` = VALUES(`owner_guid`), `override_state` = VALUES(`override_state`), "
-            "`appearance_item` = VALUES(`appearance_item`), `display_id` = VALUES(`display_id`), "
-            "`item_class` = VALUES(`item_class`), `item_subclass` = VALUES(`item_subclass`), "
-            "`inventory_type` = VALUES(`inventory_type`), `applied_at` = CURRENT_TIMESTAMP",
-            appearanceOverride.itemGuid, appearanceOverride.ownerGuid,
-            static_cast<std::uint32_t>(appearanceOverride.state), appearanceOverride.appearanceItem,
-            appearanceOverride.appearance.displayId,
-            static_cast<std::uint32_t>(appearanceOverride.appearance.itemClass),
-            static_cast<std::uint32_t>(appearanceOverride.appearance.itemSubclass),
-            static_cast<std::uint32_t>(appearanceOverride.appearance.inventoryType));
         overrides.push_back(appearanceOverride);
     }
-    CharacterDatabase.DirectCommitTransaction(transaction);
+    if (!overrides.empty())
+    {
+        CharacterDatabaseTransaction transaction = CharacterDatabase.BeginTransaction();
+        for (AppearanceOverride const& appearanceOverride : overrides)
+            transaction->Append(
+                "INSERT INTO `native_transmog_item_override` (`item_guid`, `owner_guid`, `override_state`, "
+                "`appearance_item`, `display_id`, `item_class`, `item_subclass`, `inventory_type`, `applied_at`) "
+                "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE "
+                "`owner_guid` = VALUES(`owner_guid`), `override_state` = VALUES(`override_state`), "
+                "`appearance_item` = VALUES(`appearance_item`), `display_id` = VALUES(`display_id`), "
+                "`item_class` = VALUES(`item_class`), `item_subclass` = VALUES(`item_subclass`), "
+                "`inventory_type` = VALUES(`inventory_type`), `applied_at` = CURRENT_TIMESTAMP",
+                appearanceOverride.itemGuid, appearanceOverride.ownerGuid,
+                static_cast<std::uint32_t>(appearanceOverride.state), appearanceOverride.appearanceItem,
+                appearanceOverride.appearance.displayId,
+                static_cast<std::uint32_t>(appearanceOverride.appearance.itemClass),
+                static_cast<std::uint32_t>(appearanceOverride.appearance.itemSubclass),
+                static_cast<std::uint32_t>(appearanceOverride.appearance.inventoryType));
+        CharacterDatabase.DirectCommitTransaction(transaction);
+    }
     {
         std::lock_guard<std::mutex> lock(_mutex);
         for (AppearanceOverride const& appearanceOverride : overrides)

@@ -1,5 +1,32 @@
 # Test results
 
+## Apply Outfit in Transmogrify
+
+Test date: 2026-11-10.
+
+### Passed
+
+- Focused Apply Outfit coverage plus the full automated suite:
+  `python3 -m unittest discover -s tests -p 'test_*.py'` — 357 tests passed. Coverage includes multi-slot apply,
+  explicit hidden/empty slots, unspecified-slot preservation, grouped weapon compatibility, uncollected/incompatible
+  rejection, NPC authorization, all-or-nothing persistence, duplicate requests, client pending/success/failure/timeout
+  handling, and saved-preview preservation.
+- Playerbot AzerothCore revision `e7e2e288e`, GCC 15.2, C++20, `MODULES=static`, `SCRIPTS=none`:
+  all module translation units compiled, `libmodules.a` linked, and `worldserver` linked at 100%. The binary exports
+  `Addmod_native_transmogScripts` and does not export `Addmod_transmogScripts`.
+  Worldserver SHA-256: `0faae5b9063d3400f961fbecd1161fb94002d56ac06278f0d967565e9cf172b7`.
+- Deterministic EPF build and `--check` passed with four members.
+  EPF SHA-256: `3a9225574b7bbe085b8377a5bdf35c2a18876b28d06575ba9269b81bd84b40e4`.
+- `git diff --check` passed. No core source, SQL schema, saved-set persistence format, standalone addon, commit, or push
+  was introduced.
+
+### Not run or not proven
+
+No PTR deployment, live database startup, build-12340 client session, NPC interaction, `TempJudge` application, visual
+inspection, equipped-item comparison, observer synchronization, or persistence/reopen acceptance was performed.
+Follow [`APPLY_OUTFIT_PTR_VALIDATION.md`](APPLY_OUTFIT_PTR_VALIDATION.md); do not record PTR success from these local
+results.
+
 ## Grouped weapon compatibility and saved-outfit preview routing
 
 Test date: 2026-11-10.

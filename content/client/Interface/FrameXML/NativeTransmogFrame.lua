@@ -55,10 +55,10 @@ local setSection, customEditing, customPickingSlot = "PREDEFINED", false, nil
 local customRequestId, customDraftId, customDraftPieces = 0, 0, {}
 local customHideMask = 0
 local customTotal, customMaximum = 0, 20
-local savedSetCatalog, savedSetIncoming, savedSetId, savedSetNonce, savedSetRequest, savedSetRefreshDue = {}, {}, nil, nil, 0, nil
+local savedSetCatalog, savedSetIncoming, savedSetId, savedSetReady, savedSetRequest, savedSetRefreshDue = {}, {}, nil, nil, 0, nil
 local savedSetNextCursor, savedSetHasNext, savedSetListPending = 0, false, false
 local customListRequestId = 0
-local savedPreflight = nil
+local savedOutfitApplyRequest = 0
 local CUSTOM_SLOT_CATEGORY = {1,2,5,4,9,10,11,7,8,3,12,15,14,6}
 local collectionMode = "SETS"
 local itemCategory, itemFilter, itemCursor, itemNextCursor, itemHasNext = 1, 0, 0, 0, false
@@ -128,7 +128,8 @@ local RESULT_TEXT = {
  ["CUSTOM_NOT_FOUND"]="That custom set no longer exists.", ["CUSTOM_INVALID_NAME"]="Enter a name between 1 and 48 bytes.",
  ["CUSTOM_DUPLICATE_NAME"]="A custom set already uses that name.", ["CUSTOM_LIMIT_REACHED"]="The custom-set limit has been reached.",
  ["CUSTOM_NOT_COLLECTED"]="A selected appearance is no longer collected.", ["CUSTOM_SLOT_MISMATCH"]="That appearance is not valid for this slot.",
- ["CUSTOM_HIDE_UNSUPPORTED"]="This slot cannot be hidden.", ["CUSTOM_EMPTY_SET"]="Choose at least one appearance before saving."
+ ["CUSTOM_HIDE_UNSUPPORTED"]="This slot cannot be hidden.", ["CUSTOM_EMPTY_SET"]="Choose at least one appearance before saving.",
+ ["DUPLICATE_REQUEST"]="That outfit application request was already processed."
 }
 
 local function splitTabs(value)
@@ -722,7 +723,8 @@ local function refreshSelection()
  setButtonEnabled(NativeTransmogFrameRemove, authorizedToken and hasPhysicalItem and overridePresent and not pending)
  setButtonEnabled(NativeTransmogFramePrevious, authorizedToken and #cursorHistory > 0 and not pending)
  setButtonEnabled(NativeTransmogFrameNext, authorizedToken and hasNext and not pending)
- setButtonEnabled(NativeTransmogFrameApplySavedSet,not pending)
+ setButtonEnabled(NativeTransmogFrameApplyOutfit,authorizedToken and savedSetId and
+     savedSetReady==savedSetId and not pending)
  local savedSetDropDownButton=_G[NativeTransmogFrameSavedSetDropDown:GetName().."Button"]
  if savedSetDropDownButton then setButtonEnabled(savedSetDropDownButton,not pending) end
  local hasOutfit=false; for _ in pairs(NativeTransmogWardrobeState.selections) do hasOutfit=true; break end
@@ -796,6 +798,7 @@ local function rebuildOutfitPreview()
 end
 local function previewItem(button)
  if not button.appearance or not hasPhysicalItem then return end
+ savedSetReady=nil
  selectedAppearance = { selection=button.selectionId, entry=button.entry, isHide=button.isHide }
  NativeTransmogWardrobeState.selections[selectedSlotId]=selectedAppearance
  rebuildOutfitPreview()
@@ -1070,6 +1073,7 @@ function NativeTransmog_ToggleSavedSets(button)
 end
 function NativeTransmog_LoadSavedSet()
  if not authorizedToken or not savedSetId then setStatus("Choose a saved custom set first.",true); return end
+ savedSetReady=nil; refreshSelection()
  savedSetRequest=savedSetRequest+1; NativeTransmogWardrobeState.load={request=savedSetRequest,setId=savedSetId,phase="INFO",pieces={}}
  sendRequest("CUSTOMPREVIEW",savedSetRequest.."\t"..savedSetId)
 end
@@ -1091,15 +1095,17 @@ StaticPopupDialogs["NATIVE_TRANSMOG_SAVE_OUTFIT"]={text="Name this custom outfit
  EditBoxOnEnterPressed=function(self) local parent=self:GetParent(); submitOutfitSave(self:GetText()); parent:Hide() end,
  timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3}
 function NativeTransmog_SaveOutfit() StaticPopup_Show("NATIVE_TRANSMOG_SAVE_OUTFIT") end
-function NativeTransmog_PreflightSavedSet()
- if not authorizedToken or not savedSetId then setStatus("Choose a saved custom set first.",true); return end
- savedSetRequest=savedSetRequest+1; savedSetNonce=nil; sendRequest("CUSTOMPREFLIGHT",savedSetRequest.."\t"..savedSetId)
+function NativeTransmog_ApplySavedOutfit()
+ if not authorizedToken or not savedSetId or savedSetReady~=savedSetId or pending then
+  setStatus("Load a valid saved outfit before applying it.",true); return
+ end
+ savedOutfitApplyRequest=savedOutfitApplyRequest+1
+ sendRequest("CUSTOMAPPLYOUTFIT",savedOutfitApplyRequest.."\t"..savedSetId)
 end
-StaticPopupDialogs["NATIVE_TRANSMOG_APPLY_CUSTOM_SET"]={text="Apply %s?\n\nAll %s compatible selections will be applied. Unspecified slots remain unchanged.",button1=APPLY,button2=CANCEL,OnAccept=function() if savedSetNonce then sendRequest("CUSTOMCONFIRM",savedSetRequest.."\t"..savedSetNonce) end end,timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3}
 function NativeTransmog_NextPage() if hasNext then table.insert(cursorHistory,cursor); requestCatalog(nextCursor) end end
 function NativeTransmog_PreviousPage() if #cursorHistory>0 then requestCatalog(table.remove(cursorHistory)) end end
 function NativeTransmog_ResetPreview()
- selectedAppearance=nil; NativeTransmogWardrobeState.selections={}; previewGeneration=previewGeneration+1; previewRefresh=nil; clearCatalogPortrait(); modelRotation=0; local model=getModel(); model:SetUnit("player"); model:SetRotation(0); refreshSelection()
+ selectedAppearance=nil; savedSetReady=nil; NativeTransmogWardrobeState.selections={}; previewGeneration=previewGeneration+1; previewRefresh=nil; clearCatalogPortrait(); modelRotation=0; local model=getModel(); model:SetUnit("player"); model:SetRotation(0); refreshSelection()
 end
 function NativeTransmog_SelectSlot(slotId)
  if not SLOT_ORDER[slotId] then return end
@@ -1194,7 +1200,7 @@ function NativeTransmog_FrameUpdate()
  end
  if pending and GetTime()-pending.started>5 then
   local operation=pending.operation; pending=nil
-  if operation=="CUSTOMPREVIEW" then NativeTransmogWardrobeState.load=nil end
+  if operation=="CUSTOMPREVIEW" then NativeTransmogWardrobeState.load=nil; savedSetReady=nil end
   if operation=="CAT" and #catalog==0 then catalogMessage="The appearance catalog did not respond. Try again."; renderCatalog()
   else refreshSelection() end
   setStatus("Server unavailable or request timed out.",true)
@@ -1223,7 +1229,7 @@ end
 function NativeTransmog_OnHide()
  clearCatalogPortrait()
  previewGeneration=previewGeneration+1; previewRefresh=nil
- NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil; NativeTransmogWardrobeState.searchDue=nil; NativeTransmogWardrobeState.load=nil; savedSetNextCursor=0; savedSetHasNext=false; savedSetListPending=false; savedSetRefreshDue=nil
+ NativeTransmog_EndRotation(getModel()); authorizedToken=nil; pending=nil; snapshotNonce=nil; scheduledRefresh=nil; NativeTransmogWardrobeState.searchDue=nil; NativeTransmogWardrobeState.load=nil; savedSetReady=nil; savedSetNextCursor=0; savedSetHasNext=false; savedSetListPending=false; savedSetRefreshDue=nil
  GameTooltip:Hide(); PlaySound("igCharacterInfoClose")
 end
 function NativeTransmog_OpenAuthorized(token)
@@ -1312,7 +1318,7 @@ local function handleCustomMessage(command,fields)
     table.insert(failures,(slot and SLOT_LABELS[SLOT_ORDER[slot]] or "Unknown slot")..": "..reason)
    end
   end
-  local name=load.name; NativeTransmogWardrobeState.load=nil; pending=nil; NativeTransmogWardrobeState.selections=loaded; selectedAppearance=NativeTransmogWardrobeState.selections[selectedSlotId]
+  local name=load.name; NativeTransmogWardrobeState.load=nil; pending=nil; savedSetReady=#failures==0 and setId or nil; NativeTransmogWardrobeState.selections=loaded; selectedAppearance=NativeTransmogWardrobeState.selections[selectedSlotId]
   rebuildOutfitPreview(); refreshSelection()
   setStatus(name.." loaded for preview"..(#failures>0 and ("; unavailable: "..table.concat(failures,"; ")) or "."),#failures>0)
   return
@@ -1355,18 +1361,16 @@ local function handleCustomMessage(command,fields)
   if tonumber(fields[3])~=customRequestId then return end
   local operation,result=fields[4],fields[5] or "MALFORMED"; if result~="ok" then setStatus(RESULT_TEXT[result] or ("Custom set request failed: "..result),true); return end
   if operation=="CUSTOMSAVE" or operation=="CUSTOMDELETE" then setCustomEditorVisible(false); customDraftPieces={}; customHideMask=0; selectedSet=nil; requestSets(0); savedSetRefreshDue=authorizedToken and GetTime()+.35 or nil end; return
- elseif command=="CUSTOMPREFLIGHTINFO" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest then
-  savedSetNonce=tonumber(fields[6]); savedPreflight={valid=fields[7]=="1",count=tonumber(fields[8]) or 0,name=fields[9] or "Custom Set",failures={}}; return
- elseif command=="CUSTOMAPPLYPIECE" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest then
-  if savedPreflight and fields[7]~="ok" then table.insert(savedPreflight.failures,(SLOT_ORDER[tonumber(fields[5])] or "Slot")..": "..(fields[7] or "incompatible")) end; return
- elseif command=="CUSTOMAPPLYEND" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest then
-  pending=nil; refreshSelection()
-  if savedPreflight and savedPreflight.valid and savedSetNonce then StaticPopup_Show("NATIVE_TRANSMOG_APPLY_CUSTOM_SET",savedPreflight.name,savedPreflight.count)
-  elseif savedPreflight then setStatus("Set cannot be applied: "..table.concat(savedPreflight.failures,"; "),true) end; return
  elseif command=="RESULT" and fields[3]==authorizedToken and NativeTransmogWardrobeState.load and tonumber(fields[4])==NativeTransmogWardrobeState.load.request and (fields[5]=="CUSTOMPREVIEW" or fields[5]=="REQUEST") then
-  pending=nil; NativeTransmogWardrobeState.load=nil; refreshSelection(); local result=fields[6] or "MALFORMED"; setStatus(RESULT_TEXT[result] or ("Custom outfit load failed: "..result),true); return true
- elseif command=="RESULT" and fields[3]==authorizedToken and tonumber(fields[4])==savedSetRequest and (fields[5]=="CUSTOMPREFLIGHT" or fields[5]=="CUSTOMCONFIRM") then
-  pending=nil; refreshSelection(); local result=fields[6] or "MALFORMED"; if result=="ok" then setStatus("Custom set applied.",false); updateEquipmentSlots(); scheduledRefresh=GetTime()+.30 else setStatus(RESULT_TEXT[result] or ("Custom set application failed: "..result),true) end; return true
+  pending=nil; NativeTransmogWardrobeState.load=nil; savedSetReady=nil; refreshSelection(); local result=fields[6] or "MALFORMED"; setStatus(RESULT_TEXT[result] or ("Custom outfit load failed: "..result),true); return true
+ elseif command=="RESULT" and fields[3]==authorizedToken and tonumber(fields[4])==savedOutfitApplyRequest and (fields[5]=="CUSTOMAPPLYOUTFIT" or fields[5]=="REQUEST") then
+  pending=nil; refreshSelection(); local result=fields[6] or "MALFORMED"
+  if result=="ok" then setStatus("Saved outfit applied.",false); updateEquipmentSlots(); scheduledRefresh=GetTime()+.30
+  else
+   local slot=tonumber(fields[7]); local reason=RESULT_TEXT[result] or result
+   setStatus((slot and SLOT_ORDER[slot] and (NativeTransmogSavedSlotNames[slot]..": ") or "Saved outfit application failed: ")..reason,true)
+  end
+  return true
  elseif command=="RESULT" and fields[3]==authorizedToken and tonumber(fields[4])==NativeTransmogWardrobeState.saveRequest and (fields[5]=="CUSTOMSAVEOUTFIT" or fields[5]=="REQUEST") then
   pending=nil; refreshSelection(); local result=fields[6] or "MALFORMED"
   if result=="ok" then savedSetId=tonumber(fields[7]); setStatus("Custom outfit saved.",false); savedSetNextCursor=0; savedSetHasNext=false; savedSetRefreshDue=GetTime()+.35
@@ -1434,6 +1438,7 @@ function NativeTransmog_OnEvent(_,event,...)
   return
  elseif event=="PLAYER_EQUIPMENT_CHANGED" then
   local changedInventorySlot=...
+  savedSetReady=nil; refreshSelection()
   for wireSlot=1,#SLOT_ORDER do
    local inventorySlot=getInventorySlot(wireSlot)
    if inventorySlot==changedInventorySlot then

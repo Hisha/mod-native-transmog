@@ -335,14 +335,14 @@
         <Size x="132" y="24" /><Anchors><Anchor point="LEFT" relativeTo="$parentApply" relativePoint="RIGHT"><Offset x="6" y="0" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_Remove();</OnClick></Scripts>
       </Button>
+      <Button name="$parentApplyOutfit" inherits="UIPanelButtonTemplate" text="Apply Outfit">
+        <Size x="132" y="24" /><Anchors><Anchor point="LEFT" relativeTo="$parentRemove" relativePoint="RIGHT"><Offset x="6" y="0" /></Anchor></Anchors>
+        <Scripts><OnClick>NativeTransmog_ApplySavedOutfit();</OnClick></Scripts>
+      </Button>
       <Frame name="$parentSavedSetDropDown" inherits="UIDropDownMenuTemplate">
         <Anchors><Anchor point="TOPLEFT"><Offset x="4" y="-40" /></Anchor></Anchors>
         <Scripts><OnLoad>NativeTransmog_SavedSetDropDown_OnLoad(self);</OnLoad></Scripts>
       </Frame>
-      <Button name="$parentApplySavedSet" inherits="UIPanelButtonTemplate" text="Saved Sets..." hidden="true">
-        <Size x="184" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="12" y="-43" /></Anchor></Anchors>
-        <Scripts><OnClick>NativeTransmog_ToggleSavedSets(self);</OnClick></Scripts>
-      </Button>
       <Button name="$parentSaveOutfit" inherits="UIPanelButtonTemplate" text="Save">
         <Size x="72" y="22" /><Anchors><Anchor point="TOPLEFT"><Offset x="220" y="-43" /></Anchor></Anchors>
         <Scripts><OnClick>NativeTransmog_SaveOutfit();</OnClick></Scripts>
